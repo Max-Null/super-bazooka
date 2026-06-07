@@ -9,6 +9,7 @@ const router = useRouter();
 const route = useRoute();
 const drawerOpen = ref(false);
 const cwd = ref("");
+const fileNavCounter = ref(0);    // increment to trigger FilePanel navigation
 
 onMounted(async () => {
   try { cwd.value = await getWorkspaceRoot(); } catch {}
@@ -16,6 +17,10 @@ onMounted(async () => {
 
 function isActive(path: string): boolean {
   return route.path === path;
+}
+
+function openFilePanelTo(path: string) {
+  fileNavCounter.value++;
 }
 </script>
 
@@ -44,13 +49,14 @@ function isActive(path: string): boolean {
         <span class="text-sm font-semibold tracking-tight leading-none" style="color:var(--text-bright)">cc-gui</span>
         <span class="text-[10px] font-medium px-1.5 py-px rounded leading-none" style="background:var(--accent-glow); color:var(--accent-dim)">DEV</span>
 
-        <!-- CWD — left aligned after logo -->
-        <span
+        <!-- CWD — clickable, opens file panel to workspace root -->
+        <button
           v-if="cwd"
-          class="text-[10px] font-mono truncate ml-1 px-2 py-0.5 rounded leading-none"
+          @click="openFilePanelTo(cwd)"
+          class="text-[10px] font-mono truncate ml-1 px-2 py-0.5 rounded leading-none cursor-pointer transition-colors hover:border-[var(--accent)]"
           :style="{ background: 'var(--bg-root)', color: 'var(--accent)', border: '1px solid var(--border-dim)' }"
-          :title="cwd"
-        >{{ cwd }}</span>
+          :title="cwd + ' — click to browse'"
+        >{{ cwd }}</button>
       </div>
 
       <!-- Actions group -->
@@ -111,7 +117,7 @@ function isActive(path: string): boolean {
       </main>
 
       <!-- File panel (right side) -->
-      <FilePanel />
+      <FilePanel :navCounter="fileNavCounter" :navPath="cwd" />
     </div>
   </div>
 </template>

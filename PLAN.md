@@ -210,6 +210,11 @@ Playwright  16 tests   3 files   E2E 交互 + 截图 + 真 stream 回放
 Cargo       12 tests   3 files   协议解析 + 集成 + 多轮
 ─────────────────────────────────────────
 Total      123 tests
+
+新增模块（Phase 3）:
+- Rust: `list_dir`, `read_file_content`, `get_workspace_root` (3 commands)
+- Vue: FilePanel, FileTree, FilePreview, DiffViewer (4 components)
+- Dependencies: codemirror 6, @codemirror/lang-*, @codemirror/theme-one-dark, diff
 ```
 
 | 命令 | 内容 | 耗时 |
@@ -275,11 +280,18 @@ Total      123 tests
 - [x] 真实多轮上下文集成测试（resume_test.rs）
 - [x] 测试体系：95 vitest + 16 playwright + 12 cargo = 123 tests
 
-### Phase 3：文件集成 ❌
+### Phase 3：文件集成 ← 当前
 
-- [ ] 文件浏览器（目录树、图标、右键菜单）
-- [ ] CodeMirror 文件预览
-- [ ] 代码 Diff 查看器
+- [x] 文件浏览器面板（可折叠，抽屉式拉手 `FILES` 标签）
+- [x] 目录树（文件类型图标、文件大小、文件夹优先排序）
+- [x] 面包屑导航（分段可点击、返回上一级 ⌂、回到工作目录根 ⌂）
+- [x] 工作目录显示（header 等宽字体 + 强调色、点击打开文件面板）
+- [x] CodeMirror 6 文件预览（只读、one-dark 主题、12 种语言）
+- [x] 代码 Diff 查看器（增/删/不变三色标记、行号、diff 库）
+- [x] Rust file ops（`list_dir`, `read_file_content`, `get_workspace_root`）
+- [ ] 右键上下文菜单（新建文件/文件夹、删除、重命名）
+- [ ] 深层目录递归展开（虚拟树可按需加载子目录）
+- [ ] 拖拽调整面板宽度
 
 ### Phase 4：体验优化 ❌
 
