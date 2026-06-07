@@ -1,12 +1,18 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, onMounted } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import SessionSidebar from "@/components/session/SessionSidebar.vue";
 import FilePanel from "@/components/files/FilePanel.vue";
+import { getWorkspaceRoot } from "@/lib/tauri-bridge";
 
 const router = useRouter();
 const route = useRoute();
 const drawerOpen = ref(false);
+const cwd = ref("");
+
+onMounted(async () => {
+  try { cwd.value = await getWorkspaceRoot(); } catch {}
+});
 
 function isActive(path: string): boolean {
   return route.path === path;
@@ -21,10 +27,11 @@ function isActive(path: string): boolean {
       style="background:var(--bg-surface); border-bottom:1px solid var(--border-dim)"
     >
       <!-- Logo group -->
-      <div class="flex items-center gap-2.5 flex-1">
+      <!-- Logo + CWD — left aligned, baseline aligned -->
+      <div class="flex items-baseline gap-2.5 flex-1 min-w-0">
         <button
           @click="drawerOpen = !drawerOpen"
-          class="w-7 h-7 flex items-center justify-center rounded-md transition-colors"
+          class="w-7 h-7 flex items-center justify-center rounded-md transition-colors shrink-0 translate-y-0.5"
           :style="{ background: drawerOpen ? 'var(--bg-active)' : 'transparent', color: 'var(--text-secondary)' }"
           :class="drawerOpen ? '' : 'hover:bg-[var(--bg-hover)]'"
           title="Toggle sidebar"
@@ -34,15 +41,16 @@ function isActive(path: string): boolean {
           </svg>
         </button>
 
-        <span
-          class="text-sm font-semibold tracking-tight"
-          style="color:var(--text-bright)"
-        >cc-gui</span>
+        <span class="text-sm font-semibold tracking-tight leading-none" style="color:var(--text-bright)">cc-gui</span>
+        <span class="text-[10px] font-medium px-1.5 py-px rounded leading-none" style="background:var(--accent-glow); color:var(--accent-dim)">DEV</span>
 
+        <!-- CWD — left aligned after logo -->
         <span
-          class="text-[10px] font-medium px-1.5 py-px rounded"
-          style="background:var(--accent-glow); color:var(--accent-dim)"
-        >DEV</span>
+          v-if="cwd"
+          class="text-[10px] font-mono truncate ml-1 px-2 py-0.5 rounded leading-none"
+          :style="{ background: 'var(--bg-root)', color: 'var(--accent)', border: '1px solid var(--border-dim)' }"
+          :title="cwd"
+        >{{ cwd }}</span>
       </div>
 
       <!-- Actions group -->

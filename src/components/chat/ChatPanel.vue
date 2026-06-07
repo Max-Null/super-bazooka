@@ -105,7 +105,7 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottom());
     </div>
 
     <!-- Messages -->
-    <div ref="scrollContainer" class="flex-1 overflow-y-auto" @scroll="onScrollThrottled">
+    <div ref="scrollContainer" :class="['flex-1', chat.messages.length > 0 ? 'overflow-y-auto' : '']" @scroll="onScrollThrottled">
       <!-- Welcome -->
       <div v-if="chat.messages.length === 0" class="flex items-center justify-center h-full">
         <div class="text-center max-w-sm px-6 pb-24">

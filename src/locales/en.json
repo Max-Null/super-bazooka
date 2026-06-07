@@ -37,5 +37,9 @@
       "max": "Max",
       "ultracode": "UltraCode (xhigh + auto workflows)"
     }
+  },
+  "file": {
+    "title": "Files",
+    "empty": "Empty directory"
   }
 }
