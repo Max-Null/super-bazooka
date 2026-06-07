@@ -1,0 +1,1 @@
+{"hooks":{"PostToolUse":[{"matcher":"Write|Edit","hooks":[{"type":"command","command":"cd h:/MaxNull/WorkStation/cc-gui && npm test 2>&1 || true","timeout":30}]}]}}

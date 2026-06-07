@@ -1,0 +1,41 @@
+{
+  "app": {
+    "title": "cc-gui - Claude Code Desktop GUI"
+  },
+  "chat": {
+    "placeholder": "Type a message, Enter to send...",
+    "send": "Send",
+    "thinking": "Thinking...",
+    "thinkingDone": "Thinking",
+    "loading": "Loading..."
+  },
+  "settings": {
+    "title": "Settings",
+    "apiKey": "API Key",
+    "baseUrl": "API Base URL",
+    "model": "Model",
+    "test": "Test Connection",
+    "save": "Save"
+  },
+  "session": {
+    "new": "New Session"
+  },
+  "mode": {
+    "plan": "Plan mode",
+    "planDesc": "Claude will explore the code and present a plan before editing",
+    "askBefore": "Ask before edits",
+    "askBeforeDesc": "Claude will ask for approval before making each edit",
+    "editAuto": "Edit automatically",
+    "editAutoDesc": "Claude will edit your selected text or the whole file",
+    "auto": "Auto mode",
+    "autoDesc": "Claude will automatically choose the best permission mode for each task",
+    "effort": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "xhigh": "Extra High",
+      "max": "Max",
+      "ultracode": "UltraCode (xhigh + auto workflows)"
+    }
+  }
+}

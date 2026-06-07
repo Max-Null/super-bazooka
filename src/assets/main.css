@@ -1,0 +1,113 @@
+@import "tailwindcss";
+@plugin "daisyui";
+@plugin "@tailwindcss/typography";
+
+/* ── cc-gui Design System: Precision Terminal ── */
+
+:root {
+  --bg-root: #09090b;
+  --bg-surface: #111113;
+  --bg-elevated: #18181c;
+  --bg-hover: #1e1e26;
+  --bg-active: #262634;
+
+  --border-dim: #1c1c26;
+  --border-default: #2a2a3a;
+  --border-bright: #404058;
+
+  --text-muted: #4a4a5e;
+  --text-secondary: #7c7c94;
+  --text-primary: #c0c0d0;
+  --text-bright: #e8e8f4;
+
+  --accent: #06d6a0;
+  --accent-dim: #048a66;
+  --accent-glow: rgba(6, 214, 160, 0.10);
+
+  --amber: #f5a623;
+  --amber-glow: rgba(245, 166, 35, 0.08);
+
+  --coral: #ff5e5b;
+
+  --violet: #a78bfa;
+
+  --font-mono: "JetBrains Mono", "Cascadia Code", "Fira Code", "Consolas", monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+}
+
+/* Reset placed in Tailwind's base layer so utilities can override */
+@layer base {
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+}
+
+html, body, #app { height: 100%; overflow: hidden; }
+
+body {
+  background: var(--bg-root);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-default) transparent;
+}
+
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-bright); }
+
+*:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+
+/* Streaming cursor */
+@keyframes blink-cursor { 0%,100%{opacity:1} 50%{opacity:0} }
+.stream-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1.2em;
+  background: var(--accent);
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: blink-cursor 0.8s infinite;
+}
+
+/* Message enter */
+@keyframes fade-in { from { opacity:0; transform:translateY(6px) } to { opacity:1; transform:translateY(0) } }
+.message-enter { animation: fade-in 0.2s ease-out; }
+
+/* Prose */
+.prose {
+  --tw-prose-body: var(--text-primary);
+  --tw-prose-headings: var(--text-bright);
+  --tw-prose-links: var(--accent);
+  --tw-prose-code: var(--accent);
+  --tw-prose-pre-bg: var(--bg-root);
+  max-width: none;
+}
+.prose pre {
+  background: var(--bg-root);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-md);
+  padding: 14px 18px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.prose code::before, .prose code::after { content: none; }
+:not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.825em;
+  background: var(--bg-hover);
+  padding: 0.15em 0.4em;
+  border-radius: 3px;
+}
+
+/* Tool cards — hide default marker */
+details summary { list-style: none; }
+details summary::-webkit-details-marker { display: none; }
+
+/* DaisyUI overrides */
+.btn { font-weight: 500; letter-spacing: 0.01em; }
+.loading-dots { color: var(--accent); }

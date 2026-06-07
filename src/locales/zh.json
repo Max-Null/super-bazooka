@@ -1,0 +1,41 @@
+{
+  "app": {
+    "title": "cc-gui - Claude Code 桌面 GUI"
+  },
+  "chat": {
+    "placeholder": "输入消息，Enter 发送...",
+    "send": "发送",
+    "thinking": "思考中...",
+    "thinkingDone": "思考过程",
+    "loading": "加载中..."
+  },
+  "settings": {
+    "title": "设置",
+    "apiKey": "API Key",
+    "baseUrl": "API 地址",
+    "model": "模型",
+    "test": "测试连接",
+    "save": "保存"
+  },
+  "session": {
+    "new": "新会话"
+  },
+  "mode": {
+    "plan": "计划模式",
+    "planDesc": "Claude 将先探索代码并制定计划，然后再进行编辑",
+    "askBefore": "编辑前询问",
+    "askBeforeDesc": "Claude 将在每次编辑前请求批准",
+    "editAuto": "自动编辑",
+    "editAutoDesc": "Claude 将编辑你选中的文本或整个文件",
+    "auto": "自动模式",
+    "autoDesc": "Claude 将自动为每个任务选择最佳权限模式",
+    "effort": {
+      "low": "低思考",
+      "medium": "中等思考",
+      "high": "高思考",
+      "xhigh": "极高思考",
+      "max": "最大思考",
+      "ultracode": "极高级 (xhigh + 自动工作流编排)"
+    }
+  }
+}

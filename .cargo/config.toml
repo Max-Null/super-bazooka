@@ -1,0 +1,8 @@
+# Build configuration for cc-gui
+# MinGW-w64 toolchain (WinLibs) is required for the x86_64-pc-windows-gnu target
+
+[target.x86_64-pc-windows-gnu]
+linker = "x86_64-w64-mingw32-gcc"
+
+[env]
+MINGW_BIN = { value = "C:\\Users\\MaxNull\\AppData\\Local\\Microsoft\\WinGet\\Packages\\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\\mingw64\\bin", force = false }

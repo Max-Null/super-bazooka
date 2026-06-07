@@ -1,0 +1,16 @@
+node_modules/
+dist/
+src-tauri/target/
+test-results/
+/*.png
+/*.jpg
+.playwright-mcp/
+*.db
+*.db-journal
+*.db-wal
+
+# Tauri auto-generated schema (regenerated on build)
+src-tauri/gen/schemas/
+
+# Temp screenshots in scripts/
+scripts/*.png
