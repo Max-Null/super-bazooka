@@ -32,18 +32,27 @@ cc-gui/
 │   │   ├── session.ts                # 会话 CRUD（对接 Rust SQLite）
 │   │   └── settings.ts               # API 配置、主题、语言、权限模式、effort
 │   ├── components/
-│   │   ├── layout/AppShell.vue       # Navbar + 可折叠侧边栏
+│   │   ├── layout/AppShell.vue       # Navbar + 可折叠侧边栏 + Ctrl+K 命令面板
 │   │   ├── session/SessionSidebar.vue # 会话列表、新建、删除、重命名
 │   │   ├── chat/
-│   │   │   ├── ChatPanel.vue         # 消息区、欢迎页、Permission bar、Debug
+│   │   │   ├── ChatPanel.vue         # 消息区、欢迎页、Permission bar、Debug、导出
 │   │   │   ├── InputBar.vue          # SVG 图标按钮 + auto-resize textarea
-│   │   │   ├── MessageBubble.vue     # 头像、思考折叠、工具卡片、Markdown
-│   │   │   └── ModeBar.vue           # 权限模式 + 思考深度切换
+│   │   │   ├── MessageBubble.vue     # 头像、思考折叠、工具卡片、Markdown、编辑/重发
+│   │   │   ├── ModeBar.vue           # 权限模式 + 思考深度切换
+│   │   │   └── ThinkingIndicator.vue # 思考中动画指示器
 │   │   ├── settings/SettingsPanel.vue # API 配置、连接测试、批准场景管理
-│   │   └── shared/MarkdownRenderer.vue # Markdown → HTML + highlight.js
+│   │   ├── files/
+│   │   │   ├── FilePanel.vue         # 文件浏览器（可折叠、拖拽宽度、面包屑）
+│   │   │   ├── FileTree.vue          # 递归目录树（展开/折叠、右键菜单）
+│   │   │   ├── FilePreview.vue       # CodeMirror 6 只读预览 (12 种语言)
+│   │   │   └── DiffViewer.vue        # 代码 Diff 查看器（三色标记）
+│   │   └── shared/
+│   │       ├── MarkdownRenderer.vue  # Markdown → HTML + highlight.js + Mermaid
+│   │       ├── MermaidRenderer.vue   # Mermaid 图表渲染 (SVG)
+│   │       └── CommandPalette.vue    # Ctrl+K 命令面板 (8 个操作)
 │   ├── composables/
-│   │   ├── useStreamProcessor.ts     # Tauri 事件监听
-│   │   ├── useHighlight.ts           # highlight.js 封装
+│   │   ├── useStreamProcessor.ts     # Tauri 事件监听 (stream + control_request)
+│   │   ├── useHighlight.ts           # highlight.js 封装 (15 种语言)
 │   │   └── useDebugLog.ts            # Debug 面板
 │   └── lib/
 │       ├── tauri-bridge.ts           # IPC 调用 + 类型定义
@@ -205,14 +214,14 @@ CREATE TABLE approved_scenarios (
 ## 测试体系
 
 ```
-Vitest      95 tests   7 files   stores + 组件
+Vitest     120 tests   8 files   stores + 组件 + FileTree + edit/resend + export
 Playwright  16 tests   3 files   E2E 交互 + 截图 + 真 stream 回放
 Cargo       12 tests   3 files   协议解析 + 集成 + 多轮
 ─────────────────────────────────────────
-Total      123 tests
+Total      148 tests
 
 新增模块（Phase 3）:
-- Rust: `list_dir`, `read_file_content`, `get_workspace_root` (3 commands)
+- Rust: `list_dir`, `read_file_content`, `get_workspace_root`, `reveal_in_explorer` (4 commands)
 - Vue: FilePanel, FileTree, FilePreview, DiffViewer (4 components)
 - Dependencies: codemirror 6, @codemirror/lang-*, @codemirror/theme-one-dark, diff
 ```
@@ -280,7 +289,7 @@ Total      123 tests
 - [x] 真实多轮上下文集成测试（resume_test.rs）
 - [x] 测试体系：95 vitest + 16 playwright + 12 cargo = 123 tests
 
-### Phase 3：文件集成 ← 当前
+### Phase 3：文件集成 ✅ 已完成
 
 - [x] 文件浏览器面板（可折叠，抽屉式拉手 `FILES` 标签）
 - [x] 目录树（文件类型图标、文件大小、文件夹优先排序）
@@ -288,24 +297,29 @@ Total      123 tests
 - [x] 工作目录显示（header 等宽字体 + 强调色、点击打开文件面板）
 - [x] CodeMirror 6 文件预览（只读、one-dark 主题、12 种语言）
 - [x] 代码 Diff 查看器（增/删/不变三色标记、行号、diff 库）
-- [x] Rust file ops（`list_dir`, `read_file_content`, `get_workspace_root`）
-- [ ] 右键上下文菜单（新建文件/文件夹、删除、重命名）
-- [ ] 深层目录递归展开（虚拟树可按需加载子目录）
-- [ ] 拖拽调整面板宽度
+- [x] Rust file ops（`list_dir`, `read_file_content`, `get_workspace_root`, `reveal_in_explorer`）
+- [x] 右键上下文菜单（Reveal in Explorer / Copy Path / Copy Name）
+- [x] 深层目录递归展开（▶ 展开/▼ 折叠、缩进竖线、加载动画）
+- [x] 拖拽调整面板宽度（细条手柄、200px ~ 600px）
 
-### Phase 4：体验优化 ❌
+### Phase 4：体验优化 ✅ 已完成
 
-- [ ] Mermaid 图表渲染
-- [ ] Token 用量 + 费用 UI（数据已捕获）
-- [ ] 命令面板 (Ctrl+K)
-- [ ] 消息编辑/重发功能
-- [ ] 会话导出
+- [x] Mermaid 图表渲染（flowchart, sequence, gantt, ER, pie 等全部类型）
+- [x] Token 用量 + 费用 UI（⏱s ↑in ↓out $cost 显示在每条 assistant 消息底部）
+- [x] 命令面板 (Ctrl+K) — 搜索过滤、键盘导航、模式切换、会话操作
+- [x] 消息编辑/重发功能 — 内联编辑 textarea、Save & Resend 按钮、截断后续消息、单按钮 Resend
+- [x] 会话导出 — Markdown 格式导出（含 thinking、tool_use、token 统计）、blob URL 下载
+- [x] 用户消息操作按钮：复制、编辑(✏️)、重发(↻)
 
-### Phase 5：打包发布 ❌
+### Phase 5：打包发布 ✅ 已完成
 
-- [ ] Windows .msi/.exe + macOS .dmg + Linux .AppImage
-- [ ] 自动更新
-- [ ] CI/CD
+- [x] Windows .msi (11 MB) — WiX Toolset，自动下载依赖
+- [x] Windows .exe (7.5 MB) — NSIS 安装包，单文件安装
+- [x] Tauri bundle 配置 — NSIS（中英文）、窗口最小尺寸 800×600
+- [x] CI/CD — GitHub Actions: `ci.yml` (PR 测试+编译检查) + `release.yml` (tag 推送 → Windows 构建)
+- [x] npm scripts — `build:tauri`, `build:tauri:msi`, `build:tauri:nsis`
+- [ ] macOS .dmg / Linux .AppImage — 待定
+- [ ] 自动更新 / 代码签名 — 待定
 
 ---
 

@@ -40,6 +40,9 @@
   },
   "file": {
     "title": "Files",
-    "empty": "Empty directory"
+    "empty": "Empty directory",
+    "reveal": "Reveal in Explorer",
+    "copyPath": "Copy Path",
+    "copyName": "Copy Name"
   }
 }

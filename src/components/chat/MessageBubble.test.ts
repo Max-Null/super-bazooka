@@ -120,4 +120,173 @@ describe("MessageBubble", () => {
     });
     expect(wrapper.html()).not.toContain("stream-cursor");
   });
+
+  // ── Token stats ──
+
+  it("shows token stats for finished assistant messages", () => {
+    const wrapper = mount(MessageBubble, {
+      props: {
+        message: makeMsg({
+          role: "assistant",
+          content: "Done.",
+          isStreaming: false,
+          durationMs: 2345,
+          inputTokens: 150,
+          outputTokens: 80,
+          costUSD: 0.0042,
+        }),
+      },
+      global: { plugins: [i18n] },
+    });
+    expect(wrapper.text()).toContain("2.3s");
+    expect(wrapper.text()).toContain("150");
+    expect(wrapper.text()).toContain("80");
+    expect(wrapper.text()).toContain("0.0042");
+  });
+
+  it("shows stats only when finished, not streaming", () => {
+    // Streaming: no stats
+    const streaming = mount(MessageBubble, {
+      props: {
+        message: makeMsg({
+          role: "assistant", content: "partial",
+          isStreaming: true, durationMs: 500, inputTokens: 10,
+        }),
+      },
+      global: { plugins: [i18n] },
+    });
+    // Finished: stats visible
+    const finished = mount(MessageBubble, {
+      props: {
+        message: makeMsg({
+          role: "assistant", content: "done",
+          isStreaming: false, durationMs: 2345, inputTokens: 150, outputTokens: 80, costUSD: 0.0042,
+        }),
+      },
+      global: { plugins: [i18n] },
+    });
+    expect(finished.text()).toContain("2.3s");
+    expect(finished.text()).toContain("0.0042");
+  });
+
+  it("does not show token stats when no data", () => {
+    const wrapper = mount(MessageBubble, {
+      props: {
+        message: makeMsg({
+          role: "assistant",
+          content: "Done.",
+          isStreaming: false,
+          durationMs: undefined,
+          inputTokens: undefined,
+          outputTokens: undefined,
+          costUSD: undefined,
+        }),
+      },
+      global: { plugins: [i18n] },
+    });
+    // No token stats bar should render
+    expect(wrapper.text()).not.toContain("⏱");
+  });
+
+  // ── Edit / Resend buttons ──
+
+  it("shows edit and resend buttons on user messages", () => {
+    const wrapper = mount(MessageBubble, {
+      props: {
+        message: makeMsg({ role: "user", content: "Hi", isStreaming: false }),
+      },
+      global: { plugins: [i18n] },
+    });
+    // Edit and Resend buttons should be present (title attributes)
+    const buttons = wrapper.findAll("button");
+    const titles = buttons.map(b => b.attributes("title")).filter(Boolean);
+    expect(titles).toContain("Edit");
+    expect(titles).toContain("Resend");
+  });
+
+  it("does not show edit/resend on assistant messages", () => {
+    const wrapper = mount(MessageBubble, {
+      props: {
+        message: makeMsg({ role: "assistant", content: "Reply", isStreaming: false }),
+      },
+      global: { plugins: [i18n] },
+    });
+    const buttons = wrapper.findAll("button");
+    const titles = buttons.map(b => b.attributes("title")).filter(Boolean);
+    expect(titles).not.toContain("Edit");
+    expect(titles).not.toContain("Resend");
+  });
+
+  it("does not show edit/resend during streaming", () => {
+    const wrapper = mount(MessageBubble, {
+      props: {
+        message: makeMsg({ role: "user", content: "Hi", isStreaming: true }),
+      },
+      global: { plugins: [i18n] },
+    });
+    const buttons = wrapper.findAll("button");
+    const titles = buttons.map(b => b.attributes("title")).filter(Boolean);
+    expect(titles).not.toContain("Edit");
+    expect(titles).not.toContain("Resend");
+  });
+
+  it("enters edit mode on edit click and shows textarea", async () => {
+    const wrapper = mount(MessageBubble, {
+      props: {
+        message: makeMsg({ role: "user", content: "Hello world", isStreaming: false }),
+      },
+      global: { plugins: [i18n] },
+    });
+    // Click edit button
+    const editBtn = wrapper.findAll("button").find(b => b.attributes("title") === "Edit");
+    expect(editBtn).toBeTruthy();
+    await editBtn!.trigger("click");
+
+    // Textarea should appear with original content
+    const textarea = wrapper.find("textarea");
+    expect(textarea.exists()).toBe(true);
+    expect(textarea.element.value).toBe("Hello world");
+
+    // Cancel and Save & Resend buttons should appear
+    expect(wrapper.text()).toContain("Cancel");
+    expect(wrapper.text()).toContain("Save");
+  });
+
+  it("emits editSave with new content on save", async () => {
+    const wrapper = mount(MessageBubble, {
+      props: {
+        message: makeMsg({ role: "user", content: "Original", isStreaming: false }),
+      },
+      global: { plugins: [i18n] },
+    });
+    // Enter edit mode
+    const editBtn = wrapper.findAll("button").find(b => b.attributes("title") === "Edit");
+    await editBtn!.trigger("click");
+
+    // Edit text
+    const textarea = wrapper.find("textarea");
+    await textarea.setValue("Edited text");
+
+    // Click save
+    const saveBtn = wrapper.findAll("button").find(b => b.text().includes("Save"));
+    await saveBtn!.trigger("click");
+
+    expect(wrapper.emitted("editSave")).toBeTruthy();
+    expect(wrapper.emitted("editSave")![0]).toEqual(["test-1", "Edited text"]);
+  });
+
+  it("emits resend event on resend button click", async () => {
+    const wrapper = mount(MessageBubble, {
+      props: {
+        message: makeMsg({ role: "user", content: "Retry me", isStreaming: false }),
+      },
+      global: { plugins: [i18n] },
+    });
+    const resendBtn = wrapper.findAll("button").find(b => b.attributes("title") === "Resend");
+    expect(resendBtn).toBeTruthy();
+    await resendBtn!.trigger("click");
+
+    expect(wrapper.emitted("resend")).toBeTruthy();
+    expect(wrapper.emitted("resend")![0]).toEqual(["test-1", "Retry me"]);
+  });
 });

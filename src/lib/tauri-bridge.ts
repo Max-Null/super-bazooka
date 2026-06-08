@@ -187,6 +187,10 @@ export async function getWorkspaceRoot(): Promise<string> {
   return invoke("get_workspace_root");
 }
 
+export async function revealInExplorer(path: string): Promise<void> {
+  return invoke("reveal_in_explorer", { path });
+}
+
 /**
  * Emitted by Rust when a claude process exits.
  */

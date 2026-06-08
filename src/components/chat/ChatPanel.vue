@@ -15,6 +15,8 @@ const session = useSessionStore();
 const settings = useSettingsStore();
 const debugLog = useDebugLog();
 const scrollContainer = ref<HTMLElement | null>(null);
+const exporting = ref(false);
+const exportedLabel = ref("");
 
 // ── Sticky question banner ──
 const stickyQuestion = ref("");
@@ -83,6 +85,46 @@ async function handleDeny() {
   chat.resolveControlRequest("deny");
 }
 
+// ── Edit + Resend: truncate subsequent messages, update content, resend ──
+async function handleEditSave(id: string, newContent: string) {
+  // Update the message content
+  chat.updateMessage(id, newContent);
+  // Remove all messages after the edited one (they were responses to the old text)
+  chat.truncateAfterMessage(id);
+  // Resend the edited message
+  await handleSend(newContent);
+}
+
+async function handleResend(id: string, content: string) {
+  // Resend the same message text
+  await handleSend(content);
+}
+
+// ── Session Export ──
+async function handleExport() {
+  const sid = session.activeSessionId;
+  if (!sid || chat.messages.length === 0) return;
+  exporting.value = true;
+  try {
+    const active = session.sessions.find(s => s.id === sid);
+    const title = active?.title || "Chat Export";
+    const md = chat.exportMarkdown(title);
+    const blob = new Blob([md], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${title.replace(/[^a-zA-Z0-9一-鿿_-]/g, "_")}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    exportedLabel.value = "Exported!";
+    setTimeout(() => exportedLabel.value = "", 2000);
+  } finally {
+    exporting.value = false;
+  }
+}
+
 async function scrollToBottom() {
   await nextTick();
   if (scrollContainer.value) scrollContainer.value.scrollTop = scrollContainer.value.scrollHeight;
@@ -134,7 +176,27 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottom());
 
       <!-- Message list -->
       <div class="max-w-3xl mx-auto px-4 py-6 space-y-5">
-        <MessageBubble v-for="msg in chat.messages" :key="msg.id" :message="msg" />
+        <!-- Export bar (when messages exist) -->
+        <div v-if="chat.messages.length > 0" class="flex items-center justify-end">
+          <button
+            @click="handleExport"
+            :disabled="exporting"
+            class="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] transition-colors hover:bg-[var(--bg-hover)]"
+            :style="{ color: exportedLabel ? 'var(--accent)' : 'var(--text-muted)' }"
+            title="Export session as Markdown"
+          >
+            <svg v-if="!exporting" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span v-if="exportedLabel">{{ exportedLabel }}</span>
+            <span v-else>Export</span>
+          </button>
+        </div>
+        <MessageBubble
+          v-for="msg in chat.messages"
+          :key="msg.id"
+          :message="msg"
+          @edit-save="handleEditSave"
+          @resend="handleResend"
+        />
 
         <!-- Processing indicator (initial phase, before any content arrives) -->
         <ThinkingIndicator

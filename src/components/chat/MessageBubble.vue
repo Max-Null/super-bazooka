@@ -1,12 +1,54 @@
 <script setup lang="ts">
 import type { Message } from "@/stores/chat";
-import { ref, computed, onUnmounted } from "vue";
+import { ref, computed, onUnmounted, nextTick } from "vue";
 import { useI18n } from "vue-i18n";
 import MarkdownRenderer from "../shared/MarkdownRenderer.vue";
 
 const { t } = useI18n();
 const props = defineProps<{ message: Message }>();
+const emit = defineEmits<{
+  edit: [id: string, content: string];
+  resend: [id: string, content: string];
+  editSave: [id: string, newContent: string];
+}>();
 const copied = ref(false);
+
+// ── Inline editing state ──
+const isEditing = ref(false);
+const editText = ref("");
+const editTextarea = ref<HTMLTextAreaElement | null>(null);
+
+function startEdit() {
+  editText.value = props.message.content;
+  isEditing.value = true;
+  nextTick(() => {
+    editTextarea.value?.focus();
+    editTextarea.value?.select();
+  });
+}
+
+function cancelEdit() {
+  isEditing.value = false;
+  editText.value = "";
+}
+
+function saveAndResend() {
+  const text = editText.value.trim();
+  if (!text) return;
+  isEditing.value = false;
+  emit("editSave", props.message.id, text);
+}
+
+function onEditKeydown(e: KeyboardEvent) {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    saveAndResend();
+  }
+  if (e.key === "Escape") {
+    e.preventDefault();
+    cancelEdit();
+  }
+}
 
 // ── Live timer during streaming ──
 const liveElapsedMs = ref(0);
@@ -119,11 +161,12 @@ function formatJSON(obj: unknown): string {
 
     <!-- Body -->
     <div :class="['flex-1 min-w-0 space-y-2', message.role === 'user' ? 'flex flex-col items-end' : '']">
-      <!-- Name + copy -->
+      <!-- Name + actions -->
       <div class="flex items-center gap-1.5 px-0.5">
         <span class="text-[11px] font-medium" style="color:var(--text-muted)">
           {{ message.role === 'user' ? 'You' : 'Claude' }}
         </span>
+        <!-- Copy -->
         <button
           v-if="message.content && !message.isStreaming"
           @click="copyContent"
@@ -133,6 +176,26 @@ function formatJSON(obj: unknown): string {
         >
           <svg v-if="!copied" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
           <svg v-else width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+        </button>
+        <!-- Edit (user messages only) -->
+        <button
+          v-if="message.role === 'user' && !message.isStreaming && !isEditing"
+          @click="startEdit"
+          class="w-4 h-4 flex items-center justify-center rounded transition-colors hover:bg-[var(--bg-hover)]"
+          style="color: var(--text-muted)"
+          title="Edit"
+        >
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+        </button>
+        <!-- Resend (user messages only) -->
+        <button
+          v-if="message.role === 'user' && !message.isStreaming && !isEditing"
+          @click="emit('resend', message.id, message.content)"
+          class="w-4 h-4 flex items-center justify-center rounded transition-colors hover:bg-[var(--bg-hover)]"
+          style="color: var(--text-muted)"
+          title="Resend"
+        >
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
         </button>
       </div>
 
@@ -155,8 +218,43 @@ function formatJSON(obj: unknown): string {
       </div>
 
       <!-- Content (answer text AFTER tools) -->
+      <!-- Edit mode: inline textarea for user messages -->
+      <div v-if="isEditing" class="w-full">
+        <textarea
+          ref="editTextarea"
+          v-model="editText"
+          @keydown="onEditKeydown"
+          rows="3"
+          class="w-full resize-none bg-transparent text-sm leading-relaxed p-3 rounded-xl rounded-br-md border outline-none"
+          :style="{
+            color: 'var(--text-bright)',
+            background: 'linear-gradient(135deg, rgba(59,130,246,0.15), rgba(99,102,241,0.10))',
+            borderColor: 'var(--accent)',
+          }"
+        ></textarea>
+        <div class="flex items-center gap-2 mt-2 justify-end">
+          <button
+            @click="cancelEdit"
+            class="px-2.5 py-1 rounded-md text-xs transition-colors hover:bg-[var(--bg-hover)]"
+            style="color: var(--text-muted)"
+          >Cancel</button>
+          <button
+            @click="saveAndResend"
+            :disabled="!editText.trim()"
+            class="px-3 py-1 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5"
+            :style="{
+              background: editText.trim() ? 'var(--accent)' : 'var(--bg-elevated)',
+              color: editText.trim() ? 'var(--bg-root)' : 'var(--text-muted)',
+            }"
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            Save &amp; Resend
+          </button>
+        </div>
+      </div>
+
       <div
-        v-if="message.content"
+        v-else-if="message.content"
         :class="[
           'prose text-sm leading-relaxed',
           message.role === 'user'
@@ -170,6 +268,22 @@ function formatJSON(obj: unknown): string {
       >
         <MarkdownRenderer v-if="message.content" :content="message.content" />
         <span v-if="message.isStreaming" class="stream-cursor"></span>
+      </div>
+
+      <!-- Token + Time stats (only for finished assistant messages) -->
+      <div
+        v-if="message.role === 'assistant' && !message.isStreaming && (message.durationMs || message.inputTokens)"
+        class="flex items-center gap-3 mt-1.5 text-[10px]"
+        :style="{ color: 'var(--text-muted)' }"
+      >
+        <span v-if="message.durationMs">⏱ {{ (message.durationMs / 1000).toFixed(1) }}s</span>
+        <span v-if="message.inputTokens">↑{{ message.inputTokens }}</span>
+        <span v-if="message.outputTokens">↓{{ message.outputTokens }}</span>
+        <span
+          v-if="message.costUSD"
+          class="font-mono"
+          :style="{ color: 'var(--accent)' }"
+        >${{ message.costUSD.toFixed(4) }}</span>
       </div>
 
       <!-- Thinking (collapsed by default) — timer + tokens integrated in summary -->

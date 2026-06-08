@@ -3,13 +3,31 @@ import { ref, onMounted } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import SessionSidebar from "@/components/session/SessionSidebar.vue";
 import FilePanel from "@/components/files/FilePanel.vue";
+import CommandPalette from "@/components/shared/CommandPalette.vue";
 import { getWorkspaceRoot } from "@/lib/tauri-bridge";
+import { useSessionStore } from "@/stores/session";
+import { useSettingsStore } from "@/stores/settings";
 
 const router = useRouter();
 const route = useRoute();
+const session = useSessionStore();
+const settings = useSettingsStore();
 const drawerOpen = ref(false);
 const cwd = ref("");
-const fileNavCounter = ref(0);    // increment to trigger FilePanel navigation
+const fileNavCounter = ref(0);
+
+function handleCommand(action: string) {
+  switch (action) {
+    case "new-session": session.createSession().then(() => router.push("/chat")); break;
+    case "toggle-sidebar": drawerOpen.value = !drawerOpen.value; break;
+    case "toggle-files": fileNavCounter.value++; break;
+    case "settings": router.push("/settings"); break;
+    case "plan-mode": settings.planMode = true; settings.autoMode = false; break;
+    case "auto-mode": settings.autoMode = true; settings.planMode = false; break;
+    case "accept-edits": settings.permissionMode = "acceptEdits"; break;
+    case "bypass": settings.permissionMode = "bypassPermissions"; break;
+  }
+}
 
 onMounted(async () => {
   try { cwd.value = await getWorkspaceRoot(); } catch {}
@@ -119,5 +137,7 @@ function openFilePanelTo(path: string) {
       <!-- File panel (right side) -->
       <FilePanel :navCounter="fileNavCounter" :navPath="cwd" />
     </div>
+
+    <CommandPalette @command="handleCommand" />
   </div>
 </template>

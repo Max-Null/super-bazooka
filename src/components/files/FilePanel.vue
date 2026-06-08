@@ -8,11 +8,31 @@ import FilePreview from "./FilePreview.vue";
 const props = defineProps<{ navCounter?: number; navPath?: string }>();
 const { t } = useI18n();
 const collapsed = ref(true);
+const panelWidth = ref(280);
 const rootPath = ref("");
 const workspaceRoot = ref("");
 const files = ref<FileEntry[]>([]);
 const selectedFile = ref<string | null>(null);
 const previewContent = ref("");
+
+// Drag-to-resize
+const dragging = ref(false);
+function onDragStart(e: MouseEvent) {
+  e.preventDefault();
+  dragging.value = true;
+  const startX = e.clientX;
+  const startW = panelWidth.value;
+  const onMove = (ev: MouseEvent) => {
+    panelWidth.value = Math.min(600, Math.max(200, startW - (ev.clientX - startX)));
+  };
+  const onUp = () => {
+    dragging.value = false;
+    document.removeEventListener("mousemove", onMove);
+    document.removeEventListener("mouseup", onUp);
+  };
+  document.addEventListener("mousemove", onMove);
+  document.addEventListener("mouseup", onUp);
+}
 
 onMounted(async () => {
   try {
@@ -23,7 +43,6 @@ onMounted(async () => {
 });
 
 // Listen for external navigation signal (e.g. header CWD click)
-// Uses counter so every click fires, even to the same path
 watch(() => props.navCounter, async () => {
   const path = props.navPath;
   if (!path) return;
@@ -69,14 +88,23 @@ function goUp() {
 
 <template>
   <div class="flex shrink-0 overflow-hidden">
-    <!-- Drawer pull-tab (always visible, acts as open/close handle) -->
+    <!-- Drag handle (thin strip, visible when panel is open) -->
+    <div
+      v-if="!collapsed"
+      @mousedown="onDragStart"
+      class="w-1.5 shrink-0 cursor-col-resize hover:bg-[var(--accent)]/30 transition-colors select-none"
+      :class="dragging ? 'bg-[var(--accent)]/40' : ''"
+      :style="{ background: dragging ? 'var(--accent-dim)' : 'transparent' }"
+    ></div>
+
+    <!-- Drawer pull-tab -->
     <button
       @click="collapsed = !collapsed"
       class="shrink-0 w-7 flex items-center justify-center rounded-l-lg cursor-pointer select-none transition-all duration-200"
       :style="{
         background: collapsed ? 'var(--bg-surface)' : 'var(--bg-elevated)',
         color: 'var(--text-muted)',
-        border: '1px solid var(--border-dim)',
+        border: collapsed ? '1px solid var(--border-dim)' : 'none',
         borderRight: 'none',
       }"
       :title="collapsed ? t('file.title') : ''"
@@ -91,17 +119,18 @@ function goUp() {
 
     <!-- Panel body -->
     <aside
-      :class="['flex flex-col border-l overflow-hidden transition-all duration-200',
-        collapsed ? 'w-0 border-transparent' : 'w-72']"
-      :style="{ background: 'var(--bg-surface)', borderColor: 'var(--border-dim)' }"
+      :class="['flex flex-col overflow-hidden transition-all duration-200',
+        collapsed ? 'w-0' : '']"
+      :style="{
+        width: collapsed ? '0' : panelWidth + 'px',
+        background: 'var(--bg-surface)',
+        borderLeft: collapsed ? 'none' : '1px solid var(--border-dim)',
+      }"
     >
       <div v-if="!collapsed" class="flex flex-col h-full">
         <!-- Breadcrumb -->
         <div class="flex items-center gap-0.5 px-2 py-1.5 text-[11px] shrink-0 overflow-x-auto"
           :style="{ color: 'var(--text-muted)', borderBottom: '1px solid var(--border-dim)' }">
-          <button @click="goUp" class="hover:text-[var(--accent)] transition-colors shrink-0" title="Up">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
-          </button>
           <button @click="goRoot" class="hover:text-[var(--accent)] transition-colors shrink-0 mr-0.5" title="Back to workspace root">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
           </button>
@@ -120,7 +149,7 @@ function goUp() {
 
         <!-- File tree -->
         <div class="flex-1 overflow-y-auto px-1 py-0.5">
-          <FileTree :entries="files" :selected="selectedFile" @select="openFile" @navigate="navigateTo" />
+          <FileTree :entries="files" :selected="selectedFile" @selectFile="openFile" @navigateTo="navigateTo" />
         </div>
 
         <!-- Preview — flex-1 to fill remaining space -->

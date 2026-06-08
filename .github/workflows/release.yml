@@ -1,0 +1,73 @@
+name: Build & Release
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+  build-windows:
+    needs: test-frontend
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - run: npm ci
+
+      - name: Build Tauri
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "cc-gui ${{ github.ref_name }}"
+          releaseBody: |
+            ## cc-gui ${{ github.ref_name }}
+
+            Claude Code Desktop GUI — Tauri 2 + Vue 3
+
+            ### Downloads
+            - **Windows**: `.msi` installer or `.exe` setup
+
+            ### Requirements
+            - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) must be installed
+            - DeepSeek API key (or compatible endpoint)
+          releaseDraft: true
+          prerelease: false
+
+  # ── macOS / Linux 待定 ──
+  # build-macos:
+  #   needs: test-frontend
+  #   runs-on: macos-latest
+  #   strategy:
+  #     matrix:
+  #       target: [x86_64-apple-darwin, aarch64-apple-darwin]
+  #   ...
+  #
+  # build-linux:
+  #   needs: test-frontend
+  #   runs-on: ubuntu-latest
+  #   ...

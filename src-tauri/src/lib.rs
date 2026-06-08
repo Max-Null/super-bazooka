@@ -306,6 +306,36 @@ async fn get_workspace_root() -> Result<String, String> {
     Ok(root.to_string_lossy().to_string())
 }
 
+#[tauri::command]
+async fn reveal_in_explorer(path: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        let p = std::path::Path::new(&path);
+        if p.is_dir() {
+            std::process::Command::new("explorer")
+                .arg(p)
+                .spawn()
+                .map_err(|e| format!("{}", e))?;
+        } else {
+            std::process::Command::new("explorer")
+                .arg("/select,")
+                .arg(p)
+                .spawn()
+                .map_err(|e| format!("{}", e))?;
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let p = std::path::Path::new(&path);
+        let dir = if p.is_dir() { p } else { p.parent().unwrap_or(p) };
+        std::process::Command::new("open")
+            .arg(dir)
+            .spawn()
+            .map_err(|e| format!("{}", e))?;
+    }
+    Ok(())
+}
+
 // ── Entry Point ──
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -340,6 +370,7 @@ pub fn run() {
             list_dir,
             read_file_content,
             get_workspace_root,
+            reveal_in_explorer,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

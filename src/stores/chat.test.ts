@@ -194,4 +194,98 @@ describe("chat store", () => {
     expect(chat.messages).toHaveLength(1);
     expect(chat.messages[0].content).toBe("new");
   });
+
+  // ── updateMessage ──
+
+  it("updates message content by id", () => {
+    const chat = useChatStore();
+    const id = chat.addUserMessage("Original");
+    chat.updateMessage(id, "Edited");
+    expect(chat.messages[0].content).toBe("Edited");
+  });
+
+  it("updateMessage does nothing for unknown id", () => {
+    const chat = useChatStore();
+    chat.addUserMessage("Hello");
+    chat.updateMessage("nonexistent", "Should not work");
+    expect(chat.messages[0].content).toBe("Hello");
+    expect(chat.messages).toHaveLength(1);
+  });
+
+  // ── truncateFromIndex ──
+
+  it("truncateFromIndex removes messages from index", () => {
+    const chat = useChatStore();
+    chat.addUserMessage("msg1");
+    chat.addUserMessage("msg2");
+    chat.addUserMessage("msg3");
+    expect(chat.messages).toHaveLength(3);
+
+    chat.truncateFromIndex(1);
+    expect(chat.messages).toHaveLength(1);
+    expect(chat.messages[0].content).toBe("msg1");
+  });
+
+  it("truncateFromIndex returns 0 for out-of-bounds index", () => {
+    const chat = useChatStore();
+    chat.addUserMessage("msg1");
+    expect(chat.truncateFromIndex(5)).toBe(0);
+    expect(chat.truncateFromIndex(-1)).toBe(0);
+    expect(chat.messages).toHaveLength(1);
+  });
+
+  // ── truncateAfterMessage ──
+
+  it("truncateAfterMessage removes messages after given id", () => {
+    const chat = useChatStore();
+    const id1 = chat.addUserMessage("msg1");
+    chat.addUserMessage("msg2");
+    chat.addUserMessage("msg3");
+    expect(chat.messages).toHaveLength(3);
+
+    chat.truncateAfterMessage(id1);
+    expect(chat.messages).toHaveLength(1);
+    expect(chat.messages[0].content).toBe("msg1");
+  });
+
+  it("truncateAfterMessage does nothing for unknown id", () => {
+    const chat = useChatStore();
+    chat.addUserMessage("msg1");
+    chat.addUserMessage("msg2");
+    chat.truncateAfterMessage("unknown");
+    expect(chat.messages).toHaveLength(2);
+  });
+
+  // ── exportMarkdown ──
+
+  it("exportMarkdown produces markdown with user and assistant messages", () => {
+    const chat = useChatStore();
+    chat.addUserMessage("Hello AI");
+    chat.startAssistantMessage();
+    chat.appendText("Hello human");
+    chat.finishAssistantMessage(1000, 10, 20, 0.001);
+
+    const md = chat.exportMarkdown("Test Session");
+    expect(md).toContain("# Test Session");
+    expect(md).toContain("## You");
+    expect(md).toContain("Hello AI");
+    expect(md).toContain("## Claude");
+    expect(md).toContain("Hello human");
+    expect(md).toContain("⏱ 1.0s");
+  });
+
+  it("exportMarkdown includes thinking and tool uses", () => {
+    const chat = useChatStore();
+    chat.addUserMessage("Run command");
+    chat.startAssistantMessage();
+    chat.appendThinking("Let me think...");
+    chat.addToolUse({ id: "t1", name: "Bash", input: { command: "ls" } });
+    chat.appendText("Done");
+    chat.finishAssistantMessage();
+
+    const md = chat.exportMarkdown("Test");
+    expect(md).toContain("**Thinking:**");
+    expect(md).toContain("Let me think...");
+    expect(md).toContain("🔧 **Bash**");
+  });
 });
