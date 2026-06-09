@@ -10,6 +10,23 @@ let unlistenError: UnlistenFn | null = null;
 let unlistenSession: UnlistenFn | null = null;
 let unlistenProcessExit: UnlistenFn | null = null;
 
+function notifyComplete(durationMs?: number, inputTokens?: number, outputTokens?: number) {
+  if (!("Notification" in window)) return;
+  if (Notification.permission === "denied") return;
+  const body = [
+    durationMs ? `${(durationMs / 1000).toFixed(1)}s` : "",
+    inputTokens ? `↑${inputTokens}` : "",
+    outputTokens ? `↓${outputTokens}` : "",
+  ].filter(Boolean).join(" · ");
+  if (Notification.permission === "granted") {
+    new Notification("cc-gui — Done", { body: body || undefined, silent: true });
+  } else {
+    Notification.requestPermission().then(p => {
+      if (p === "granted") new Notification("cc-gui — Done", { body: body || undefined, silent: true });
+    });
+  }
+}
+
 interface SessionCreatedPayload {
   ourId: string;
   claudeSessionId: string;
@@ -74,6 +91,8 @@ export function useStreamProcessor() {
             data.output_tokens,
             data.cost_usd
           );
+          // Desktop notification
+          notifyComplete(data.duration_ms, data.input_tokens, data.output_tokens);
           break;
         }
 

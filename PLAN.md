@@ -214,7 +214,7 @@ CREATE TABLE approved_scenarios (
 ## 测试体系
 
 ```
-Vitest     120 tests   8 files   stores + 组件 + FileTree + edit/resend + export
+Vitest     132 tests   9 files   stores + 组件 + FileTree + edit/resend/export + SessionSidebar + theme + drag-drop
 Playwright  16 tests   3 files   E2E 交互 + 截图 + 真 stream 回放
 Cargo       12 tests   3 files   协议解析 + 集成 + 多轮
 ─────────────────────────────────────────
@@ -320,6 +320,125 @@ Total      148 tests
 - [x] npm scripts — `build:tauri`, `build:tauri:msi`, `build:tauri:nsis`
 - [ ] macOS .dmg / Linux .AppImage — 待定
 - [ ] 自动更新 / 代码签名 — 待定
+
+### Phase 6：完善打磨 ❌
+
+#### A. 功能增强
+
+##### A1. 会话搜索 ✅
+- **目标**：SessionSidebar 顶部增加搜索输入框，按标题实时过滤会话列表
+- **实现**：
+  - `SessionSidebar.vue`：搜索 input + `filteredSessions` computed
+  - 输入时实时过滤，匹配标题（大小写不敏感），无匹配显示 "No matching sessions"
+  - 清除按钮一键重置搜索
+  - 不影响新建/删除/重命名等现有操作
+- **文件**：`src/components/session/SessionSidebar.vue`，`src/components/session/SessionSidebar.test.ts`(新)
+- **测试**：搜索过滤、空状态显示、清除按钮、恢复全部列表（7 tests）
+
+##### A2. 主题切换 ✅
+- **目标**：支持深色/浅色模式切换，默认 dark
+- **实现**：
+  - `src/assets/theme-light.css`(新)：`[data-theme="light"]` CSS 变量覆写
+  - `src/App.vue`：根元素绑定 `data-theme` 属性，watch 动态切换
+  - `AppShell.vue`：header 新增 sun/moon 图标切换按钮
+  - `CommandPalette.vue`：新增 theme-dark / theme-light 操作
+  - `settings.ts`：theme 持久化 localStorage
+- **文件**：`src/assets/theme-light.css`(新), `src/App.vue`, `src/components/layout/AppShell.vue`, `src/components/shared/CommandPalette.vue`
+- **测试**：theme toggle、localStorage 持久化（2 tests）
+
+##### A3. 全局快捷键 ✅
+- **目标**：快捷键全局可用（无需打开命令面板）
+- **绑定**：`Ctrl+N` 新建 · `Ctrl+B` 侧边栏 · `Ctrl+E` 文件面板 · `Ctrl+,` 设置
+- **实现**：`AppShell.vue` 全局 keydown listener，input/textarea 聚焦时跳过
+- **文件**：`src/components/layout/AppShell.vue`
+- **注意**：Ctrl+K 仍由 CommandPalette 独立处理，不与全局冲突
+
+##### A4. 拖拽文件到输入框 ✅
+- **目标**：从系统拖拽文件到输入框，自动插入文件路径
+- **实现**：`InputBar.vue` → @dragover/@dragleave/@drop，虚线高亮边框，支持多文件
+- **文件**：`src/components/chat/InputBar.vue`
+- **测试**：拖拽高亮、文件路径插入（3 tests）
+
+##### A5. InputBar 工具栏 + 命令菜单增强 ✅（对标 VS Code 扩展）
+- **目标**：在 InputBar 上方新增工具栏，左侧放置附加文件按钮 + 命令菜单按钮，对齐 VS Code 扩展体验
+- **布局**：
+  ```
+  ┌──────────────────────────────────────────────────────────────────────┐
+  │ [📎] [☰] [模式: 计划模式 ▼] [努力: high ▼]    [▂▃▅▇ 45.6K/200K] │
+  └──────────────────────────────────────────────────────────────────────┘
+  ```
+- **工具栏按钮（从左到右）**：
+  | 按钮 | 功能 |
+  |------|------|
+  | 📎 附加文件 | 打开文件选择器，将选中文件路径插入输入框（支持多个） |
+  | ☰ 命令菜单 | 打开 Ctrl+K 命令面板（与快捷键等价），含更多操作 |
+  | 权限模式选择器 | 下拉切换（计划模式/自动模式/编辑前询问/编辑自动/完全放行），显示当前模式名 |
+  | Effort 选择器 | 下拉切换思考深度（low/medium/high/xhigh/max/ultracode），显示当前值 |
+  | 上下文指示器 | 右侧显示 token 用量（见 A6） |
+- **注意**：权限模式选择器从现有 `ModeBar.vue` 提取并移到工具栏，原 ModeBar 移除（功能已被工具栏 + CommandPalette 覆盖）
+- **命令面板扩展**（☰ 按钮或 Ctrl+K 打开）：
+  - 新增：attach-file（附加文件）、show-usage（查看用量）、compact（压缩上下文）
+  - 保留现有 8 个操作（new-session, toggle-sidebar, toggle-files, settings, 4 个权限模式）
+- **实现**：
+  - `InputBarToolbar.vue`(新)：工具栏（📎Attach + ☰Menu + 权限模式▼ + 努力▼）
+  - `useCommandPalette.ts`(新)：轻量事件总线，解耦菜单按钮 ↔ CommandPalette
+  - `ChatPanel.vue`：ModeBar 替换为 InputBarToolbar，handleAttachFile
+  - `CommandPalette.vue`：新增 attach-file/show-usage/compact + watch 总线打开
+  - `AppShell.vue`：处理新增命令
+  - ModeBar.vue 保留但不渲染（后续移除）
+- **文件**：`InputBarToolbar.vue`(新), `useCommandPalette.ts`(新), `ChatPanel.vue`, `CommandPalette.vue`, `AppShell.vue`
+
+##### A6. 上下文指示器 ✅
+- **目标**：工具栏右侧显示 context window 使用情况
+- **实现**：`ContextIndicator.vue`(新) → 分段进度条 + 百分比，模型容量映射，绿→黄→红阈值
+- **文件**：`src/components/chat/ContextIndicator.vue`(新), `InputBarToolbar.vue`
+
+#### B. 质量加固
+
+##### B1. Rust unwrap 消除 ✅
+- 5 处 unwrap/expect 已消除或改为 proper error：
+  - `process.rs:203`：`serde_json::to_string_pretty().unwrap()` → `map_err`
+  - `db.rs:14`：`data_dir().expect()` → `unwrap_or_else` fallback to temp dir
+  - `db.rs:26`：`create_dir_all().expect()` → `map_err` → SqliteResult
+  - `lib.rs:343`：`Db::new().expect()` → `unwrap_or_else` with eprintln + exit
+  - `lib.rs:380`：Tauri builder expect 保留（入口点必须成功）
+
+##### B2. 按需加载 ✅
+- MermaidRenderer → `defineAsyncComponent(() => import(...))`
+
+##### B3. 前端错误边界 ✅
+- `ErrorBoundary.vue`(新)：`onErrorCaptured` + 重试按钮
+- ChatPanel / FilePanel / SettingsPanel 已包裹
+
+#### C. 体验打磨
+
+##### C1. 消息过渡动画 ✅
+- Vue `<TransitionGroup name="msg">` + CSS slide-up/fade-in 动画
+
+##### C2. 系统通知 ✅
+- Web Notification API：AI 回答完成时弹出通知（耗时 + token）
+
+##### C3. 会话统计信息 ✅
+- Rust list_sessions 聚合 JSON content 中的 token/cost
+- SessionSidebar 每个会话显示 token 总量 + 费用
+
+### Phase 6：完善打磨 ✅ 已完成
+
+全部 10 项已完成，详见各分节。
+
+#### 实施顺序
+
+```
+第一轮（功能增强）：
+  A1 会话搜索 → A2 主题切换 → A3 全局快捷键 → A4 拖拽文件
+  → A5 命令菜单增强 → A6 上下文指示器
+
+第二轮（质量加固）：
+  B1 Rust unwrap → B2 代码分包 → B3 错误边界
+
+第三轮（体验打磨）：
+  C1 消息动画 → C2 系统通知 → C3 会话统计
+```
 
 ---
 

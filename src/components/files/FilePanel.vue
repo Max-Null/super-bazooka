@@ -2,8 +2,10 @@
 import { ref, computed, onMounted, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { listDir, readFileContent, getWorkspaceRoot, type FileEntry } from "@/lib/tauri-bridge";
+import ErrorBoundary from "@/components/shared/ErrorBoundary.vue";
 import FileTree from "./FileTree.vue";
 import FilePreview from "./FilePreview.vue";
+import FilePreviewModal from "@/components/shared/FilePreviewModal.vue";
 
 const props = defineProps<{ navCounter?: number; navPath?: string }>();
 const { t } = useI18n();
@@ -14,6 +16,7 @@ const workspaceRoot = ref("");
 const files = ref<FileEntry[]>([]);
 const selectedFile = ref<string | null>(null);
 const previewContent = ref("");
+const previewFile = ref<{ name: string; path: string } | null>(null);
 
 // Drag-to-resize
 const dragging = ref(false);
@@ -67,6 +70,14 @@ async function openFile(entry: FileEntry) {
   catch (e) { previewContent.value = `Error: ${e}`; }
 }
 
+function openModalPreview() {
+  if (selectedFile.value) {
+    // Use the full path from the current directory
+    const fullPath = rootPath.value.replace(/[\\/]$/, "") + "\\" + selectedFile.value;
+    previewFile.value = { name: selectedFile.value, path: fullPath };
+  }
+}
+
 // Split path into clickable segments for breadcrumb
 const pathSegments = computed(() => {
   const path = rootPath.value.replace(/[\\/]$/, "");
@@ -87,7 +98,8 @@ function goUp() {
 </script>
 
 <template>
-  <div class="flex shrink-0 overflow-hidden">
+  <ErrorBoundary name="FilePanel">
+    <div class="flex shrink-0 overflow-hidden">
     <!-- Drag handle (thin strip, visible when panel is open) -->
     <div
       v-if="!collapsed"
@@ -148,22 +160,33 @@ function goUp() {
         </div>
 
         <!-- File tree -->
-        <div class="flex-1 overflow-y-auto px-1 py-0.5">
+        <div class="flex-1 overflow-y-auto px-1 py-0.5 min-h-0">
           <FileTree :entries="files" :selected="selectedFile" @selectFile="openFile" @navigateTo="navigateTo" />
         </div>
 
-        <!-- Preview — flex-1 to fill remaining space -->
+        <!-- Inline preview panel -->
         <div v-if="selectedFile && previewContent" class="border-t flex flex-col flex-1 min-h-0"
           :style="{ borderColor: 'var(--border-dim)' }">
           <div class="flex items-center justify-between px-3 h-8 text-[11px] shrink-0"
             :style="{ color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-dim)' }">
             <span class="truncate font-medium">{{ selectedFile }}</span>
-            <button
-              @click="selectedFile = null; previewContent = ''"
-              class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-[var(--bg-hover)] transition-colors text-sm shrink-0"
-              :style="{ color: 'var(--text-muted)' }"
-              title="Close preview"
-            >&times;</button>
+            <div class="flex items-center gap-1">
+              <!-- Open in modal button -->
+              <button
+                @click="openModalPreview"
+                class="w-5 h-5 flex items-center justify-center rounded transition-colors hover:bg-[var(--bg-elevated)]"
+                style="color: var(--accent)"
+                title="Open in preview window"
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+              </button>
+              <button
+                @click="selectedFile = null; previewContent = ''"
+                class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-[var(--bg-hover)] transition-colors text-sm shrink-0"
+                :style="{ color: 'var(--text-muted)' }"
+                title="Close preview"
+              >&times;</button>
+            </div>
           </div>
           <div class="flex-1 overflow-auto">
             <FilePreview :content="previewContent" :filename="selectedFile" />
@@ -172,4 +195,8 @@ function goUp() {
       </div>
     </aside>
   </div>
+  </ErrorBoundary>
+
+  <!-- File preview modal -->
+  <FilePreviewModal :file="previewFile" @close="previewFile = null" />
 </template>

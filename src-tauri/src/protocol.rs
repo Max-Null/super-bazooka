@@ -107,6 +107,65 @@ impl StreamLine {
         let event_type = self.inner["type"].as_str().unwrap_or("unknown");
 
         match event_type {
+            "stream_event" => {
+                // With --include-partial-messages, incremental events arrive as stream_event
+                let ev = &self.inner["event"];
+                match ev["type"].as_str() {
+                    Some("content_block_delta") => {
+                        let delta = &ev["delta"];
+                        match delta["type"].as_str() {
+                            Some("text_delta") => {
+                                let text = delta["text"].as_str().unwrap_or("");
+                                StreamFrontendEvent {
+                                    event_type: "assistant".to_string(),
+                                    text: text.to_string(),
+                                    thinking: String::new(),
+                                    tool_use: None,
+                                    control_request: None,
+                                    is_final: false,
+                                    error: None,
+                                    duration_ms: None, input_tokens: None, output_tokens: None, cost_usd: None,
+                                }
+                            }
+                            Some("input_json_delta") => {
+                                let _json = delta["partial_json"].as_str().unwrap_or("");
+                                StreamFrontendEvent {
+                                    event_type: "tool_input_delta".to_string(),
+                                    text: String::new(),
+                                    thinking: String::new(),
+                                    tool_use: None,
+                                    control_request: None,
+                                    is_final: false,
+                                    error: None,
+                                    duration_ms: None, input_tokens: None, output_tokens: None, cost_usd: None,
+                                }
+                            }
+                            _ => StreamFrontendEvent::empty(event_type),
+                        }
+                    }
+                    Some("content_block_start") => {
+                        let block = &ev["content_block"];
+                        if block["type"].as_str() == Some("tool_use") {
+                            StreamFrontendEvent {
+                                event_type: "tool_start".to_string(),
+                                text: String::new(),
+                                thinking: String::new(),
+                                tool_use: Some(vec![serde_json::json!({
+                                    "id": block["id"],
+                                    "name": block["name"],
+                                })]),
+                                control_request: None,
+                                is_final: false,
+                                error: None,
+                                duration_ms: None, input_tokens: None, output_tokens: None, cost_usd: None,
+                            }
+                        } else {
+                            StreamFrontendEvent::empty(event_type)
+                        }
+                    }
+                    _ => StreamFrontendEvent::empty(event_type),
+                }
+            }
             "assistant" => {
                 // Extract text and thinking content
                 let mut texts = Vec::new();
@@ -218,6 +277,22 @@ pub struct ControlRequest {
     pub subtype: String,
     pub tool_name: Option<String>,
     pub tool_input: Value,
+}
+
+impl StreamFrontendEvent {
+    fn empty(event_type: &str) -> Self {
+        StreamFrontendEvent {
+            event_type: event_type.to_string(),
+            text: String::new(),
+            thinking: String::new(),
+            tool_use: None,
+            control_request: None,
+            is_final: false,
+            error: None,
+            duration_ms: None, input_tokens: None,
+            output_tokens: None, cost_usd: None,
+        }
+    }
 }
 
 /// Simplified event sent to the frontend

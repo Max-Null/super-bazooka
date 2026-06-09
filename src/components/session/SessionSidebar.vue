@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useSessionStore } from "@/stores/session";
 import { useChatStore } from "@/stores/chat";
 import { useDebugLog } from "@/composables/useDebugLog";
 import { useSettingsStore } from "@/stores/settings";
 import { listMessages } from "@/lib/tauri-bridge";
+import { formatTokenCount } from "@/lib/utils";
 
 const router = useRouter();
 const sessionStore = useSessionStore();
@@ -13,8 +14,15 @@ const chatStore = useChatStore();
 const debugLog = useDebugLog();
 const settings = useSettingsStore();
 
+const searchQuery = ref("");
 const editingId = ref<string | null>(null);
 const editingTitle = ref("");
+
+const filteredSessions = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase();
+  if (!q) return sessionStore.sessions;
+  return sessionStore.sessions.filter(s => s.title.toLowerCase().includes(q));
+});
 
 onMounted(async () => { await sessionStore.loadSessions(); });
 
@@ -74,10 +82,30 @@ async function handleDelete(id: string) {
       </button>
     </div>
 
+    <!-- Search -->
+    <div class="px-3 pb-2">
+      <div class="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs" :style="{ background: 'var(--bg-root)', border: '1px solid var(--border-dim)' }">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input
+          v-model="searchQuery"
+          placeholder="Search sessions…"
+          class="flex-1 bg-transparent outline-none text-xs"
+          :style="{ color: 'var(--text-primary)', caretColor: 'var(--accent)' }"
+        />
+        <button
+          v-if="searchQuery"
+          @click="searchQuery = ''"
+          class="w-4 h-4 flex items-center justify-center rounded transition-colors hover:bg-[var(--bg-hover)]"
+          style="color: var(--text-muted)"
+          title="Clear"
+        >✕</button>
+      </div>
+    </div>
+
     <!-- List -->
     <div class="flex-1 overflow-y-auto px-2 pb-2 space-y-px">
       <button
-        v-for="s in sessionStore.sessions"
+        v-for="s in filteredSessions"
         :key="s.id"
         @click="handleSelect(s.id)"
         class="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-left text-[13px] transition-colors group"
@@ -101,7 +129,17 @@ async function handleDelete(id: string) {
           :style="{ color: 'var(--text-bright)', borderBottom: '1px solid var(--accent)' }"
           maxlength="100"
         />
-        <span v-else class="truncate flex-1">{{ s.title }}</span>
+        <div v-else class="truncate flex-1 min-w-0">
+          <span class="block truncate">{{ s.title }}</span>
+          <span
+            v-if="s.totalTokens"
+            class="block text-[10px] truncate"
+            :style="{ color: 'var(--text-muted)' }"
+          >
+            {{ formatTokenCount(s.totalTokens) }}
+            <span v-if="s.totalCost" class="ml-1">· ${{ s.totalCost.toFixed(3) }}</span>
+          </span>
+        </div>
 
         <!-- Hover actions -->
         <div class="hidden group-hover:flex items-center gap-0.5 shrink-0 ml-auto">
@@ -116,6 +154,9 @@ async function handleDelete(id: string) {
 
       <div v-if="sessionStore.sessions.length === 0" class="px-3 py-12 text-center text-xs" style="color:var(--text-muted)">
         No sessions yet
+      </div>
+      <div v-else-if="filteredSessions.length === 0" class="px-3 py-12 text-center text-xs" style="color:var(--text-muted)">
+        No matching sessions
       </div>
     </div>
   </div>

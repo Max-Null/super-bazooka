@@ -1,14 +1,19 @@
 <script setup lang="ts">
-import { ref, nextTick, watch } from "vue";
+import { ref, nextTick, watch, onMounted } from "vue";
 import { useChatStore } from "@/stores/chat";
 import { useSessionStore } from "@/stores/session";
 import { useDebugLog } from "@/composables/useDebugLog";
-import { sendMessage, sendStdin } from "@/lib/tauri-bridge";
+import { open } from "@tauri-apps/plugin-dialog";
+import { sendMessage, sendStdin, getAutoModeStatus, stopSession, saveMessage } from "@/lib/tauri-bridge";
+import { useFilePreview } from "@/composables/useFilePreview";
 import { useSettingsStore } from "@/stores/settings";
+import ErrorBoundary from "@/components/shared/ErrorBoundary.vue";
 import InputBar from "./InputBar.vue";
+import InputBarToolbar from "./InputBarToolbar.vue";
 import MessageBubble from "./MessageBubble.vue";
-import ModeBar from "./ModeBar.vue";
 import ThinkingIndicator from "./ThinkingIndicator.vue";
+import FilePreviewModal from "@/components/shared/FilePreviewModal.vue";
+import { useCommandPaletteBus } from "@/composables/useCommandPalette";
 
 const chat = useChatStore();
 const session = useSessionStore();
@@ -17,6 +22,32 @@ const debugLog = useDebugLog();
 const scrollContainer = ref<HTMLElement | null>(null);
 const exporting = ref(false);
 const exportedLabel = ref("");
+const commandBus = useCommandPaletteBus();
+import { isImageFile } from "@/composables/useFilePreview";
+const { getThumbnail, thumbnails } = useFilePreview();
+
+// ── Attached files ──
+interface AttachedFile { name: string; path: string }
+const attachedFiles = ref<AttachedFile[]>([]);
+
+function removeAttachedFile(index: number) {
+  attachedFiles.value.splice(index, 1);
+}
+
+const previewFile = ref<{ name: string; path: string } | null>(null);
+
+// ── Auto mode detection ──
+// Primary: frontend store (instant UI feedback when user switches)
+// Calibration: on mount, verify actual settings.json (catches external modifications)
+const autoModeActive = ref(settings.autoMode);
+
+onMounted(async () => {
+  try { autoModeActive.value = await getAutoModeStatus(); }
+  catch { autoModeActive.value = settings.autoMode; }
+});
+
+// Sync on store change
+watch(() => settings.autoMode, (v) => { autoModeActive.value = v; });
 
 // ── Sticky question banner ──
 const stickyQuestion = ref("");
@@ -52,7 +83,21 @@ async function handleSend(text: string) {
   debugLog.clear();
   let sid = session.activeSessionId;
   if (!sid) sid = await session.createSession(settings.model);
-  chat.addUserMessage(text);
+
+  // Collect attached file paths before clearing
+  const filePaths = attachedFiles.value.map(f => f.path);
+  attachedFiles.value = [];
+
+  const attachments = filePaths.length > 0 ? filePaths.map(p => ({ name: p.split(/[/\\]/).pop() || p, path: p })) : undefined;
+  const userMsgId = chat.addUserMessage(text, attachments);
+
+  // Save user message to SQLite
+  if (attachments) {
+    saveMessage(userMsgId, sid, "user", JSON.stringify({ text, attachments }), "{}").catch(() => {});
+  } else {
+    saveMessage(userMsgId, sid, "user", text, "{}").catch(() => {});
+  }
+
   chat.startAssistantMessage();
   chat.isProcessing = true;
   await scrollToBottom();
@@ -64,6 +109,7 @@ async function handleSend(text: string) {
       effort: settings.effort,
       ultracode: settings.effort === "ultracode",
       model: settings.model,
+      filePaths: filePaths.length > 0 ? filePaths : undefined,
     });
     session.loadSessions().catch(() => {});
   } catch (err) {
@@ -100,6 +146,13 @@ async function handleResend(id: string, content: string) {
   await handleSend(content);
 }
 
+// ── Stop processing ──
+async function handleStop() {
+  if (!session.activeSessionId) return;
+  try { await stopSession(session.activeSessionId); } catch {}
+  chat.finishAssistantMessage();
+}
+
 // ── Session Export ──
 async function handleExport() {
   const sid = session.activeSessionId;
@@ -125,6 +178,22 @@ async function handleExport() {
   }
 }
 
+// ── Attach file ──
+async function handleAttachFile() {
+  const selected = await open({
+    multiple: true,
+    title: "Attach Files",
+  });
+  if (!selected) return;
+  const paths = Array.isArray(selected) ? selected : [selected];
+  for (const p of paths) {
+    const name = p.split(/[/\\]/).pop() || p;
+    if (!attachedFiles.value.some(af => af.path === p)) {
+      attachedFiles.value.push({ name, path: p });
+    }
+  }
+}
+
 async function scrollToBottom() {
   await nextTick();
   if (scrollContainer.value) scrollContainer.value.scrollTop = scrollContainer.value.scrollHeight;
@@ -136,6 +205,7 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottom());
 </script>
 
 <template>
+  <ErrorBoundary name="ChatPanel">
   <div class="flex flex-col flex-1 h-full overflow-hidden">
     <!-- Sticky question banner -->
     <div
@@ -190,13 +260,16 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottom());
             <span v-else>Export</span>
           </button>
         </div>
-        <MessageBubble
-          v-for="msg in chat.messages"
-          :key="msg.id"
-          :message="msg"
-          @edit-save="handleEditSave"
-          @resend="handleResend"
-        />
+        <TransitionGroup name="msg">
+          <MessageBubble
+            v-for="msg in chat.messages"
+            :key="msg.id"
+            :message="msg"
+            @edit-save="handleEditSave"
+            @resend="handleResend"
+            @preview-file="(f) => previewFile = f"
+          />
+        </TransitionGroup>
 
         <!-- Processing indicator (initial phase, before any content arrives) -->
         <ThinkingIndicator
@@ -231,10 +304,46 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottom());
       <button @click="handleDeny" class="px-3 py-1 rounded-md text-xs font-medium transition-colors" style="border:1px solid var(--coral); color:var(--coral)">Deny</button>
     </div>
 
-    <!-- Mode toolbar -->
-    <ModeBar />
+    <!-- Toolbar (attach, command menu, mode, effort) -->
+    <InputBarToolbar
+      @attach-file="handleAttachFile"
+      @open-command-menu="commandBus.open()"
+    />
+
+    <!-- Attached files chips -->
+    <div v-if="attachedFiles.length > 0" class="max-w-3xl mx-auto px-1 pb-1.5 flex flex-wrap gap-1.5">
+      <div
+        v-for="(file, i) in attachedFiles"
+        :key="file.path"
+        class="flex items-center gap-1.5 pl-2 pr-1 py-1 rounded-md text-[11px] group shrink-0 max-w-[220px] cursor-pointer transition-colors"
+        :style="{ background: 'var(--bg-elevated)', border: '1px solid var(--border-dim)', color: 'var(--text-secondary)' }"
+        @click="previewFile = file"
+      >
+        <!-- File thumbnail / icon -->
+        <img
+          v-if="isImageFile(file.name)"
+          :src="thumbnails[file.path] || ''"
+          @vue:mounted="getThumbnail(file.path, file.name)"
+          class="w-5 h-5 rounded object-cover shrink-0"
+          style="border: 1px solid var(--border-dim)"
+          v-show="thumbnails[file.path]"
+        />
+        <svg v-else width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" class="shrink-0"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+        <span class="truncate text-[11px] font-medium" :title="file.path">{{ file.name }}</span>
+        <button
+          @click.stop="removeAttachedFile(i)"
+          class="w-4 h-4 flex items-center justify-center rounded transition-colors hover:bg-[var(--bg-hover)] shrink-0 opacity-50 group-hover:opacity-100"
+          style="color: var(--text-muted)"
+          title="Remove"
+        >&times;</button>
+      </div>
+    </div>
+
+    <!-- File preview modal -->
+    <FilePreviewModal :file="previewFile" @close="previewFile = null" />
 
     <!-- Input -->
-    <InputBar :disabled="chat.isProcessing" @send="handleSend" />
+    <InputBar :disabled="chat.isProcessing" :auto-mode="autoModeActive" @send="handleSend" @stop="handleStop" @files="(fs) => { for (const f of fs) { if (!attachedFiles.some(af => af.path === f.path)) attachedFiles.push(f); } }" />
   </div>
+  </ErrorBoundary>
 </template>

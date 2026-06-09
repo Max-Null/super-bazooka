@@ -10,9 +10,11 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 /// Returns the database directory: %APPDATA%/cc-gui on Windows, ~/.local/share/cc-gui on Linux, ~/Library/Application Support/cc-gui on macOS.
+/// Falls back to a temp directory if the platform data dir is unavailable.
 pub fn db_dir() -> PathBuf {
-    let base = dirs::data_dir().expect("no data dir");
-    base.join("cc-gui")
+    dirs::data_dir()
+        .unwrap_or_else(|| std::env::temp_dir().join("cc-gui"))
+        .join("cc-gui")
 }
 
 /// Returns the full database path.
@@ -23,7 +25,10 @@ pub fn db_path() -> PathBuf {
 /// Open (or create) the database and run migrations.
 pub fn open_db() -> SqliteResult<Connection> {
     let dir = db_dir();
-    std::fs::create_dir_all(&dir).expect("failed to create data directory");
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| {
+            rusqlite::Error::InvalidParameterName(format!("{}: {}", dir.display(), e))
+        })?;
 
     let conn = Connection::open(db_path())?;
 

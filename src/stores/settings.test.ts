@@ -100,4 +100,25 @@ describe("settings store", () => {
     expect(parsed.planMode).toBe(true);
     expect(parsed.effort).toBe("ultracode");
   });
+
+  // ── Theme ──
+
+  it("toggles between dark and light theme", () => {
+    const settings = useSettingsStore();
+    expect(settings.theme).toBe("dark");
+    settings.theme = "light";
+    expect(settings.theme).toBe("light");
+    settings.theme = "dark";
+    expect(settings.theme).toBe("dark");
+  });
+
+  it("persists theme preference", () => {
+    const settings = useSettingsStore();
+    settings.theme = "light";
+    settings.save();
+
+    const raw = localStorage.getItem("cc-gui-settings");
+    const parsed = JSON.parse(raw!);
+    expect(parsed.theme).toBe("light");
+  });
 });

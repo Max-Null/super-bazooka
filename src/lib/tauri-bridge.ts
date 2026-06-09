@@ -43,6 +43,8 @@ export interface SendOptions {
   ultracode?: boolean;
   /** Model name (e.g. deepseek-v4-pro[1M]), passed to CLI via --model */
   model?: string;
+  /** File paths to attach (parent dirs are added via --add-dir) */
+  filePaths?: string[];
 }
 
 export async function sendMessage(sessionId: string, message: string, options?: SendOptions): Promise<string> {
@@ -55,6 +57,7 @@ export async function sendMessage(sessionId: string, message: string, options?: 
     effort: options?.effort ?? "high",
     ultracode: options?.ultracode ?? false,
     model: options?.model ?? null,
+    filePaths: options?.filePaths ?? null,
   });
 }
 
@@ -93,6 +96,8 @@ export interface SessionData {
   created_at: string;
   updated_at: string;
   message_count: number;
+  total_tokens: number | null;
+  total_cost: number | null;
 }
 
 export interface MessageData {
@@ -189,6 +194,16 @@ export async function getWorkspaceRoot(): Promise<string> {
 
 export async function revealInExplorer(path: string): Promise<void> {
   return invoke("reveal_in_explorer", { path });
+}
+
+/** Check if auto mode is active in settings.json (may have been changed externally) */
+export async function getAutoModeStatus(): Promise<boolean> {
+  return invoke("get_auto_mode_status");
+}
+
+/** Read a file as base64-encoded string (for image thumbnails) */
+export async function readFileBase64(path: string): Promise<string> {
+  return invoke("read_file_base64", { path });
 }
 
 /**

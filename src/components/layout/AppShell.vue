@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, onMounted, onUnmounted } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import SessionSidebar from "@/components/session/SessionSidebar.vue";
 import FilePanel from "@/components/files/FilePanel.vue";
@@ -16,6 +16,8 @@ const drawerOpen = ref(false);
 const cwd = ref("");
 const fileNavCounter = ref(0);
 
+const commandPalette = ref<InstanceType<typeof CommandPalette> | null>(null);
+
 function handleCommand(action: string) {
   switch (action) {
     case "new-session": session.createSession().then(() => router.push("/chat")); break;
@@ -26,11 +28,38 @@ function handleCommand(action: string) {
     case "auto-mode": settings.autoMode = true; settings.planMode = false; break;
     case "accept-edits": settings.permissionMode = "acceptEdits"; break;
     case "bypass": settings.permissionMode = "bypassPermissions"; break;
+    case "theme-dark": settings.theme = "dark"; break;
+    case "theme-light": settings.theme = "light"; break;
+    // These are handled by ChatPanel but listed here for completeness
+    case "attach-file":
+    case "show-usage":
+    case "compact": break;
+  }
+}
+
+// ── Global keyboard shortcuts ──
+function onGlobalKeydown(e: KeyboardEvent) {
+  if (!(e.ctrlKey || e.metaKey)) return;
+  // Skip when focused on input/textarea/contenteditable
+  const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+  const isEditable = (e.target as HTMLElement)?.isContentEditable;
+  if (tag === "input" || tag === "textarea" || tag === "select" || isEditable) return;
+
+  switch (e.key.toLowerCase()) {
+    case "n": e.preventDefault(); handleCommand("new-session"); break;
+    case "b": e.preventDefault(); handleCommand("toggle-sidebar"); break;
+    case "e": e.preventDefault(); handleCommand("toggle-files"); break;
+    case ",": e.preventDefault(); handleCommand("settings"); break;
   }
 }
 
 onMounted(async () => {
   try { cwd.value = await getWorkspaceRoot(); } catch {}
+  document.addEventListener("keydown", onGlobalKeydown);
+});
+
+onUnmounted(() => {
+  document.removeEventListener("keydown", onGlobalKeydown);
 });
 
 function isActive(path: string): boolean {
@@ -79,6 +108,31 @@ function openFilePanelTo(path: string) {
 
       <!-- Actions group -->
       <div class="flex items-center gap-1">
+        <!-- Theme toggle -->
+        <button
+          @click="settings.theme = settings.theme === 'dark' ? 'light' : 'dark'"
+          class="w-7 h-7 flex items-center justify-center rounded-md transition-colors hover:bg-[var(--bg-hover)]"
+          style="color:var(--text-secondary)"
+          :title="settings.theme === 'dark' ? 'Light mode' : 'Dark mode'"
+        >
+          <!-- Sun icon (light mode indicator) -->
+          <svg v-if="settings.theme === 'dark'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="5" />
+            <line x1="12" y1="1" x2="12" y2="3" />
+            <line x1="12" y1="21" x2="12" y2="23" />
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+            <line x1="1" y1="12" x2="3" y2="12" />
+            <line x1="21" y1="12" x2="23" y2="12" />
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+          </svg>
+          <!-- Moon icon (dark mode indicator) -->
+          <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+          </svg>
+        </button>
+
         <!-- Refresh -->
         <button
           @click="router.go(0)"

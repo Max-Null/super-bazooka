@@ -1,0 +1,423 @@
+- generic [active] [ref=e1]:
+  - generic:
+    - generic:
+      - link "跳到主要内容" [ref=e2] [cursor=pointer]
+      - link "无障碍功能帮助" [ref=e3] [cursor=pointer]:
+        - /url: https://support.google.com/websearch/answer/181196?hl=zh-CN
+  - generic [ref=e8]:
+    - search [ref=e9]:
+      - generic [ref=e11]:
+        - link "Google 首页" [ref=e13] [cursor=pointer]:
+          - /url: https://www.google.com.hk/webhp?hl=zh-CN&sa=X&ved=0ahUKEwju0fec0_qUAxW7r6gCHai1HgoQPAgI
+          - img [ref=e14]
+        - generic [ref=e21]:
+          - generic [ref=e22]:
+            - combobox "搜索" [ref=e25]: vue3 typescript best practices composables project structure 2025 vue3 typescript best practices composables project structure 2025
+            - generic [ref=e26]:
+              - button "清除" [ref=e28] [cursor=pointer]:
+                - img [ref=e30]
+              - generic [ref=e33]:
+                - button "按语音搜索" [ref=e34] [cursor=pointer]:
+                  - img [ref=e35]
+                - button "按图搜索" [ref=e37] [cursor=pointer]:
+                  - img [ref=e38]
+          - button "搜索" [ref=e40] [cursor=pointer]:
+            - img [ref=e43]
+    - generic [ref=e45]:
+      - button "设置" [ref=e47] [cursor=pointer]:
+        - img [ref=e50]
+      - generic [ref=e53]:
+        - button "Google 应用" [ref=e55] [cursor=pointer]:
+          - img [ref=e56]
+        - link "登录" [ref=e60] [cursor=pointer]:
+          - /url: https://accounts.google.com/ServiceLogin?hl=zh-CN&passive=true&continue=https://www.google.com.hk/search%3Fq%3Dvue3%2Btypescript%2Bbest%2Bpractices%2Bcomposables%2Bproject%2Bstructure%2B2025%26sei%3D-0goarfRBIH31e8Ph6-EkAE&ec=futura_srp_og_si_72236_p
+  - generic [ref=e62]:
+    - navigation [ref=e68]:
+      - generic [ref=e74]:
+        - list [ref=e75]:
+          - listitem [ref=e76]:
+            - link "全部" [disabled] [ref=e77]:
+              - generic [ref=e79]: 全部
+          - listitem [ref=e80]:
+            - link "短视频" [ref=e81] [cursor=pointer]:
+              - /url: /search?newwindow=1&sca_esv=bcc915fd4b92abab&udm=39&fbs=ADc_l-Z6XGGbkKmpylZqg2J7ZOuV_KncnHn6wz4gIjIDLYT6HECwqay5zFadwRbLWKP4y2wmqAg9_Ygyn8bNGHzCX68ObKtGQ3cMQOqC7f2v487IwfHwIz44JU2myQImhv5-hAJrqJ39k7L-feuP5MULCgf3eeGGzcAuSlHZYPocMBBGL1AJ8M_ZJ7DQ3kcvCEljHtq5dVv7&q=vue3+typescript+best+practices+composables+project+structure+2025&sa=X&ved=2ahUKEwju0fec0_qUAxW7r6gCHai1HgoQs6gLegQIFhAB
+              - generic [ref=e83]: 短视频
+          - listitem [ref=e84]:
+            - link "视频" [ref=e85] [cursor=pointer]:
+              - /url: /search?newwindow=1&sca_esv=bcc915fd4b92abab&udm=7&fbs=ADc_l-Z6XGGbkKmpylZqg2J7ZOuV_KncnHn6wz4gIjIDLYT6HECwqay5zFadwRbLWKP4y2wmqAg9_Ygyn8bNGHzCX68ObKtGQ3cMQOqC7f2v487IwfHwIz44JU2myQImhv5-hAJrqJ39k7L-feuP5MULCgf3eeGGzcAuSlHZYPocMBBGL1AJ8M_ZJ7DQ3kcvCEljHtq5dVv7&q=vue3+typescript+best+practices+composables+project+structure+2025&sa=X&ved=2ahUKEwju0fec0_qUAxW7r6gCHai1HgoQtKgLegQIFRAB
+              - generic [ref=e87]: 视频
+          - listitem [ref=e88]:
+            - link "图片" [ref=e89] [cursor=pointer]:
+              - /url: /search?newwindow=1&sca_esv=bcc915fd4b92abab&udm=2&fbs=ADc_l-Z6XGGbkKmpylZqg2J7ZOuV_KncnHn6wz4gIjIDLYT6HECwqay5zFadwRbLWKP4y2wmqAg9_Ygyn8bNGHzCX68ObKtGQ3cMQOqC7f2v487IwfHwIz44JU2myQImhv5-hAJrqJ39k7L-feuP5MULCgf3eeGGzcAuSlHZYPocMBBGL1AJ8M_ZJ7DQ3kcvCEljHtq5dVv7&q=vue3+typescript+best+practices+composables+project+structure+2025&sa=X&ved=2ahUKEwju0fec0_qUAxW7r6gCHai1HgoQtKgLegQIFBAB
+              - generic [ref=e91]: 图片
+          - listitem [ref=e92]:
+            - link "网页" [ref=e93] [cursor=pointer]:
+              - /url: /search?newwindow=1&sca_esv=bcc915fd4b92abab&udm=web&fbs=ADc_l-Z6XGGbkKmpylZqg2J7ZOuV_KncnHn6wz4gIjIDLYT6HECwqay5zFadwRbLWKP4y2wmqAg9_Ygyn8bNGHzCX68ObKtGQ3cMQOqC7f2v487IwfHwIz44JU2myQImhv5-hAJrqJ39k7L-feuP5MULCgf3eeGGzcAuSlHZYPocMBBGL1AJ8M_ZJ7DQ3kcvCEljHtq5dVv7&q=vue3+typescript+best+practices+composables+project+structure+2025&sa=X&ved=2ahUKEwju0fec0_qUAxW7r6gCHai1HgoQs6gLegQIExAB
+              - generic [ref=e95]: 网页
+          - listitem [ref=e96]:
+            - link "新闻" [ref=e97] [cursor=pointer]:
+              - /url: /search?newwindow=1&sca_esv=bcc915fd4b92abab&q=vue3+typescript+best+practices+composables+project+structure+2025&tbm=nws&source=lnms&fbs=ADc_l-Z6XGGbkKmpylZqg2J7ZOuV_KncnHn6wz4gIjIDLYT6HECwqay5zFadwRbLWKP4y2wmqAg9_Ygyn8bNGHzCX68ObKtGQ3cMQOqC7f2v487IwfHwIz44JU2myQImhv5-hAJrqJ39k7L-feuP5MULCgf3eeGGzcAuSlHZYPocMBBGL1AJ8M_ZJ7DQ3kcvCEljHtq5dVv7&sa=X&ved=2ahUKEwju0fec0_qUAxW7r6gCHai1HgoQ0pQJegQIEhAB
+              - generic [ref=e99]: 新闻
+          - listitem [ref=e100]:
+            - link "图书" [ref=e101] [cursor=pointer]:
+              - /url: /search?newwindow=1&sca_esv=bcc915fd4b92abab&q=vue3+typescript+best+practices+composables+project+structure+2025&udm=36&source=lnms&fbs=ADc_l-Z6XGGbkKmpylZqg2J7ZOuV_KncnHn6wz4gIjIDLYT6HECwqay5zFadwRbLWKP4y2wmqAg9_Ygyn8bNGHzCX68ObKtGQ3cMQOqC7f2v487IwfHwIz44JU2myQImhv5-hAJrqJ39k7L-feuP5MULCgf3eeGGzcAuSlHZYPocMBBGL1AJ8M_ZJ7DQ3kcvCEljHtq5dVv7&sa=X&ved=2ahUKEwju0fec0_qUAxW7r6gCHai1HgoQ0pQJegQIERAB
+              - generic [ref=e103]: 图书
+          - listitem [ref=e104]:
+            - button "更多过滤条件" [ref=e105] [cursor=pointer]:
+              - generic "更多过滤条件" [ref=e106]:
+                - generic [ref=e107]:
+                  - generic [ref=e108]: 更多
+                  - img [ref=e110]
+        - button "工具" [ref=e113] [cursor=pointer]:
+          - generic [ref=e115]:
+            - generic [ref=e116]: 工具
+            - img [ref=e118]
+    - heading "搜索结果" [level=1] [ref=e120]
+    - main [ref=e126]:
+      - generic [ref=e130]:
+        - generic [ref=e134]:
+          - generic [ref=e136]:
+            - heading "视频" [level=2] [ref=e137]
+            - button "关于这条结果的详细信息" [ref=e138] [cursor=pointer]:
+              - img [ref=e141]
+          - generic [ref=e144]:
+            - generic [ref=e150]:
+              - generic [ref=e151]:
+                - generic [ref=e152]:
+                  - link "5 Vue.js BEST Practices in 4 Minutes YouTube Better Stack 2025年6月17日" [ref=e154] [cursor=pointer]:
+                    - /url: https://www.youtube.com/watch?v=QB1p2iuQm_0
+                    - heading "5 Vue.js BEST Practices in 4 Minutes YouTube Better Stack 2025年6月17日" [level=3] [ref=e155]:
+                      - generic [ref=e158]: 5 Vue.js BEST Practices in 4 Minutes
+                      - generic [ref=e160]:
+                        - generic [ref=e161]:
+                          - text: YouTube
+                          - generic [ref=e162]: · Better Stack
+                        - generic [ref=e163]: 2025年6月17日
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic:
+                            - text: YouTube
+                            - generic: · Better Stack
+                      - button "关于这条结果的详细信息" [ref=e164] [cursor=pointer]:
+                        - img [ref=e167]
+                - button "5 Vue.js BEST Practices in 4 Minutes，由Better Stack上传到YouTube上. 在 Google 上播放. 4:32" [ref=e169] [cursor=pointer]:
+                  - generic [ref=e170]:
+                    - img [ref=e176]
+                    - generic [ref=e179]:
+                      - generic [ref=e180]: 4:32
+                      - img [ref=e183]
+              - button "在此视频中，有 6 个重要时刻" [ref=e189] [cursor=pointer]:
+                - generic [ref=e198]:
+                  - generic [ref=e201]: 在此视频中，有 6 个重要时刻
+                  - img [ref=e203]
+            - generic [ref=e210]:
+              - generic [ref=e211]:
+                - generic [ref=e212]:
+                  - link "Jakub Andrzejewski - Good practices and Design Patterns for ... YouTube Vue Germany 2024年12月3日" [ref=e214] [cursor=pointer]:
+                    - /url: https://www.youtube.com/watch?v=UN1_yJD8ycY
+                    - heading "Jakub Andrzejewski - Good practices and Design Patterns for ... YouTube Vue Germany 2024年12月3日" [level=3] [ref=e215]:
+                      - generic [ref=e218]: Jakub Andrzejewski - Good practices and Design Patterns for ...
+                      - generic [ref=e220]:
+                        - generic [ref=e221]:
+                          - text: YouTube
+                          - generic [ref=e222]: · Vue Germany
+                        - generic [ref=e223]: 2024年12月3日
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic:
+                            - text: YouTube
+                            - generic: · Vue Germany
+                      - button "关于这条结果的详细信息" [ref=e224] [cursor=pointer]:
+                        - img [ref=e227]
+                - button "Jakub Andrzejewski - Good practices and Design Patterns for ...，由Vue Germany上传到YouTube上. 在 Google 上播放. 24:03" [ref=e229] [cursor=pointer]:
+                  - generic [ref=e230]:
+                    - img [ref=e236]
+                    - generic [ref=e239]:
+                      - generic [ref=e240]: 24:03
+                      - img [ref=e243]
+              - button "在此视频中，有 6 个重要时刻" [ref=e249] [cursor=pointer]:
+                - generic [ref=e258]:
+                  - generic [ref=e261]: 在此视频中，有 6 个重要时刻
+                  - img [ref=e263]
+            - generic [ref=e269]:
+              - generic [ref=e270]:
+                - generic [ref=e271]:
+                  - 'link "Vue.js Nation 2025: Michael Thiessen - How to write better ... YouTube Vue School 2025年2月6日" [ref=e273] [cursor=pointer]':
+                    - /url: https://www.youtube.com/watch?v=z132P8H0uXI
+                    - 'heading "Vue.js Nation 2025: Michael Thiessen - How to write better ... YouTube Vue School 2025年2月6日" [level=3] [ref=e274]':
+                      - generic [ref=e277]: "Vue.js Nation 2025: Michael Thiessen - How to write better ..."
+                      - generic [ref=e279]:
+                        - generic [ref=e280]:
+                          - text: YouTube
+                          - generic [ref=e281]: · Vue School
+                        - generic [ref=e282]: 2025年2月6日
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic:
+                            - text: YouTube
+                            - generic: · Vue School
+                      - button "关于这条结果的详细信息" [ref=e283] [cursor=pointer]:
+                        - img [ref=e286]
+                - 'button "Vue.js Nation 2025: Michael Thiessen - How to write better ...，由Vue School上传到YouTube上. 在 Google 上播放. 27:01" [ref=e288] [cursor=pointer]':
+                  - generic [ref=e289]:
+                    - img [ref=e292]
+                    - generic [ref=e295]:
+                      - generic [ref=e296]: 27:01
+                      - img [ref=e299]
+              - button "在此视频中，有 10 个重要时刻" [ref=e305] [cursor=pointer]:
+                - generic [ref=e314]:
+                  - generic [ref=e317]: 在此视频中，有 10 个重要时刻
+                  - img [ref=e319]
+          - link "查看所有视频" [ref=e323] [cursor=pointer]:
+            - /url: /search?newwindow=1&sca_esv=bcc915fd4b92abab&udm=7&q=vue3+typescript+best+practices+composables+project+structure+2025&sa=X&ved=2ahUKEwju0fec0_qUAxW7r6gCHai1HgoQ8ccDKAJ6BAgaEAQ
+            - separator [ref=e324]
+            - generic [ref=e325]:
+              - generic [ref=e326]: 查看全部
+              - img [ref=e328]
+        - generic [ref=e332]:
+          - heading "Web results" [level=2] [ref=e333]
+          - generic [ref=e334]:
+            - generic [ref=e337]:
+              - link "Best Practices for Organizing Larger Vue 3 Projects with ... Reddit · r/vuejs 20+ 条评论 · 2年前" [ref=e339] [cursor=pointer]:
+                - /url: https://www.reddit.com/r/vuejs/comments/1ay0rui/best_practices_for_organizing_larger_vue_3/
+                - heading "Best Practices for Organizing Larger Vue 3 Projects with ..." [level=3] [ref=e340]
+                - generic [ref=e345]:
+                  - generic [ref=e347]: Reddit · r/vuejs
+                  - generic [ref=e349]: 20+ 条评论 · 2年前
+              - button "关于这条结果的详细信息" [ref=e350] [cursor=pointer]:
+                - img [ref=e353]
+            - generic [ref=e356]: Hello everyone, I'm currently learning Vue and have gone through several courses. However, I'm still curious about the project structure companies ...
+            - generic [ref=e361]:
+              - link "26 个回答" [ref=e362] [cursor=pointer]:
+                - /url: https://www.reddit.com/r/vuejs/comments/1ay0rui/best_practices_for_organizing_larger_vue_3/krsfyb1/
+              - generic [ref=e363]: ·
+              - generic [ref=e364]: "最佳答案:"
+              - generic [ref=e365]: Not saying you have to use Nuxt, but I think they have a sane directory structure. https://nuxt.com/ ...
+            - generic [ref=e368]:
+              - generic [ref=e369]:
+                - link "My Vue files get enormous, any best practices to ..." [ref=e372] [cursor=pointer]:
+                  - /url: https://www.reddit.com/r/vuejs/comments/10mgh2j/my_vue_files_get_enormous_any_best_practices_to/
+                  - generic [ref=e373]:
+                    - text: My Vue files get enormous, any
+                    - emphasis [ref=e374]: best practices
+                    - text: to ...
+                - generic [ref=e376]: 42 个回答
+                - generic [ref=e378]: 2023年1月27日
+              - generic [ref=e379]:
+                - 'link "Vue.js Project Structure : r/vuejs - Reddit" [ref=e382] [cursor=pointer]':
+                  - /url: https://www.reddit.com/r/vuejs/comments/1iku3fo/vuejs_project_structure/
+                  - generic [ref=e383]:
+                    - text: Vue.js
+                    - emphasis [ref=e384]: Project Structure
+                    - text: ": r/vuejs - Reddit"
+                - generic [ref=e386]: 20 个回答
+                - generic [ref=e388]: 2025年2月8日
+              - link "www.reddit.com站内的其它相关信息" [ref=e392] [cursor=pointer]:
+                - /url: /search?q=vue3+typescript+best+practices+composables+project+structure+2025+site:www.reddit.com&newwindow=1&sca_esv=bcc915fd4b92abab&sa=X&ved=2ahUKEwju0fec0_qUAxW7r6gCHai1HgoQrQIoAnoECB0QAw
+        - generic [ref=e396]:
+          - generic [ref=e399]:
+            - link "Good practices and Design Patterns for Vue Composables DEV Community https://dev.to › jacobandrewsky › good-pra..." [ref=e401] [cursor=pointer]:
+              - /url: https://dev.to/jacobandrewsky/good-practices-and-design-patterns-for-vue-composables-24lk
+              - heading "Good practices and Design Patterns for Vue Composables" [level=3] [ref=e402]
+              - generic [ref=e407]:
+                - generic [ref=e409]: DEV Community
+                - generic [ref=e411]: https://dev.to › jacobandrewsky › good-pra...
+            - generic [ref=e412]:
+              - generic [ref=e413]: ·
+              - link "翻译此页" [ref=e414] [cursor=pointer]:
+                - /url: https://dev.to/jacobandrewsky/good-practices-and-design-patterns-for-vue-composables-24lk
+            - button "关于这条结果的详细信息" [ref=e415] [cursor=pointer]:
+              - img [ref=e418]
+          - generic [ref=e421]:
+            - generic [ref=e422]: 2023年6月19日 —
+            - generic [ref=e423]:
+              - text: In this article, I will summarise ideas that we have created and also merge them with
+              - emphasis [ref=e424]: good practices
+              - text: and design patterns that I read about in few articles.
+        - generic [ref=e428]:
+          - generic [ref=e431]:
+            - link "How to Efficiently Structure a Medium-Sized Vue 3 Project Medium · Mohand Amokrane Abdiche 30+ 个赞 · 1年前" [ref=e433] [cursor=pointer]:
+              - /url: https://medium.com/@mohandabdiche/building-efficient-frontends-a-vue-3-blueprint-for-modern-medium-sized-applications-671dd403ca62
+              - heading "How to Efficiently Structure a Medium-Sized Vue 3 Project" [level=3] [ref=e434]
+              - generic [ref=e439]:
+                - generic [ref=e441]: Medium · Mohand Amokrane Abdiche
+                - generic [ref=e443]: 30+ 个赞 · 1年前
+            - button "关于这条结果的详细信息" [ref=e444] [cursor=pointer]:
+              - img [ref=e447]
+          - generic [ref=e451]:
+            - emphasis [ref=e452]: 1. State Management with Pinia
+            - text: · 2. API Calls & Axios Configuration · 3. Composables Folder · 4. Vue Router Organization · 5. Constants Files · 6.
+        - generic [ref=e456]:
+          - generic [ref=e459]:
+            - 'link "Vue 3 + TypeScript Best Practices: 2025 Enterprise ... eastondev.com https://eastondev.com › ... › Technology" [ref=e461] [cursor=pointer]':
+              - /url: https://eastondev.com/blog/en/posts/dev/20251124-vue3-typescript-best-practices/
+              - 'heading "Vue 3 + TypeScript Best Practices: 2025 Enterprise ..." [level=3] [ref=e462]'
+              - generic [ref=e467]:
+                - generic [ref=e469]: eastondev.com
+                - generic [ref=e471]: https://eastondev.com › ... › Technology
+            - generic [ref=e472]:
+              - generic [ref=e473]: ·
+              - link "翻译此页" [ref=e474] [cursor=pointer]:
+                - /url: https://eastondev.com/blog/en/posts/dev/20251124-vue3-typescript-best-practices/
+            - button "关于这条结果的详细信息" [ref=e475] [cursor=pointer]:
+              - img [ref=e478]
+          - generic [ref=e481]:
+            - generic [ref=e482]: 2025年11月24日 —
+            - generic [ref=e483]:
+              - text: Complete 2025 guide to
+              - emphasis [ref=e484]: Vue 3 + TypeScript enterprise architecture
+              - text: . Covers Vite project initialization, Pinia state management, TypeScript ...
+        - generic [ref=e488]:
+          - generic [ref=e491]:
+            - link "How to Structure a Large Scale Vue.js Application Vue School https://vueschool.io › News" [ref=e493] [cursor=pointer]:
+              - /url: https://vueschool.io/articles/vuejs-tutorials/how-to-structure-a-large-scale-vue-js-application/
+              - heading "How to Structure a Large Scale Vue.js Application" [level=3] [ref=e494]
+              - generic [ref=e499]:
+                - generic [ref=e501]: Vue School
+                - generic [ref=e503]: https://vueschool.io › News
+            - generic [ref=e504]:
+              - generic [ref=e505]: ·
+              - link "翻译此页" [ref=e506] [cursor=pointer]:
+                - /url: https://vueschool.io/articles/vuejs-tutorials/how-to-structure-a-large-scale-vue-js-application/
+            - button "关于这条结果的详细信息" [ref=e507] [cursor=pointer]:
+              - img [ref=e510]
+          - generic [ref=e513]:
+            - generic [ref=e514]: 2025年7月28日 —
+            - generic [ref=e515]:
+              - text: What is the
+              - emphasis [ref=e516]: best
+              - text: way to
+              - emphasis [ref=e517]: structure
+              - text: a Vue.js application so that it scales and remains maintainable and extendable the more it grows?
+        - generic [ref=e521]:
+          - generic [ref=e524]:
+            - link "How to Structure Vue Projects alexop.dev https://alexop.dev › posts › how-to-structur..." [ref=e526] [cursor=pointer]:
+              - /url: https://alexop.dev/posts/how-to-structure-vue-projects/
+              - heading "How to Structure Vue Projects" [level=3] [ref=e527]
+              - generic [ref=e532]:
+                - generic [ref=e534]: alexop.dev
+                - generic [ref=e536]: https://alexop.dev › posts › how-to-structur...
+            - generic [ref=e537]:
+              - generic [ref=e538]: ·
+              - link "翻译此页" [ref=e539] [cursor=pointer]:
+                - /url: https://alexop.dev/posts/how-to-structure-vue-projects/
+            - button "关于这条结果的详细信息" [ref=e540] [cursor=pointer]:
+              - img [ref=e543]
+          - generic [ref=e546]:
+            - generic [ref=e547]: 2025年2月9日 —
+            - generic [ref=e548]:
+              - text: Discover
+              - emphasis [ref=e549]: best practices for structuring Vue projects
+              - text: of any size, from simple apps to complex enterprise solutions.
+        - generic [ref=e553]:
+          - generic [ref=e556]:
+            - link "Vue 3 project structure - Vue FAQ vue-faq.org https://vue-faq.org › development › project..." [ref=e558] [cursor=pointer]:
+              - /url: https://vue-faq.org/en/development/project-structure.html
+              - heading "Vue 3 project structure - Vue FAQ" [level=3] [ref=e559]
+              - generic [ref=e564]:
+                - generic [ref=e566]: vue-faq.org
+                - generic [ref=e568]: https://vue-faq.org › development › project...
+            - generic [ref=e569]:
+              - generic [ref=e570]: ·
+              - link "翻译此页" [ref=e571] [cursor=pointer]:
+                - /url: https://vue-faq.org/en/development/project-structure.html
+            - button "关于这条结果的详细信息" [ref=e572] [cursor=pointer]:
+              - img [ref=e575]
+          - generic [ref=e578]:
+            - generic [ref=e579]: 2025年11月5日 —
+            - generic [ref=e580]:
+              - text: The most suitable architecture for a
+              - emphasis [ref=e581]: Vue 3
+              - text: application is Modular. Initially, the application is divided into logical modules that are loosely related to each ...
+        - generic [ref=e585]:
+          - generic [ref=e588]:
+            - link "Vue 3 Best Practices Medium · Frontend Highlights 150+ 个赞 · 1年前" [ref=e590] [cursor=pointer]:
+              - /url: https://medium.com/@ignatovich.dm/vue-3-best-practices-cb0a6e281ef4
+              - heading "Vue 3 Best Practices" [level=3] [ref=e591]
+              - generic [ref=e596]:
+                - generic [ref=e598]: Medium · Frontend Highlights
+                - generic [ref=e600]: 150+ 个赞 · 1年前
+            - button "关于这条结果的详细信息" [ref=e601] [cursor=pointer]:
+              - img [ref=e604]
+          - generic [ref=e608]:
+            - text: This guide covers
+            - emphasis [ref=e609]: essential best practices
+            - text: with practical code examples to help you leverage Vue 3's capabilities effectively.
+        - generic [ref=e613]:
+          - generic [ref=e616]:
+            - link "Composables Vue.js https://vuejs.org › guide › reusability › com..." [ref=e618] [cursor=pointer]:
+              - /url: https://vuejs.org/guide/reusability/composables
+              - heading "Composables" [level=3] [ref=e619]
+              - generic [ref=e624]:
+                - generic [ref=e626]: Vue.js
+                - generic [ref=e628]: https://vuejs.org › guide › reusability › com...
+            - generic [ref=e629]:
+              - generic [ref=e630]: ·
+              - link "翻译此页" [ref=e631] [cursor=pointer]:
+                - /url: https://vuejs.org/guide/reusability/composables
+            - button "关于这条结果的详细信息" [ref=e632] [cursor=pointer]:
+              - img [ref=e635]
+          - generic [ref=e639]:
+            - text: A
+            - emphasis [ref=e640]: composable
+            - text: is a function that leverages Vue's Composition API to encapsulate and reuse stateful logic.
+      - generic [ref=e642]:
+        - generic [ref=e647]:
+          - heading "用户还搜索了" [level=2] [ref=e649]
+          - generic [ref=e651]:
+            - generic [ref=e652]:
+              - link "Vue3 best practices" [ref=e656] [cursor=pointer]:
+                - /url: /search?newwindow=1&sca_esv=bcc915fd4b92abab&q=Vue3+best+practices&sa=X&ved=2ahUKEwju0fec0_qUAxW7r6gCHai1HgoQ1QJ6BAg5EAE
+                - generic [ref=e657]:
+                  - generic [ref=e662]: Vue3 best practices
+                  - img [ref=e666]
+              - link "Vue best practices" [ref=e671] [cursor=pointer]:
+                - /url: /search?newwindow=1&sca_esv=bcc915fd4b92abab&q=Vue+best+practices&sa=X&ved=2ahUKEwju0fec0_qUAxW7r6gCHai1HgoQ1QJ6BAg7EAE
+                - generic [ref=e672]:
+                  - generic [ref=e677]: Vue best practices
+                  - img [ref=e681]
+            - link "Vue 3 style guide" [ref=e687] [cursor=pointer]:
+              - /url: /search?newwindow=1&sca_esv=bcc915fd4b92abab&q=Vue+3+style+guide&sa=X&ved=2ahUKEwju0fec0_qUAxW7r6gCHai1HgoQ1QJ6BAg6EAE
+              - generic [ref=e688]:
+                - generic [ref=e693]: Vue 3 style guide
+                - img [ref=e697]
+        - navigation [ref=e699]:
+          - heading "网页导航" [level=1] [ref=e700]
+          - text: "1"
+          - link "Page 2" [ref=e703] [cursor=pointer]:
+            - /url: /search?q=vue3+typescript+best+practices+composables+project+structure+2025&newwindow=1&sca_esv=bcc915fd4b92abab&ei=-0goaq7oF7vfosUPqOv6UA&start=10&sa=N&sstk=AU9db-CxXvgCY9Iea7icGwHYbVU6xgl0yAqPkutEEc9U6RR3usZr6IodYW_VL_bpIIScyQ2dVKWJOYoQqBMY5cHHuEC88v7pa8nAEg&ved=2ahUKEwju0fec0_qUAxW7r6gCHai1HgoQ8tMDegQINxAE
+            - text: "2"
+          - link "Page 3" [ref=e705] [cursor=pointer]:
+            - /url: /search?q=vue3+typescript+best+practices+composables+project+structure+2025&newwindow=1&sca_esv=bcc915fd4b92abab&ei=-0goaq7oF7vfosUPqOv6UA&start=20&sa=N&sstk=AU9db-CxXvgCY9Iea7icGwHYbVU6xgl0yAqPkutEEc9U6RR3usZr6IodYW_VL_bpIIScyQ2dVKWJOYoQqBMY5cHHuEC88v7pa8nAEg&ved=2ahUKEwju0fec0_qUAxW7r6gCHai1HgoQ8tMDegQINxAG
+            - text: "3"
+          - heading "下一页" [level=2] [ref=e707]:
+            - link "下一页" [ref=e708] [cursor=pointer]:
+              - /url: /search?q=vue3+typescript+best+practices+composables+project+structure+2025&newwindow=1&sca_esv=bcc915fd4b92abab&ei=-0goaq7oF7vfosUPqOv6UA&start=10&sa=N&sstk=AU9db-CxXvgCY9Iea7icGwHYbVU6xgl0yAqPkutEEc9U6RR3usZr6IodYW_VL_bpIIScyQ2dVKWJOYoQqBMY5cHHuEC88v7pa8nAEg&ved=2ahUKEwju0fec0_qUAxW7r6gCHai1HgoQ8NMDegQINxAI
+              - generic [ref=e710]: 下一页
+      - navigation
+    - contentinfo [ref=e711]:
+      - heading "页脚链接" [level=1] [ref=e712]
+      - generic [ref=e716]:
+        - generic [ref=e720]:
+          - button "广东省 中国 - 是根据您的 IP 地址推断出来的" [ref=e722] [cursor=pointer]:
+            - generic [ref=e723]: 广东省 中国
+            - generic [ref=e725]:
+              - text: "-"
+              - generic [ref=e726]: 是根据您的 IP 地址推断出来的
+          - text: "-"
+          - button "更新位置信息" [ref=e728] [cursor=pointer]: 更新位置信息
+        - generic [ref=e731]:
+          - link "帮助" [ref=e732] [cursor=pointer]:
+            - /url: https://support.google.com/websearch/?p=ws_results_help&hl=zh-CN&fg=1
+          - link "发送反馈" [ref=e733] [cursor=pointer]:
+            - /url: "#"
+          - link "隐私权" [ref=e734] [cursor=pointer]:
+            - /url: https://policies.google.com/privacy?hl=zh-CN&fg=1
+          - link "条款" [ref=e735] [cursor=pointer]:
+            - /url: https://policies.google.com/terms?hl=zh-CN&fg=1

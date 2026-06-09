@@ -118,20 +118,37 @@ impl StdinManager {
 pub fn find_claude() -> Option<String> {
     #[cfg(target_os = "windows")]
     {
-        if let Ok(appdata) = std::env::var("APPDATA") {
-            let path = std::path::Path::new(&appdata).join("npm").join("claude.cmd");
-            if path.exists() {
-                return Some(path.to_string_lossy().to_string());
+        // 1st: Native install (claude install <ver>), easy to downgrade
+        if let Ok(home) = std::env::var("USERPROFILE") {
+            let native = std::path::Path::new(&home).join(".local").join("bin").join("claude.exe");
+            if native.exists() {
+                return Some(native.to_string_lossy().to_string());
             }
         }
-        if let Ok(userprofile) = std::env::var("USERPROFILE") {
-            let path = std::path::Path::new(&userprofile)
-                .join("AppData")
-                .join("Roaming")
-                .join("npm")
-                .join("claude.cmd");
-            if path.exists() {
-                return Some(path.to_string_lossy().to_string());
+        // 2nd: npm global install exe
+        for base_var in &["APPDATA", "USERPROFILE"] {
+            if let Ok(base) = std::env::var(base_var) {
+                let base_path = if base_var == &"USERPROFILE" {
+                    std::path::Path::new(&base).join("AppData").join("Roaming")
+                } else {
+                    std::path::PathBuf::from(&base)
+                };
+                // Try claude.exe first (bypasses cmd wrapper)
+                let exe = base_path
+                    .join("npm")
+                    .join("node_modules")
+                    .join("@anthropic-ai")
+                    .join("claude-code")
+                    .join("bin")
+                    .join("claude.exe");
+                if exe.exists() {
+                    return Some(exe.to_string_lossy().to_string());
+                }
+                // Fallback to claude.cmd
+                let cmd = base_path.join("npm").join("claude.cmd");
+                if cmd.exists() {
+                    return Some(cmd.to_string_lossy().to_string());
+                }
             }
         }
     }
@@ -162,6 +179,7 @@ pub struct SpawnParams {
     pub ultracode: bool,
     pub cwd: String,
     pub model: String,
+    pub file_paths: Vec<String>,
 }
 
 /// Result of spawning a claude session.
@@ -200,7 +218,9 @@ fn sync_permission_settings(auto_mode: bool) -> Result<(), String> {
     // Only write if the value actually changed (avoid unnecessary I/O)
     if current != target {
         settings["permissions"]["defaultMode"] = serde_json::Value::String(target.to_string());
-        std::fs::write(&settings_path, serde_json::to_string_pretty(&settings).unwrap())
+        let json = serde_json::to_string_pretty(&settings)
+            .map_err(|e| format!("Failed to serialize settings.json: {}", e))?;
+        std::fs::write(&settings_path, json)
             .map_err(|e| format!("Failed to write settings.json: {}", e))?;
     }
 
@@ -218,11 +238,13 @@ pub async fn spawn_claude_session(
     // Sync settings.json: auto mode writes "auto", other modes revert to "default"
     sync_permission_settings(params.auto_mode)?;
 
-    // Build command args
+    // Build command args (per docs: stream-json + verbose + include-partial-messages
+    // for real-time token streaming)
     let mut args = vec![
         "--print".to_string(),
         "--output-format".to_string(), "stream-json".to_string(),
         "--verbose".to_string(),
+        "--include-partial-messages".to_string(),
     ];
 
     // NOTE: --model is intentionally NOT passed to the CLI.
@@ -231,26 +253,26 @@ pub async fn spawn_claude_session(
     // is stored in the session record for reference but is a different provider.
     // Passing a non-Anthropic model name to the Claude CLI would cause it to fail.
 
-    // Let the CLI access the user's global config directory
-    if let Some(home) = dirs::home_dir() {
-        let claude_config = home.join(".claude");
-        if claude_config.exists() {
-            args.push("--add-dir".to_string());
-            args.push(claude_config.to_string_lossy().to_string());
+    // Note: CLI reads ~/.claude/settings.json automatically — no --add-dir needed.
+    // --add-dir grants file EDIT permissions, which should NOT include CLI config.
+
+    // Add parent directories of attached files so Claude can read them
+    for file_path in &params.file_paths {
+        if let Some(parent) = std::path::Path::new(file_path).parent() {
+            if parent.exists() {
+                args.push("--add-dir".to_string());
+                args.push(parent.to_string_lossy().to_string());
+            }
         }
     }
 
     // Permission mode → CLI flag mapping
-    // CLI accepts: default | acceptEdits | bypassPermissions | plan
-    // "auto" is NOT a CLI flag — it's permissions.defaultMode in settings.json
-    // For auto mode: CLI runs with "default" → emits control_requests → frontend decides
+    // CLI accepts (per docs): default | acceptEdits | bypassPermissions | plan | auto | dontAsk
     let cli_perm = if params.plan_mode {
         "plan".to_string()
     } else if params.auto_mode {
-        "default".to_string()  // auto = default + frontend handles control_requests
+        "auto".to_string()
     } else {
-        // Pass through the exact permission mode from UI
-        // acceptEdits / bypassPermissions / default
         params.permission_mode.clone()
     };
 
@@ -276,6 +298,7 @@ pub async fn spawn_claude_session(
     args.push(effort);
 
     // Ultracode mode: inject --settings to enable auto Workflow orchestration
+    // Docs: --settings accepts a file path or inline JSON string
     if params.ultracode {
         args.push("--settings".to_string());
         args.push(r#"{"ultracode":true}"#.to_string());

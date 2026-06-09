@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, nextTick } from "vue";
 import mermaid from "mermaid";
+import DOMPurify from "dompurify";
 
 const props = defineProps<{ code: string }>();
 const svg = ref("");
@@ -8,6 +9,7 @@ const error = ref("");
 
 mermaid.initialize({
   startOnLoad: false,
+  securityLevel: "strict",
   theme: "dark",
   themeVariables: {
     primaryColor: "#06d6a0",
@@ -24,7 +26,7 @@ async function render() {
   try {
     const id = "mermaid-" + Math.random().toString(36).slice(2);
     const { svg: result } = await mermaid.render(id, props.code);
-    svg.value = result;
+    svg.value = DOMPurify.sanitize(result);
   } catch (e: unknown) {
     error.value = (e as Error).message || String(e);
     svg.value = "";

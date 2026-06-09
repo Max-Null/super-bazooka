@@ -44,5 +44,15 @@
     "reveal": "Reveal in Explorer",
     "copyPath": "Copy Path",
     "copyName": "Copy Name"
+  },
+  "preview": {
+    "loading": "Loading...",
+    "unsupported": "Preview not available for this file type",
+    "unsupportedHint": "Binary / proprietary format — open externally"
+  },
+  "effortWarning": "xhigh + DeepSeek may cause API errors (WebSearch/WebFetch tools)",
+  "toolbar": {
+    "attach": "Attach",
+    "commands": "Commands"
   }
 }

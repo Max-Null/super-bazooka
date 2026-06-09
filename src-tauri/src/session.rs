@@ -22,6 +22,8 @@ pub struct Session {
     pub created_at: String,
     pub updated_at: String,
     pub message_count: u32,
+    pub total_tokens: Option<f64>,
+    pub total_cost: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -90,6 +92,8 @@ impl SessionManager {
                 created_at: row.get(6)?,
                 updated_at: row.get(7)?,
                 message_count: row.get(8)?,
+                total_tokens: None,
+                total_cost: None,
             })
         })
         .map_err(|e| format!("Session not found: {} ({})", id, e))
@@ -120,13 +124,38 @@ impl SessionManager {
                     created_at: row.get(6)?,
                     updated_at: row.get(7)?,
                     message_count: row.get(8)?,
+                    total_tokens: None,
+                    total_cost: None,
                 })
             })
             .map_err(|e| format!("DB query: {}", e))?;
 
         let mut sessions = Vec::new();
         for row in rows {
-            sessions.push(row.map_err(|e| format!("DB row: {}", e))?);
+            let mut s = row.map_err(|e| format!("DB row: {}", e))?;
+            // Compute token totals from messages
+            if s.message_count > 0 {
+                let mut tok_stmt = conn
+                    .prepare("SELECT content FROM messages WHERE session_id = ?1 AND role = 'assistant'")
+                    .map_err(|e| format!("DB prepare: {}", e))?;
+                let mut tokens: f64 = 0.0;
+                let mut cost: f64 = 0.0;
+                let content_rows = tok_stmt
+                    .query_map(params![s.id], |row| row.get::<_, String>(0))
+                    .map_err(|e| format!("DB query: {}", e))?;
+                for cr in content_rows {
+                    if let Ok(content) = cr {
+                        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content) {
+                            tokens += parsed["inputTokens"].as_f64().unwrap_or(0.0);
+                            tokens += parsed["outputTokens"].as_f64().unwrap_or(0.0);
+                            cost += parsed["costUSD"].as_f64().unwrap_or(0.0);
+                        }
+                    }
+                }
+                if tokens > 0.0 { s.total_tokens = Some(tokens); }
+                if cost > 0.0 { s.total_cost = Some(cost); }
+            }
+            sessions.push(s);
         }
         Ok(sessions)
     }

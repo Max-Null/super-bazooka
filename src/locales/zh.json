@@ -44,5 +44,15 @@
     "reveal": "在资源管理器中打开",
     "copyPath": "复制路径",
     "copyName": "复制文件名"
+  },
+  "preview": {
+    "loading": "加载中...",
+    "unsupported": "此文件类型不支持预览",
+    "unsupportedHint": "二进制/专有格式 — 请在外部打开"
+  },
+  "effortWarning": "xhigh + DeepSeek 可能导致 API 错误（WebSearch/WebFetch 等工具）",
+  "toolbar": {
+    "attach": "附件",
+    "commands": "指令"
   }
 }

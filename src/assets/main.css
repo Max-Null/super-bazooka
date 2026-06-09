@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @plugin "daisyui";
 @plugin "@tailwindcss/typography";
+@import "./theme-light.css";
 
 /* ── cc-gui Design System: Precision Terminal ── */
 
@@ -77,6 +78,13 @@ body {
 /* Message enter */
 @keyframes fade-in { from { opacity:0; transform:translateY(6px) } to { opacity:1; transform:translateY(0) } }
 .message-enter { animation: fade-in 0.2s ease-out; }
+
+/* TransitionGroup: message list animations */
+.msg-enter-active { transition: all 0.25s ease-out; }
+.msg-leave-active { transition: all 0.15s ease-in; }
+.msg-enter-from { opacity: 0; transform: translateY(8px); }
+.msg-leave-to { opacity: 0; transform: translateY(-4px); }
+.msg-move { transition: transform 0.2s ease; }
 
 /* Prose */
 .prose {

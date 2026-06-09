@@ -63,6 +63,7 @@ async fn send_message(
     effort: String,
     ultracode: bool,
     model: Option<String>,
+    file_paths: Option<Vec<String>>,
     app_handle: tauri::AppHandle,
 ) -> Result<String, String> {
     // Look up claude session UUID for resume + CWD + model
@@ -104,6 +105,7 @@ async fn send_message(
         ultracode,
         cwd,
         model: spawn_model,
+        file_paths: file_paths.unwrap_or_default(),
     };
 
     let stdin_mgr = state.stdin_manager.clone();
@@ -307,6 +309,33 @@ async fn get_workspace_root() -> Result<String, String> {
 }
 
 #[tauri::command]
+async fn read_file_base64(path: String) -> Result<String, String> {
+    use base64::Engine;
+    let bytes = std::fs::read(&path).map_err(|e| format!("Failed to read '{}': {}", path, e))?;
+    Ok(base64::engine::general_purpose::STANDARD.encode(&bytes))
+}
+
+#[tauri::command]
+async fn get_auto_mode_status() -> Result<bool, String> {
+    let settings_path = dirs::home_dir()
+        .ok_or("No home dir")?
+        .join(".claude")
+        .join("settings.json");
+
+    match std::fs::read_to_string(&settings_path) {
+        Ok(content) => {
+            let settings: serde_json::Value =
+                serde_json::from_str(&content).map_err(|e| format!("Invalid JSON: {}", e))?;
+            let mode = settings["permissions"]["defaultMode"]
+                .as_str()
+                .unwrap_or("default");
+            Ok(mode == "auto")
+        }
+        Err(_) => Ok(false), // No settings.json → not auto
+    }
+}
+
+#[tauri::command]
 async fn reveal_in_explorer(path: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
@@ -340,11 +369,16 @@ async fn reveal_in_explorer(path: String) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let db = Db::new().expect("Failed to initialize SQLite database");
+    let db = Db::new().unwrap_or_else(|e| {
+        eprintln!("Fatal: Failed to initialize SQLite database: {}", e);
+        eprintln!("Data directory: {:?}", db::db_dir());
+        std::process::exit(1);
+    });
     let session_mgr = Arc::new(Mutex::new(SessionManager::new(db.clone())));
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(AppState {
             db: db.clone(),
             process_manager: Arc::new(Mutex::new(ProcessManager::new())),
@@ -371,6 +405,8 @@ pub fn run() {
             read_file_content,
             get_workspace_root,
             reveal_in_explorer,
+            get_auto_mode_status,
+            read_file_base64,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

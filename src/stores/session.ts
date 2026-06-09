@@ -14,6 +14,8 @@ export interface Session {
   createdAt: number;
   updatedAt: number;
   messageCount: number;
+  totalTokens?: number | null;
+  totalCost?: number | null;
   /** The real claude session UUID (for --resume) */
   claudeSessionId?: string;
 }
@@ -122,6 +124,8 @@ function toLocalSession(s: SessionData): Session {
     createdAt: new Date(s.created_at + "Z").getTime(),
     updatedAt: new Date(s.updated_at + "Z").getTime(),
     messageCount: s.message_count,
+    totalTokens: s.total_tokens,
+    totalCost: s.total_cost,
     claudeSessionId: s.cli_session_id ?? undefined,
   };
 }

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, watch, ref, nextTick } from "vue";
+import { computed, watch, ref, nextTick, defineAsyncComponent } from "vue";
 import { useHighlight } from "@/composables/useHighlight";
-import MermaidRenderer from "./MermaidRenderer.vue";
+
+const MermaidRenderer = defineAsyncComponent(() => import("./MermaidRenderer.vue"));
 
 const props = defineProps<{ content: string }>();
 const { highlight } = useHighlight();

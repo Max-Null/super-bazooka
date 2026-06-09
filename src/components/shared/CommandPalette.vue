@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, nextTick } from "vue";
+import { ref, onMounted, onUnmounted, computed, nextTick, watch } from "vue";
+import { useCommandPaletteBus } from "@/composables/useCommandPalette";
 
 const emit = defineEmits<{
   close: [];
@@ -20,6 +21,11 @@ const actions = [
   { id: "auto-mode", label: "Auto Mode", keys: "" },
   { id: "accept-edits", label: "Edit Automatically", keys: "" },
   { id: "bypass", label: "Bypass Permissions", keys: "" },
+  { id: "theme-dark", label: "Dark Theme", keys: "" },
+  { id: "theme-light", label: "Light Theme", keys: "" },
+  { id: "attach-file", label: "Attach File", keys: "" },
+  { id: "show-usage", label: "View Usage", keys: "" },
+  { id: "compact", label: "Compact Context", keys: "" },
 ];
 
 const filtered = computed(() => {
@@ -31,6 +37,10 @@ const filtered = computed(() => {
 function show() { open.value = true; query.value = ""; selectedIdx.value = 0; nextTick(() => inputEl.value?.focus()); }
 function hide() { open.value = false; emit("close"); }
 function run(action: string) { hide(); emit("command", action); }
+
+// Listen to bus for external open triggers
+const bus = useCommandPaletteBus();
+watch(() => bus.trigger.value, () => { show(); });
 
 function onKeydown(e: KeyboardEvent) {
   if (!open.value) {

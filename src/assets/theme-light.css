@@ -1,0 +1,29 @@
+/* ── Light Theme: cc-gui Design System ── */
+
+[data-theme="light"] {
+  --bg-root: #f8f9fa;
+  --bg-surface: #ffffff;
+  --bg-elevated: #f0f1f3;
+  --bg-hover: #e8e9ec;
+  --bg-active: #dfe0e4;
+
+  --border-dim: #e0e1e6;
+  --border-default: #cdced4;
+  --border-bright: #acaeb8;
+
+  --text-muted: #8b8d97;
+  --text-secondary: #5f616d;
+  --text-primary: #2a2b33;
+  --text-bright: #11121a;
+
+  --accent: #059669;
+  --accent-dim: #047857;
+  --accent-glow: rgba(5, 150, 105, 0.08);
+
+  --amber: #d97706;
+  --amber-glow: rgba(217, 119, 6, 0.07);
+
+  --coral: #dc2626;
+
+  --violet: #7c3aed;
+}

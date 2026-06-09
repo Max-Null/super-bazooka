@@ -1,6 +1,11 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
 
+export interface AttachedFile {
+  name: string;
+  path: string;
+}
+
 export interface Message {
   id: string;
   role: "user" | "assistant";
@@ -13,6 +18,7 @@ export interface Message {
   inputTokens?: number;
   outputTokens?: number;
   costUSD?: number;
+  attachments?: AttachedFile[];
 }
 
 export interface ToolUse {
@@ -41,7 +47,7 @@ export const useChatStore = defineStore("chat", () => {
   const isProcessing = ref(false);
   const pendingControlRequest = ref<ControlRequest | null>(null);
 
-  function addUserMessage(content: string): string {
+  function addUserMessage(content: string, attachments?: AttachedFile[]): string {
     const id = genId();
     messages.value.push({
       id,
@@ -51,6 +57,7 @@ export const useChatStore = defineStore("chat", () => {
       toolUses: [],
       timestamp: Date.now(),
       isStreaming: false,
+      attachments: attachments?.length ? attachments : undefined,
     });
     return id;
   }
@@ -209,10 +216,13 @@ export const useChatStore = defineStore("chat", () => {
       let costUSD: number | undefined;
 
       // Try to parse JSON for assistant messages (new format)
-      if (rec.role === "assistant") {
-        try {
-          const parsed = JSON.parse(rec.content);
-          if (parsed && typeof parsed === "object") {
+      let attachments: AttachedFile[] | undefined;
+
+      // Try JSON parse for both user and assistant messages
+      try {
+        const parsed = JSON.parse(rec.content);
+        if (parsed && typeof parsed === "object") {
+          if (rec.role === "assistant") {
             textContent = parsed.text || "";
             thinking = parsed.thinking || "";
             toolUses = parsed.toolUses || [];
@@ -220,10 +230,13 @@ export const useChatStore = defineStore("chat", () => {
             inputTokens = parsed.inputTokens;
             outputTokens = parsed.outputTokens;
             costUSD = parsed.costUSD;
+          } else if (rec.role === "user") {
+            textContent = parsed.text || "";
+            attachments = parsed.attachments;
           }
-        } catch {
-          // Old format: plain text, use as-is
         }
+      } catch {
+        // Old format: plain text, use as-is
       }
 
       messages.value.push({
@@ -238,6 +251,7 @@ export const useChatStore = defineStore("chat", () => {
         inputTokens,
         outputTokens,
         costUSD,
+        attachments,
       });
     }
   }

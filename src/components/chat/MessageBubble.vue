@@ -2,7 +2,11 @@
 import type { Message } from "@/stores/chat";
 import { ref, computed, onUnmounted, nextTick } from "vue";
 import { useI18n } from "vue-i18n";
+import { isImageFile, useFilePreview } from "@/composables/useFilePreview";
+import { formatNum } from "@/lib/utils";
 import MarkdownRenderer from "../shared/MarkdownRenderer.vue";
+
+const { getThumbnail, thumbnails } = useFilePreview();
 
 const { t } = useI18n();
 const props = defineProps<{ message: Message }>();
@@ -10,6 +14,7 @@ const emit = defineEmits<{
   edit: [id: string, content: string];
   resend: [id: string, content: string];
   editSave: [id: string, newContent: string];
+  previewFile: [file: { name: string; path: string }];
 }>();
 const copied = ref(false);
 
@@ -112,11 +117,6 @@ const tokenLabel = computed(() => {
   if (props.message.outputTokens) parts.push(`↓${formatNum(props.message.outputTokens)}`);
   return parts.join(" ");
 });
-
-function formatNum(n: number): string {
-  if (n >= 1000) return (n / 1000).toFixed(1) + "k";
-  return String(n);
-}
 
 async function copyContent() {
   await navigator.clipboard.writeText(props.message.content);
@@ -268,6 +268,31 @@ function formatJSON(obj: unknown): string {
       >
         <MarkdownRenderer v-if="message.content" :content="message.content" />
         <span v-if="message.isStreaming" class="stream-cursor"></span>
+
+        <!-- Attachments in user message -->
+        <div
+          v-if="message.role === 'user' && message.attachments?.length"
+          class="flex flex-wrap gap-1 mt-2 pt-2"
+          :style="{ borderTop: '1px solid rgba(59,130,246,0.15)' }"
+        >
+          <div
+            v-for="att in message.attachments"
+            :key="att.path"
+            class="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] cursor-pointer transition-colors hover:brightness-110 shrink-0"
+            style="background: rgba(59,130,246,0.12); color: var(--text-secondary)"
+            @click="emit('previewFile', att)"
+          >
+            <img
+              v-if="isImageFile(att.name)"
+              :src="thumbnails[att.path] || ''"
+              @vue:mounted="getThumbnail(att.path, att.name)"
+              class="w-3.5 h-3.5 rounded object-cover shrink-0"
+              v-show="thumbnails[att.path]"
+            />
+            <svg v-else width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" class="shrink-0"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+            <span class="truncate max-w-[120px]">{{ att.name }}</span>
+          </div>
+        </div>
       </div>
 
       <!-- Token + Time stats (only for finished assistant messages) -->

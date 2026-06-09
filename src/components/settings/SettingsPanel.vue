@@ -3,6 +3,7 @@ import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useSettingsStore } from "@/stores/settings";
 import { connectLLM, removeApprovedScenario, listApprovedScenarios } from "@/lib/tauri-bridge";
+import ErrorBoundary from "@/components/shared/ErrorBoundary.vue";
 
 const router = useRouter();
 const settings = useSettingsStore();
@@ -29,7 +30,8 @@ async function handleRemoveApproved(tool: string, pattern: string) {
 </script>
 
 <template>
-  <div class="h-full overflow-y-auto">
+  <ErrorBoundary name="SettingsPanel">
+    <div class="h-full overflow-y-auto">
     <div class="max-w-lg mx-auto p-8">
       <!-- Header -->
       <div class="flex items-center gap-3 mb-8">
@@ -106,4 +108,5 @@ async function handleRemoveApproved(tool: string, pattern: string) {
       </section>
     </div>
   </div>
+  </ErrorBoundary>
 </template>
