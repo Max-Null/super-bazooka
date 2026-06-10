@@ -422,9 +422,20 @@ Total      148 tests
 - Rust list_sessions 聚合 JSON content 中的 token/cost
 - SessionSidebar 每个会话显示 token 总量 + 费用
 
-### Phase 6：完善打磨 ✅ 已完成
+### Phase 6：完善打磨 ✅ 已完成（2026-06-10）
 
 全部 10 项已完成，详见各分节。
+
+### 后续 · 2026-06-11（文档与深度集成）🔄 进行中
+
+- [ ] CommandPalette 升级至 40+ 命令、6 大分类
+- [ ] ContextIndicator 上下文窗口用量可视化
+- [ ] useStreamProcessor 增强（事件回放、通知分级）
+- [ ] Light 主题完善
+- [ ] i18n 补全（91 行新条目）
+- [ ] Settings Token 持久化
+
+> 📖 完整开发时间线见 [README.md § 开发时间线](README.md#开发时间线)
 
 #### 实施顺序
 

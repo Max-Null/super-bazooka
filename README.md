@@ -332,12 +332,14 @@ erDiagram
 
 - 🖥️ **完整 GUI 交互** — 聊天面板、消息气泡、Markdown 渲染、代码高亮、Mermaid 图表
 - 🧠 **三线程流式处理** — Waiter / Stdout Reader / Stderr，实时增量 token 渲染
-- 🔄 **NDJSON 协议解析** — 支持 system / assistant / user / result / control_request 全部事件类型
+- 🔍 **命令面板** — Ctrl+K 快速搜索，6 大分组 40+ 命令，拼音首字母匹配，最近使用追踪
+- 📊 **上下文用量弹窗** — 对标 `/context`，分类明细 tokens 用量 + 中英双文标注
 - 📁 **文件面板** — 文件树浏览、代码预览、Diff 对比
 - 💬 **会话管理** — 创建/删除/重命名/续接(`--resume`)，SQLite 持久化
 - ⚙️ **设置面板** — API Key / Base URL / Model 配置 + 连接测试
 - 🛡️ **权限控制** — 6 种权限模式 UI 切换，自动同步 `~/.claude/settings.json`
 - 🌐 **i18n 国际化** — 中文 / 英文双语界面
+- 🎨 **亮/暗双主题** — CSS 变量驱动，弹窗、面板、代码块全适配
 - 🔔 **桌面通知** — 助手完成时系统通知（含耗时和 token 统计）
 - ⚡ **Ultracode 支持** — 多代理自动编排
 
@@ -464,6 +466,97 @@ cc-gui/
 | `CLAUDE_CODE_EFFORT_LEVEL` | 推理力度 (low/medium/high/max) |
 
 权限模式会自动同步到 `~/.claude/settings.json` 的 `permissions.defaultMode`。
+
+---
+
+## 开发时间线
+
+> 项目从可行性分析到功能完善，历时 5 天（2026-06-07 ~ 2026-06-11）。
+
+### Day 0 · 2026-06-07（可行性分析）
+
+| 事项 | 说明 |
+|------|------|
+| 📋 项目可行性分析 | [SOLO-FEASIBILITY-ANALYSIS.md](docs/SOLO-FEASIBILITY-ANALYSIS.md) — 技术栈验证、CLI 兼容性验证、架构对标准备 |
+| 🏗️ 项目骨架搭建 | Tauri 2 + Vue 3 + Vite + TailwindCSS 4 + DaisyUI 5 |
+| ⚙️ Rust 后端初始化 | `main.rs` / `lib.rs` / `db.rs` / `process.rs` / `protocol.rs` / `session.rs` 全部模块搭建 |
+| 🔄 三线程进程模型 | Waiter / Stdout Reader / Stderr，对标 TOKENICODE 架构 |
+| 📡 NDJSON 协议解析 | system / assistant / user / result 四种事件类型解析 |
+| 💬 聊天 UI 基础 | ChatPanel / MessageBubble / InputBar / ModeBar 组件 |
+| 🎨 代码高亮 | MarkdownRenderer + highlight.js 13 种语言 |
+| ⚙️ 设置面板 | API Key / Base URL / Model 配置 + 连接测试 |
+| 🌐 i18n | 中/英文双语 |
+| 🗄️ SQLite | 4 表 schema（sessions, messages, approved_scenarios, settings）|
+| 🧪 测试基础设施 | vitest + Playwright + cargo test |
+
+**完成度: ~60%**
+
+### Day 1 · 2026-06-08（初始发布）
+
+| 提交 | 说明 |
+|------|------|
+| `b811869` | 🎉 **Initial commit** — 项目首次提交，完整骨架代码 |
+| `406264e` | 🧹 移除未引用的截图，添加测试产物到 `.gitignore` |
+| `f0c1f24` | 📁 **完善文件面板** — 文件树浏览、代码预览、Diff 查看器、面包屑导航、右键菜单 |
+
+| 新增文件 | 说明 |
+|----------|------|
+| `FileTree.vue` | 递归目录树（展开/折叠、右键菜单）|
+| `FilePreview.vue` | CodeMirror 6 只读预览（12 种语言） |
+| `DiffViewer.vue` | 代码差异对比（三色标记） |
+| `FileTree.test.ts` | 文件树组件测试 |
+| `SessionSidebar.test.ts` | 会话侧边栏测试 |
+| `chat.test.ts` | 聊天状态管理测试 |
+
+### Day 2 · 2026-06-09（插件集成分析）
+
+| 提交 | 说明 |
+|------|------|
+| `76e5d87` | 🔌 **Claude 插件分析** — 深入分析 36 个官方插件，安装 14 个核心插件 |
+
+| 成果 | 说明 |
+|------|------|
+| [CLAUDE-PLUGINS-ANALYSIS.md](docs/CLAUDE-PLUGINS-ANALYSIS.md) | 36 个插件的完整分类和使用指南 |
+| `install-claude-plugins.sh` | 一键安装 14 个推荐插件的脚本 |
+| `search-results.md` | 代码库搜索结构文档 |
+| CI/CD 配置 | `.github/workflows/ci.yml` + `release.yml` |
+
+**安装的 14 个插件**:
+`code-simplifier` · `code-review` · `commit-commands` · `pr-review-toolkit` · `feature-dev` · `plugin-dev` · `hookify` · `claude-md-management` · `frontend-design` · `claude-code-setup` · `mcp-tunnels` · `code-modernization` · `update-config` · `verify`
+
+### Day 3 · 2026-06-10（Phase 6 完善打磨）
+
+| 提交 | 说明 |
+|------|------|
+| `c79cae9` | ✨ **Phase 6 全面打磨** — 功能完善、UI 优化、测试增强 |
+
+| 模块 | 改进内容 |
+|------|----------|
+| 🎨 **主题系统** | 亮色/暗色主题切换，CSS 变量统一管理 |
+| 💬 **ChatPanel** | 消息操作（编辑/重发/复制/删除）、Debug 面板、JSON 导出 |
+| 📝 **InputBar** | 工具栏（附件/文件/清除上下文/模式切换按钮）、自动 resize |
+| 🫧 **MessageBubble** | 头像区分、思考折叠动画、工具调用卡片、操作按钮 |
+| 🔔 **通知** | 桌面通知（含耗时 & token 统计） |
+| 🧭 **CommandPalette** | Ctrl+K 命令面板（8 个核心操作） |
+| ⚡ **Ultracode** | 多代理自动编排支持 |
+| 🛡️ **权限控制** | 6 种模式 UI 切换 + `~/.claude/settings.json` 自动同步 |
+| 🧪 **测试** | `MessageBubble.test.ts`（169 行）、`settings.test.ts`、组件测试完善 |
+
+### Day 4 · 2026-06-11（文档与深度集成）🔄 进行中
+
+| 提交 | 说明 |
+|------|------|
+| `fafe3bf` | 📚 **文档完善** — 移除废弃的 DeepSeek 代理脚本，新增完整项目文档 |
+
+| 进行中 | 说明 |
+|--------|------|
+| 🔧 **CommandPalette 升级** | 40+ 命令，6 大分类（对标 Claude Code CLI `/` 命令 + VS Code Palette） |
+| 📊 **ContextIndicator** | 上下文窗口用量可视化 |
+| 🔌 **Stream 增强** | useStreamProcessor 扩展：事件回放、系统通知分级 |
+| 🎨 **主题增强** | Light 主题完善（50+ 行 CSS 变量） |
+| 🌐 **i18n 补全** | 91 行新翻译条目（中/英） |
+| 🏪 **Settings 扩展** | Token 使用量持久化、上下文窗口配置 |
+| 📖 **开发时间线** | 本节的建立 |
 
 ---
 

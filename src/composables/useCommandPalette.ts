@@ -1,11 +1,24 @@
 import { ref } from "vue";
 
-/** Lightweight event bus to trigger command palette from anywhere */
+/** 轻量事件总线：触发命令面板打开 */
 const trigger = ref(0);
+
+/** 聊天相关命令：由 ChatPanel 消费，AppShell 发出 */
+const chatCommand = ref<{ action: string; ts: number }>({ action: "", ts: 0 });
 
 export function useCommandPaletteBus() {
   function open() {
     trigger.value++;
   }
   return { trigger, open };
+}
+
+/** 发送聊天相关命令到 ChatPanel */
+export function emitChatCommand(action: string) {
+  chatCommand.value = { action, ts: Date.now() };
+}
+
+/** ChatPanel 监听并消费聊天命令 */
+export function useChatCommandBus() {
+  return { chatCommand };
 }

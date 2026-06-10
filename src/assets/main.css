@@ -1,7 +1,6 @@
 @import "tailwindcss";
 @plugin "daisyui";
 @plugin "@tailwindcss/typography";
-@import "./theme-light.css";
 
 /* ── cc-gui Design System: Precision Terminal ── */
 
@@ -40,6 +39,42 @@
   --radius-lg: 16px;
 }
 
+/* ── Light Theme ──
+   必须在 :root 之后，否则 @import 会被提升到 :root 之前导致亮色变量被覆盖。 */
+[data-theme="light"] {
+  --bg-root: #f8f9fa;
+  --bg-surface: #ffffff;
+  --bg-elevated: #f0f1f3;
+  --bg-hover: #e8e9ec;
+  --bg-active: #dfe0e4;
+  --border-dim: #d4d5da;
+  --border-default: #b8b9bf;
+  --border-bright: #9a9ba4;
+  --text-muted: #5f6069;
+  --text-secondary: #4a4b55;
+  --text-primary: #23242c;
+  --text-bright: #0f1017;
+  --accent: #059669;
+  --accent-dim: #047857;
+  --accent-glow: rgba(5, 150, 105, 0.08);
+  --amber: #d97706;
+  --amber-glow: rgba(217, 119, 6, 0.07);
+  --coral: #dc2626;
+  --violet: #7c3aed;
+}
+[data-theme="light"] .prose {
+  --tw-prose-body: #23242c;
+  --tw-prose-headings: #0f1017;
+  --tw-prose-links: #059669;
+  --tw-prose-code: #059669;
+  --tw-prose-pre-bg: #f0f1f3;
+  --tw-prose-th-borders: #b8b9bf;
+  --tw-prose-td-borders: #d4d5da;
+}
+/* 代码块在亮色下保持暗底（highlight.js github-dark 主题需要） */
+[data-theme="light"] .prose pre,
+[data-theme="light"] .prose pre code { background: #1a1a24; }
+
 /* Reset placed in Tailwind's base layer so utilities can override */
 @layer base {
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -61,7 +96,7 @@ body {
 ::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 2px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--border-bright); }
 
-*:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+*:focus-visible { outline: none; }
 
 /* Streaming cursor */
 @keyframes blink-cursor { 0%,100%{opacity:1} 50%{opacity:0} }
@@ -119,3 +154,9 @@ details summary::-webkit-details-marker { display: none; }
 /* DaisyUI overrides */
 .btn { font-weight: 500; letter-spacing: 0.01em; }
 .loading-dots { color: var(--accent); }
+
+/* ── ModalShell 弹窗 — 暗色默认 ── */
+.modal-shell-panel { background: var(--bg-surface); border-color: var(--border-default); }
+.modal-shell-body { background: var(--bg-surface); }
+.modal-shell-header { border-color: var(--border-dim); }
+.modal-shell-close { color: var(--text-muted); }

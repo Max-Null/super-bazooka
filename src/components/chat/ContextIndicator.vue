@@ -7,10 +7,12 @@ import { formatNum } from "@/lib/utils";
 const chat = useChatStore();
 const settings = useSettingsStore();
 
-// Model context window sizes (tokens)
+// 模型上下文窗口大小（tokens）
+// DeepSeek v4 系列支持 1M 上下文，模型名中的 [1M] 后缀也明确标注
+// Claude 模型为 200k
 const contextLimits: Record<string, number> = {
-  "deepseek-v4": 128_000,
-  "deepseek-v4-pro": 128_000,
+  "deepseek-v4-pro": 1_000_000,
+  "deepseek-v4": 1_000_000,
   "deepseek-v4-flash": 128_000,
   "claude-sonnet-4-6": 200_000,
   "claude-opus-4-8": 200_000,
@@ -18,10 +20,15 @@ const contextLimits: Record<string, number> = {
 };
 
 const limit = computed(() => {
-  for (const [key, val] of Object.entries(contextLimits)) {
-    if (settings.model.toLowerCase().includes(key)) return val;
+  // 模型名中的 [1M] / [1m] 后缀直接指示 1M 上下文
+  const modelLower = settings.model.toLowerCase();
+  if (modelLower.includes("[1m]") || modelLower.includes("[1M]")) {
+    return 1_000_000;
   }
-  return 128_000; // default
+  for (const [key, val] of Object.entries(contextLimits)) {
+    if (modelLower.includes(key)) return val;
+  }
+  return 128_000; // 默认保守值
 });
 
 const usedTokens = computed(() => {

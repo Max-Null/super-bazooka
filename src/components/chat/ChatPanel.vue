@@ -4,7 +4,7 @@ import { useChatStore } from "@/stores/chat";
 import { useSessionStore } from "@/stores/session";
 import { useDebugLog } from "@/composables/useDebugLog";
 import { open } from "@tauri-apps/plugin-dialog";
-import { sendMessage, sendStdin, getAutoModeStatus, stopSession, saveMessage } from "@/lib/tauri-bridge";
+import { sendMessage, sendStdin, getAutoModeStatus, stopSession } from "@/lib/tauri-bridge";
 import { useFilePreview } from "@/composables/useFilePreview";
 import { useSettingsStore } from "@/stores/settings";
 import ErrorBoundary from "@/components/shared/ErrorBoundary.vue";
@@ -13,13 +13,16 @@ import InputBarToolbar from "./InputBarToolbar.vue";
 import MessageBubble from "./MessageBubble.vue";
 import ThinkingIndicator from "./ThinkingIndicator.vue";
 import FilePreviewModal from "@/components/shared/FilePreviewModal.vue";
-import { useCommandPaletteBus } from "@/composables/useCommandPalette";
+import ContextUsageModal from "@/components/shared/ContextUsageModal.vue";
+import { useCommandPaletteBus, useChatCommandBus } from "@/composables/useCommandPalette";
 
 const chat = useChatStore();
 const session = useSessionStore();
 const settings = useSettingsStore();
 const debugLog = useDebugLog();
 const scrollContainer = ref<HTMLElement | null>(null);
+const isNearBottom = ref(true);
+const autoScroll = ref(true);
 const exporting = ref(false);
 const exportedLabel = ref("");
 const commandBus = useCommandPaletteBus();
@@ -36,6 +39,16 @@ function removeAttachedFile(index: number) {
 
 const previewFile = ref<{ name: string; path: string } | null>(null);
 
+// ── 状态消息（临时横幅，不挤占消息区域）──
+const statusMessage = ref("");
+const showContextModal = ref(false);
+let statusTimer: ReturnType<typeof setTimeout> | null = null;
+function showStatus(msg: string) {
+  statusMessage.value = msg;
+  if (statusTimer) clearTimeout(statusTimer);
+  statusTimer = setTimeout(() => { statusMessage.value = ""; }, 5000);
+}
+
 // ── Auto mode detection ──
 // Primary: frontend store (instant UI feedback when user switches)
 // Calibration: on mount, verify actual settings.json (catches external modifications)
@@ -49,11 +62,64 @@ onMounted(async () => {
 // Sync on store change
 watch(() => settings.autoMode, (v) => { autoModeActive.value = v; });
 
+// ── 命令面板聊天命令监听 ──
+const { chatCommand } = useChatCommandBus();
+watch(() => chatCommand.value.ts, (ts) => {
+  if (!ts) return;
+  const action = chatCommand.value.action;
+  switch (action) {
+    case "clear-conversation":
+      chat.clearMessages();
+      showStatus("已清空对话");
+      break;
+    case "export-session":
+      handleExport();
+      break;
+    case "compact":
+      showStatus("/compact — 压缩上下文请求");
+      break;
+    case "show-usage":
+      showContextModal.value = true;
+      break;
+    case "show-cost": {
+      let totalIn = 0, totalOut = 0, totalCost = 0;
+      for (const m of chat.messages) {
+        totalIn += m.inputTokens || 0;
+        totalOut += m.outputTokens || 0;
+        totalCost += m.costUSD || 0;
+      }
+      showStatus(`↑${totalIn.toLocaleString()} ↓${totalOut.toLocaleString()}  消息:${chat.messages.length}  $${totalCost.toFixed(3)}`);
+      break;
+    }
+    case "focus-input":
+      // 聚焦输入框（通过 DOM 查找）
+      const input = document.querySelector<HTMLInputElement>('.chat-input-area input, .chat-input-area textarea');
+      input?.focus();
+      break;
+    case "attach-file":
+      handleAttachFile();
+      break;
+  }
+});
+
 // ── Sticky question banner ──
 const stickyQuestion = ref("");
 const showSticky = ref(false);
 
-function onScroll() {
+// 自动滚动检测：必须立即响应，不能节流。否则在 50ms 节流窗口内，
+// 新的 token 到达时 autoScroll 还没变成 false，会把用户拽回底部。
+function updateAutoScroll() {
+  const container = scrollContainer.value;
+  if (!container) return;
+  const threshold = 60;
+  const distFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+  const near = distFromBottom < threshold;
+  isNearBottom.value = near;
+  autoScroll.value = near;
+}
+
+// 置顶问题横幅：DOM 查询开销大，节流处理
+function updateStickyBanner() {
   const container = scrollContainer.value;
   if (!container) return;
   const containerRect = container.getBoundingClientRect();
@@ -75,8 +141,9 @@ function onScroll() {
 
 let scrollTimer: ReturnType<typeof setTimeout> | null = null;
 function onScrollThrottled() {
+  updateAutoScroll(); // 立即处理，防止 autoScroll 滞后
   if (scrollTimer) return;
-  scrollTimer = setTimeout(() => { scrollTimer = null; onScroll(); }, 50);
+  scrollTimer = setTimeout(() => { scrollTimer = null; updateStickyBanner(); }, 100);
 }
 
 async function handleSend(text: string) {
@@ -89,18 +156,15 @@ async function handleSend(text: string) {
   attachedFiles.value = [];
 
   const attachments = filePaths.length > 0 ? filePaths.map(p => ({ name: p.split(/[/\\]/).pop() || p, path: p })) : undefined;
-  const userMsgId = chat.addUserMessage(text, attachments);
+  chat.addUserMessage(text, attachments);
 
-  // Save user message to SQLite
-  if (attachments) {
-    saveMessage(userMsgId, sid, "user", JSON.stringify({ text, attachments }), "{}").catch(() => {});
-  } else {
-    saveMessage(userMsgId, sid, "user", text, "{}").catch(() => {});
-  }
-
+  // 用户消息由 Rust 后端在 send_message 中统一保存，
+  // 前端不再重复保存，避免历史回显时出现双份用户消息。
   chat.startAssistantMessage();
   chat.isProcessing = true;
-  await scrollToBottom();
+  autoScroll.value = true;
+  isNearBottom.value = true;
+  await scrollToBottomInstant();
   try {
     await sendMessage(sid, text, {
       planMode: settings.planMode,
@@ -194,19 +258,34 @@ async function handleAttachFile() {
   }
 }
 
-async function scrollToBottom() {
+// 即时滚动：流式输出每来一个 token 就触发，不能用 smooth，否则一直抖
+async function scrollToBottomInstant() {
   await nextTick();
   if (scrollContainer.value) scrollContainer.value.scrollTop = scrollContainer.value.scrollHeight;
 }
-watch(() => chat.messages.length, () => scrollToBottom());
-watch(() => chat.currentAssistantMsg?.content, () => scrollToBottom());
-watch(() => chat.currentAssistantMsg?.thinking, () => scrollToBottom());
-watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottom());
+// 平滑滚动：用户点击"滚动到底部"按钮时用，有动画过渡
+function scrollToBottomSmooth() {
+  if (scrollContainer.value) {
+    scrollContainer.value.scrollTo({ top: scrollContainer.value.scrollHeight, behavior: "smooth" });
+  }
+}
+function scrollToBottomAndResume() {
+  autoScroll.value = true;
+  isNearBottom.value = true;
+  scrollToBottomSmooth();
+}
+function scrollToBottomIfAuto() {
+  if (autoScroll.value) scrollToBottomInstant();
+}
+watch(() => chat.messages.length, () => scrollToBottomIfAuto());
+watch(() => chat.currentAssistantMsg?.content, () => scrollToBottomIfAuto());
+watch(() => chat.currentAssistantMsg?.thinking, () => scrollToBottomIfAuto());
+watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAuto());
 </script>
 
 <template>
   <ErrorBoundary name="ChatPanel">
-  <div class="flex flex-col flex-1 h-full overflow-hidden">
+  <div class="flex flex-col flex-1 h-full relative overflow-hidden">
     <!-- Sticky question banner -->
     <div
       v-if="showSticky"
@@ -217,7 +296,7 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottom());
     </div>
 
     <!-- Messages -->
-    <div ref="scrollContainer" :class="['flex-1', chat.messages.length > 0 ? 'overflow-y-auto' : '']" @scroll="onScrollThrottled">
+    <div ref="scrollContainer" :class="['flex-1 relative', chat.messages.length > 0 ? 'overflow-y-auto' : '']" @scroll="onScrollThrottled">
       <!-- Welcome -->
       <div v-if="chat.messages.length === 0" class="flex items-center justify-center h-full">
         <div class="text-center max-w-sm px-6 pb-24">
@@ -304,6 +383,38 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottom());
       <button @click="handleDeny" class="px-3 py-1 rounded-md text-xs font-medium transition-colors" style="border:1px solid var(--coral); color:var(--coral)">Deny</button>
     </div>
 
+    <!-- 滚动到底按钮 — 工具栏上方居中，不遮挡文件面板 -->
+    <Transition name="scroll-btn">
+      <div
+        v-if="!isNearBottom && chat.messages.length > 0"
+        class="shrink-0 flex justify-center pb-1"
+      >
+        <button
+          @click="scrollToBottomAndResume"
+          class="flex items-center justify-center w-7 h-7 rounded-full transition-all duration-150 hover:scale-110"
+          style="background: var(--bg-elevated); color: var(--text-secondary); border: 1px solid var(--border-bright); box-shadow: 0 1px 6px rgba(0,0,0,0.15)"
+          title="滚动到底部"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+      </div>
+    </Transition>
+
+    <!-- 状态消息：绝对定位在输入框上方，不挤占消息区域 -->
+    <Transition name="scroll-btn">
+      <div
+        v-if="statusMessage"
+        class="absolute bottom-[140px] left-0 right-0 flex justify-center z-10 pointer-events-none"
+      >
+        <span
+          class="text-[11px] font-mono px-2.5 py-0.5 rounded-full"
+          style="background: var(--accent-glow); color: var(--accent)"
+        >{{ statusMessage }}</span>
+      </div>
+    </Transition>
+
     <!-- Toolbar (attach, command menu, mode, effort) -->
     <InputBarToolbar
       @attach-file="handleAttachFile"
@@ -341,9 +452,18 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottom());
 
     <!-- File preview modal -->
     <FilePreviewModal :file="previewFile" @close="previewFile = null" />
+    <ContextUsageModal :open="showContextModal" @close="showContextModal = false" />
 
     <!-- Input -->
     <InputBar :disabled="chat.isProcessing" :auto-mode="autoModeActive" @send="handleSend" @stop="handleStop" @files="(fs) => { for (const f of fs) { if (!attachedFiles.some(af => af.path === f.path)) attachedFiles.push(f); } }" />
   </div>
   </ErrorBoundary>
 </template>
+
+<style scoped>
+/* Scroll-to-bottom button transition */
+.scroll-btn-enter-active { transition: all 200ms ease-out; }
+.scroll-btn-leave-active { transition: all 150ms ease-in; }
+.scroll-btn-enter-from { opacity: 0; transform: translateY(8px) scale(0.9); }
+.scroll-btn-leave-to { opacity: 0; transform: translateY(4px) scale(0.95); }
+</style>

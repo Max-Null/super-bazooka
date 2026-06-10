@@ -167,7 +167,21 @@ impl StreamLine {
                 }
             }
             "assistant" => {
-                // Extract text and thinking content
+                // 从完整的 assistant 消息中提取 text / thinking / tool_use 块。
+                //
+                // text 与 stream_event delta 的关系：
+                //   - Anthropic API：开启 --include-partial-messages 后，文本
+                //     既通过 stream_event.content_block_delta text_delta 增量发送，
+                //     也会在这个完整 assistant 事件中再次出现。
+                //     前端会追踪是否已通过增量方式收到文本，如果已收到则跳过
+                //     完整事件中的文本，避免重复。
+                //   - DeepSeek API：不发送 stream_event text_delta 事件——
+                //     文本只能通过这个完整 assistant 事件获取。前端没有先前的
+                //     增量文本，因此直接使用此处的 text。
+                //   - thinking：目前不支持增量流式传输（未来会添加 thinking_delta），
+                //     所以始终从这里提取。
+                //   - tool_use：需要完整的 input 块，无法通过
+                //     stream_event.content_block_start 获取，所以始终从这里提取。
                 let mut texts = Vec::new();
                 let mut thinkings = Vec::new();
                 let mut tool_uses = Vec::new();

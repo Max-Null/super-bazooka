@@ -4,14 +4,15 @@ import { useRouter, useRoute } from "vue-router";
 import SessionSidebar from "@/components/session/SessionSidebar.vue";
 import FilePanel from "@/components/files/FilePanel.vue";
 import CommandPalette from "@/components/shared/CommandPalette.vue";
+import { emitChatCommand } from "@/composables/useCommandPalette";
+import { useNewSession } from "@/composables/useNewSession";
 import { getWorkspaceRoot } from "@/lib/tauri-bridge";
-import { useSessionStore } from "@/stores/session";
 import { useSettingsStore } from "@/stores/settings";
 
 const router = useRouter();
 const route = useRoute();
-const session = useSessionStore();
 const settings = useSettingsStore();
+const { handleNew } = useNewSession();
 const drawerOpen = ref(false);
 const cwd = ref("");
 const fileNavCounter = ref(0);
@@ -20,20 +21,109 @@ const commandPalette = ref<InstanceType<typeof CommandPalette> | null>(null);
 
 function handleCommand(action: string) {
   switch (action) {
-    case "new-session": session.createSession().then(() => router.push("/chat")); break;
+    // ── 💬 会话 ──
+    case "new-session": handleNew(); break;
+    case "continue-session": /* 由 ChatPanel 处理 --continue */ break;
+    case "resume-session": /* 由 SessionSidebar 处理 */ break;
+    case "rename-session": /* 由 SessionSidebar 处理 */ break;
+    case "delete-session": /* 由 SessionSidebar 处理 */ break;
+    case "clear-conversation":
+    case "export-session":
+    case "switch-session":
+    case "focus-input":
+    case "compact":
+    case "show-usage":
+    case "show-cost":
+    case "attach-file":
+      emitChatCommand(action);
+      break;
+
+    // ── 🖥 视图 ──
     case "toggle-sidebar": drawerOpen.value = !drawerOpen.value; break;
     case "toggle-files": fileNavCounter.value++; break;
+    case "focus-input": /* 由 InputBar 处理 */ break;
+    case "toggle-fullscreen":
+      if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+      else document.exitFullscreen();
+      break;
+    case "zen-mode":
+      drawerOpen.value = false;
+      fileNavCounter.value++;
+      break;
+
+    // ── 🛡 权限与模式 ──
+    case "perm-default":
+      settings.permissionMode = "default";
+      settings.planMode = false;
+      settings.autoMode = false;
+      break;
+    case "perm-plan":
+      settings.planMode = true;
+      settings.autoMode = false;
+      break;
+    case "perm-edit-auto":
+      settings.permissionMode = "acceptEdits";
+      settings.planMode = false;
+      settings.autoMode = false;
+      break;
+    case "perm-auto":
+      settings.autoMode = true;
+      settings.planMode = false;
+      break;
+    case "perm-bypass":
+      settings.permissionMode = "bypassPermissions";
+      settings.planMode = false;
+      settings.autoMode = false;
+      break;
+    case "perm-dontask":
+      settings.permissionMode = "dontAsk";
+      settings.planMode = false;
+      settings.autoMode = false;
+      break;
+
+    // ── 🧠 思考深度 ──
+    case "effort-low": settings.effort = "low"; break;
+    case "effort-medium": settings.effort = "medium"; break;
+    case "effort-high": settings.effort = "high"; break;
+    case "effort-xhigh": settings.effort = "xhigh"; break;
+    case "effort-max": settings.effort = "max"; break;
+    case "effort-ultracode": settings.effort = "ultracode"; break;
+
+    // ── 📊 上下文 ──
+    case "compact": /* 由 ChatPanel 处理 */ break;
+    case "show-usage": /* 由 ChatPanel 处理 */ break;
+    case "show-cost": /* 由 ChatPanel 处理 */ break;
+    case "context-stats": /* 由 ChatPanel 处理 */ break;
+
+    // ── 🔌 工具 ──
+    case "attach-file": /* 由 ChatPanel 处理 */ break;
+    case "code-review": /* 未来集成 code-review skill */ break;
+    case "code-simplify": /* 未来集成 code-simplifier skill */ break;
+    case "security-audit": /* 未来集成 security-guidance skill */ break;
+    case "modernize-assess": /* 未来集成 code-modernization skill */ break;
+    case "open-terminal": /* 未来集成 Tauri shell open */ break;
+    case "open-explorer": /* 由 FilePanel 处理 */ break;
+    case "dev-tools": /* 开发模式 */ break;
+    case "run-doctor": /* 未来集成 /doctor */ break;
+    case "init-claude-md": /* 未来集成 /init */ break;
+    case "keybindings-ref": /* 显示快捷键弹窗 */ break;
+
+    // ── ⚙ 设置 ──
     case "settings": router.push("/settings"); break;
+    case "theme-dark": settings.theme = "dark"; break;
+    case "theme-light": settings.theme = "light"; break;
+    case "theme-system": settings.theme = "system"; break;
+    case "manage-approvals": router.push("/settings"); break;
+    case "test-connection": router.push("/settings"); break;
+    case "check-update": /* 未来集成 */ break;
+    case "about": /* 显示关于弹窗 */ break;
+
+    // ── 兼容旧 action id ──
     case "plan-mode": settings.planMode = true; settings.autoMode = false; break;
     case "auto-mode": settings.autoMode = true; settings.planMode = false; break;
     case "accept-edits": settings.permissionMode = "acceptEdits"; break;
     case "bypass": settings.permissionMode = "bypassPermissions"; break;
-    case "theme-dark": settings.theme = "dark"; break;
-    case "theme-light": settings.theme = "light"; break;
-    // These are handled by ChatPanel but listed here for completeness
-    case "attach-file":
-    case "show-usage":
-    case "compact": break;
+    case "toggle-files-legacy": fileNavCounter.value++; break;
   }
 }
 
@@ -108,6 +198,19 @@ function openFilePanelTo(path: string) {
 
       <!-- Actions group -->
       <div class="flex items-center gap-1">
+        <!-- New session -->
+        <button
+          @click="handleCommand('new-session')"
+          class="w-7 h-7 flex items-center justify-center rounded-md transition-colors hover:bg-[var(--bg-hover)]"
+          style="color:var(--text-secondary)"
+          title="新会话"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </button>
+
         <!-- Theme toggle -->
         <button
           @click="settings.theme = settings.theme === 'dark' ? 'light' : 'dark'"

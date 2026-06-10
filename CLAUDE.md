@@ -17,13 +17,13 @@ cc-gui/
 │   │   ├── session/           # SessionSidebar (会话侧边栏)
 │   │   ├── files/             # FilePanel, FileTree, FilePreview, DiffViewer
 │   │   ├── settings/          # SettingsPanel (API配置/连接测试)
-│   │   └── shared/            # MarkdownRenderer, MermaidRenderer, CommandPalette, ErrorBoundary, FilePreviewModal
+│   │   └── shared/            # MarkdownRenderer, MermaidRenderer, CommandPalette, ModalShell, ContextUsageModal, ErrorBoundary, FilePreviewModal
 │   ├── composables/           # useStreamProcessor, useFilePreview, useCommandPalette, useDebugLog, useHighlight
 │   ├── stores/                # session.ts, chat.ts, settings.ts (Pinia)
-│   ├── lib/                   # utils.ts, tauri-bridge.ts, tauri-mock.ts
+│   ├── lib/                   # utils.ts, tauri-bridge.ts, tauri-mock.ts, pinyin.ts
 │   ├── locales/               # zh.json, en.json (vue-i18n)
 │   ├── router/                # Vue Router 路由配置
-│   └── assets/                # main.css, theme-light.css
+│   └── assets/                # main.css（含亮色主题，不用再单独引入 theme-light.css）
 ├── src-tauri/                 # Rust 后端 (Tauri 2)
 │   ├── src/
 │   │   ├── main.rs            # 程序入口
@@ -104,6 +104,34 @@ npm run test:quick        # 快速测试（vitest + rust，跳过 e2e）
 
 ---
 
+## 🔴 硬性规则：禁止手搓轮子（NO REINVENTION）
+
+> **这是本项目的最高优先级规则。违反此规则是项目中最严重的工程错误。**
+
+### 写任何新代码前，必须执行以下检查（按顺序）：
+
+1. **Grep 搜索已有实现**：写新函数/组件/composable/hook 之前，先用 Grep 在整个 `src/` 目录搜索功能关键词。项目里大概率已有类似逻辑。
+2. **检查 composables 目录**：`src/composables/` 下是否已有能复用的 `useXxx()`。
+3. **检查 lib 目录**：`src/lib/utils.ts` 或 `src/lib/tauri-bridge.ts` 是否已有对应工具函数。
+4. **检查同类组件**：其他 `.vue` 组件是否已有相同的交互逻辑（按钮行为、数据处理、API 调用模式）。
+
+### 常见违规场景（每次必须自查）：
+
+| 违规行为 | 正确做法 |
+|----------|----------|
+| 在组件 B 里重写组件 A 已有的函数 | 提取为 composable，两处导入同一个 |
+| 手写 `invoke()` 而不是用 `tauri-bridge.ts` 封装 | 一律通过 bridge 调用 |
+| 复制粘贴另一个组件的 `<script>` 逻辑 | 提取共享逻辑到 composable 或 utils |
+| 新写一个已有同类功能的 util 函数 | Grep 搜索 → 复用现有实现 |
+
+### 为什么这么严格？
+
+每次都手搓轮子 → 同一逻辑散落多处 → 改 A 处漏 B 处 → Bug 积累 → 无人能读懂全部代码 → 项目变屎山。
+
+**一个 bug 的修复方式如果是"让它和那边已经正确的代码一样"，说明你一开始就该复用，而不是重写。**
+
+---
+
 ## 工程规范
 
 > 继承自全局 CLAUDE.md，以下为 cc-gui 项目特定补充。
@@ -157,3 +185,7 @@ npm run test:quick        # 快速测试（vitest + rust，跳过 e2e）
 4. **不传 --model 给 CLI**: Claude CLI 使用自己的 `~/.claude/settings.json` 配置模型；GUI 的 model 设置存储在 session 记录中供参考
 5. **权限同步**: `sync_permission_settings()` 在每次 spawn 前将 auto/default 模式写入 `~/.claude/settings.json`
 6. **Mock 优先测试**: `tauri-mock.ts` 提供完整 mock，Playwright 测试在浏览器中运行无需 Tauri
+7. **用户消息单写**: 用户消息只由 Rust 后端 `send_message` 保存，前端不再重复保存，避免历史回显双份
+8. **亮色主题 CSS 顺序**: `[data-theme="light"]` 必须在 `:root` 之后，禁止 `@import` 独立亮色 CSS 文件（会被提升到 `:root` 前导致变量被覆盖）
+9. **ModalShell 统一样式**: 所有弹窗通过 `ModalShell.vue` 外壳实现，颜色用 CSS 变量，不写 inline style 或硬编码色值
+10. **拼音搜索**: 命令面板支持拼音首字母搜索，`lib/pinyin.ts` 覆盖 3755 个常用汉字

@@ -47,10 +47,27 @@ export function useStreamProcessor() {
       switch (data.type) {
         case "assistant":
           if (data.text) {
-            chat.appendText(data.text);
+            // 去重：当完整 assistant 事件携带的文本以已有内容开头时，
+            // 说明之前已通过 text_delta 增量事件接收过，只追加新后缀。
+            // 对于不发送增量事件的后端（DeepSeek），currentContent 为空，
+            // 完整事件的文本会被完整使用。
+            const currentContent = chat.currentAssistantMsg?.content || "";
+            if (currentContent && data.text.startsWith(currentContent)) {
+              const newPart = data.text.slice(currentContent.length);
+              if (newPart) chat.appendText(newPart);
+            } else {
+              chat.appendText(data.text);
+            }
           }
           if (data.thinking) {
-            chat.appendThinking(data.thinking);
+            // 同样的去重逻辑处理 thinking 块
+            const currentThinking = chat.currentAssistantMsg?.thinking || "";
+            if (currentThinking && data.thinking.startsWith(currentThinking)) {
+              const newPart = data.thinking.slice(currentThinking.length);
+              if (newPart) chat.appendThinking(newPart);
+            } else {
+              chat.appendThinking(data.thinking);
+            }
           }
           if (data.tool_use) {
             for (const tu of data.tool_use) {

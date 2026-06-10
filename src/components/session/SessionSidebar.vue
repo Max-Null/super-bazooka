@@ -4,7 +4,7 @@ import { useRouter } from "vue-router";
 import { useSessionStore } from "@/stores/session";
 import { useChatStore } from "@/stores/chat";
 import { useDebugLog } from "@/composables/useDebugLog";
-import { useSettingsStore } from "@/stores/settings";
+import { useNewSession } from "@/composables/useNewSession";
 import { listMessages } from "@/lib/tauri-bridge";
 import { formatTokenCount } from "@/lib/utils";
 
@@ -12,7 +12,7 @@ const router = useRouter();
 const sessionStore = useSessionStore();
 const chatStore = useChatStore();
 const debugLog = useDebugLog();
-const settings = useSettingsStore();
+const { handleNew } = useNewSession();
 
 const searchQuery = ref("");
 const editingId = ref<string | null>(null);
@@ -40,13 +40,6 @@ async function handleSelect(id: string) {
   } catch {
     chatStore.clearMessages();
   }
-  router.push("/chat");
-}
-
-async function handleNew() {
-  const id = await sessionStore.createSession(settings.model);
-  chatStore.clearMessages();
-  debugLog.clear();
   router.push("/chat");
 }
 

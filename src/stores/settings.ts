@@ -4,14 +4,14 @@ import { ref, watch } from "vue";
 const STORAGE_KEY = "cc-gui-settings";
 
 /**
- * Permission mode mapping (CLI --permission-mode flag):
- *   default | acceptEdits | bypassPermissions | plan
+ * 权限模式映射（对应 CLI --permission-mode 标志）:
+ *   default | acceptEdits | bypassPermissions | plan | dontAsk | auto
  *
- * "auto" is NOT a CLI flag — it writes `permissions.defaultMode: "auto"`
- * to settings.json and runs CLI with --permission-mode default.
- * The harness then decides auto-approval based on context.
+ * "auto" 不是 CLI 标志——它会写 `permissions.defaultMode: "auto"`
+ * 到 settings.json，然后用 --permission-mode default 运行 CLI。
+ * harness 根据上下文决定自动批准。
  */
-export type PermissionMode = "default" | "acceptEdits" | "bypassPermissions" | "auto";
+export type PermissionMode = "default" | "acceptEdits" | "bypassPermissions" | "dontAsk" | "auto";
 
 /**
  * Effort level mapping:
@@ -30,7 +30,7 @@ export interface Settings {
   autoMode: boolean;
   permissionMode: PermissionMode;
   effort: Effort;
-  theme: "dark" | "light";
+  theme: "dark" | "light" | "system";
   locale: "zh" | "en";
 }
 
@@ -68,7 +68,7 @@ export const useSettingsStore = defineStore("settings", () => {
   const autoMode = ref(true);
   const permissionMode = ref<PermissionMode>("bypassPermissions");
   const effort = ref<Effort>("high");
-  const theme = ref<"dark" | "light">("dark");
+  const theme = ref<"dark" | "light" | "system">("dark");
   const locale = ref<"zh" | "en">("zh");
 
   const loaded = loadSettings();
