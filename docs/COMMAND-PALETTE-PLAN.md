@@ -134,15 +134,16 @@ function getCommands(): Command[]
 
 | 阶段 | 内容 | 涉及文件 | 状态 |
 |------|------|----------|------|
-| **P0** | i18n 命令段中英文 | `zh.json`, `en.json` | ⏳ |
-| **P0** | 数据结构重构：分组 + Command 接口 | `CommandPalette.vue` | ⏳ |
-| **P0** | 视觉升级：分组标题 + 图标 | `CommandPalette.vue` | ⏳ |
-| **P1** | 搜索增强：拼音 + 模糊匹配 | `CommandPalette.vue` | ⏳ |
-| **P1** | 新增 20+ 命令（对标 Claude Code） | `CommandPalette.vue` | ⏳ |
-| **P2** | 最近使用 + 收藏 | `CommandPalette.vue` + localStorage | ⏳ |
+| **P0** | i18n 命令段中英文 | `zh.json`, `en.json` | ✅ |
+| **P0** | 数据结构重构：分组 + Command 接口 | `CommandPalette.vue` | ✅ |
+| **P0** | 视觉升级：分组标题 + 图标 + CLI 标注 | `CommandPalette.vue` | ✅ |
+| **P1** | 搜索增强：拼音首字母匹配 | `CommandPalette.vue`, `lib/pinyin.ts` | ✅ |
+| **P1** | 新增 40+ 命令（对标 Claude Code） | `CommandPalette.vue` | ✅ |
+| **P1** | 上下文用量弹窗 | `ContextUsageModal.vue` | ✅ |
+| **P1** | 弹窗统一 (ModalShell) | `ModalShell.vue` | ✅ |
+| **P2** | 最近使用 | `CommandPalette.vue` + localStorage | ✅ |
 | **P2** | 可扩展注册系统 | `useCommandRegistry.ts`(新) | ⏳ |
 | **P2** | 组件迁移到注册方式 | `ChatPanel.vue` 等 | ⏳ |
-| **P3** | 拼音匹配库集成 | `lib/pinyin.ts`(新) | ⏳ |
 | **P3** | 单元测试 | `CommandPalette.test.ts`(新) | ⏳ |
 
 ### 实施原则

@@ -4,6 +4,7 @@ import { useI18n } from "vue-i18n";
 import { useCommandPaletteBus } from "@/composables/useCommandPalette";
 import { useSettingsStore } from "@/stores/settings";
 import { toPinyinInitials } from "@/lib/pinyin";
+import { useCommandRegistry, type RegisteredCommand } from "@/composables/useCommandRegistry";
 import ModalShell from "./ModalShell.vue";
 
 const { t } = useI18n();
@@ -36,14 +37,11 @@ const actions: CommandAction[] = [
   { id: "resume-session",  group: "session",    labelKey: "command.resumeSession",   cliKey: "--resume",    icon: "📂" },
   { id: "rename-session",  group: "session",    labelKey: "command.renameSession",  keys: "F2",       icon: "✏️" },
   { id: "delete-session",  group: "session",    labelKey: "command.deleteSession",  keys: "Del",      icon: "🗑️" },
-  { id: "clear-conversation", group: "session", labelKey: "command.clearConversation", descKey: "command.clearConversationDesc", cliKey: "/clear", icon: "🧹" },
-  { id: "export-session",  group: "session",    labelKey: "command.exportSession",  descKey: "command.exportSessionDesc", icon: "📤" },
   { id: "switch-session",  group: "session",    labelKey: "command.switchSession",  keys: "Ctrl+P",   icon: "🔀" },
 
   // ── 🖥 视图 ──
   { id: "toggle-sidebar",  group: "view",       labelKey: "command.toggleSidebar",  keys: "Ctrl+B",   icon: "📋" },
   { id: "toggle-files",    group: "view",       labelKey: "command.toggleFiles",    keys: "Ctrl+E",   icon: "📂" },
-  { id: "focus-input",     group: "view",       labelKey: "command.focusInput",     keys: "Ctrl+L",   icon: "⌨️" },
   { id: "toggle-fullscreen", group: "view",     labelKey: "command.toggleFullscreen", keys: "F11",     icon: "🖥️" },
   { id: "zen-mode",        group: "view",       labelKey: "command.zenMode",        descKey: "command.zenModeDesc", icon: "🧘" },
 
@@ -63,13 +61,8 @@ const actions: CommandAction[] = [
   { id: "effort-max",      group: "effort",     labelKey: "command.effortMax",       cliKey: "max",     icon: "🚀" },
   { id: "effort-ultracode",group: "effort",     labelKey: "command.effortUltracode", descKey: "command.effortUltracodeDesc", cliKey: "ultracode", icon: "⚡" },
 
-  // ── 📊 上下文 ──
-  { id: "compact",         group: "context",    labelKey: "command.compactContext",  descKey: "command.compactContextDesc",  cliKey: "/compact", icon: "🗜️" },
-  { id: "show-usage",      group: "context",    labelKey: "command.viewUsage",       descKey: "command.viewUsageDesc",       cliKey: "/context", icon: "📊" },
-  { id: "show-cost",       group: "context",    labelKey: "command.viewCost",        cliKey: "/cost",    icon: "💰" },
 
   // ── 🔌 工具 ──
-  { id: "attach-file",     group: "tools",      labelKey: "command.attachFile",      descKey: "command.attachFileDesc",     icon: "📎" },
   { id: "code-review",     group: "tools",      labelKey: "command.codeReview",      descKey: "command.codeReviewDesc",     cliKey: "code-review", icon: "🔍" },
   { id: "code-simplify",   group: "tools",      labelKey: "command.codeSimplify",    descKey: "command.codeSimplifyDesc",   cliKey: "code-simplifier", icon: "✨" },
   { id: "security-audit",  group: "tools",      labelKey: "command.securityAudit",   descKey: "command.securityAuditDesc",  cliKey: "security-review", icon: "🛡️" },
@@ -91,6 +84,22 @@ const actions: CommandAction[] = [
   { id: "check-update",    group: "settings",   labelKey: "command.checkUpdate",                         icon: "🆙" },
   { id: "about",           group: "settings",   labelKey: "command.about",           descKey: "command.aboutDesc",          icon: "ℹ️" },
 ];
+
+// ── 动态命令注册 ──
+const { getCommands } = useCommandRegistry();
+const allActions = computed<CommandAction[]>(() => {
+  const dynamic = getCommands().map((rc: RegisteredCommand) => ({
+    id: rc.id,
+    group: rc.group,
+    labelKey: rc.labelKey,
+    descKey: rc.descKey,
+    keys: rc.keys,
+    icon: rc.icon,
+    cliKey: rc.cliKey,
+    visible: rc.visible,
+  }));
+  return [...actions, ...dynamic];
+});
 
 // ── 分组顺序 ──
 const groupOrder = ["session", "view", "permission", "effort", "context", "tools", "settings"];
@@ -159,8 +168,8 @@ interface FlatItem {
 const flatList = computed<FlatItem[]>(() => {
   const q = query.value.trim();
   const visible = q
-    ? actions.filter((a) => matchesQuery(a, q))
-    : actions.filter((a) => (a.visible ? a.visible() : true));
+    ? allActions.value.filter((a) => matchesQuery(a, q))
+    : allActions.value.filter((a) => (a.visible ? a.visible() : true));
 
   const items: FlatItem[] = [];
   let actionIdx = 0;
@@ -201,7 +210,7 @@ function pushRecent(id: string) {
 const recentActions = computed(() => {
   if (query.value.trim()) return []; // 有搜索词时不显示最近使用
   return recentIds.value
-    .map((id) => actions.find((a) => a.id === id))
+    .map((id) => allActions.value.find((a) => a.id === id))
     .filter((a): a is CommandAction => !!a);
 });
 

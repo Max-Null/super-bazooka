@@ -15,6 +15,7 @@ import ThinkingIndicator from "./ThinkingIndicator.vue";
 import FilePreviewModal from "@/components/shared/FilePreviewModal.vue";
 import ContextUsageModal from "@/components/shared/ContextUsageModal.vue";
 import { useCommandPaletteBus, useChatCommandBus } from "@/composables/useCommandPalette";
+import { useCommandRegistry } from "@/composables/useCommandRegistry";
 
 const chat = useChatStore();
 const session = useSessionStore();
@@ -64,6 +65,16 @@ watch(() => settings.autoMode, (v) => { autoModeActive.value = v; });
 
 // ── 命令面板聊天命令监听 ──
 const { chatCommand } = useChatCommandBus();
+const { register } = useCommandRegistry();
+
+// 向命令面板注册聊天相关命令
+register({ id: "clear-conversation", group: "session", labelKey: "command.clearConversation", descKey: "command.clearConversationDesc", cliKey: "/clear", icon: "🧹" });
+register({ id: "export-session", group: "session", labelKey: "command.exportSession", descKey: "command.exportSessionDesc", icon: "📤" });
+register({ id: "compact", group: "context", labelKey: "command.compactContext", descKey: "command.compactContextDesc", cliKey: "/compact", icon: "🗜️" });
+register({ id: "show-usage", group: "context", labelKey: "command.viewUsage", descKey: "command.viewUsageDesc", cliKey: "/context", icon: "📊" });
+register({ id: "show-cost", group: "context", labelKey: "command.viewCost", cliKey: "/cost", icon: "💰" });
+register({ id: "attach-file", group: "tools", labelKey: "command.attachFile", descKey: "command.attachFileDesc", icon: "📎" });
+register({ id: "focus-input", group: "view", labelKey: "command.focusInput", keys: "Ctrl+L", icon: "⌨️" });
 watch(() => chatCommand.value.ts, (ts) => {
   if (!ts) return;
   const action = chatCommand.value.action;
