@@ -74,6 +74,16 @@ fn run_migrations(conn: &Connection) -> SqliteResult<()> {
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             PRIMARY KEY (tool_name, pattern)
         );
+
+        CREATE TABLE IF NOT EXISTS item_descriptions (
+            item_type TEXT NOT NULL,
+            name TEXT NOT NULL,
+            desc_en TEXT,
+            desc_zh TEXT,
+            source_updated_at TEXT,
+            translated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            PRIMARY KEY (item_type, name)
+        );
         ",
     )?;
 

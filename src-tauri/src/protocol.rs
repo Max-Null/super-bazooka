@@ -103,13 +103,26 @@ impl StreamLine {
         }
     }
 
-    /// If this is a system/init event, extract connected MCP server names from tools
+    /// If this is a system/init event, extract connected MCP server names.
+    /// Prefers the native `mcp_servers` field; falls back to parsing `mcp__<server>__<tool>` tool names.
     pub fn capture_mcp_servers(&self) -> Vec<String> {
         if self.inner["type"].as_str() != Some("system")
             || self.inner["subtype"].as_str() != Some("init")
         {
             return vec![];
         }
+
+        // 优先：从 mcp_servers 原生字段读取（Claude Code 直接提供的服务器列表）
+        if let Some(servers) = self.inner["mcp_servers"].as_array() {
+            if !servers.is_empty() {
+                return servers
+                    .iter()
+                    .filter_map(|s| s["name"].as_str().map(|n| n.to_string()))
+                    .collect();
+            }
+        }
+
+        // 兜底：从 tools 名称 mcp__<server>__<tool> 中提取
         let tools = match self.inner["tools"].as_array() {
             Some(t) => t,
             None => return vec![],
@@ -117,7 +130,6 @@ impl StreamLine {
         let mut servers = std::collections::BTreeSet::new();
         for tool in tools {
             if let Some(name) = tool["name"].as_str() {
-                // tool name format: mcp__<server>__<tool>
                 if let Some(rest) = name.strip_prefix("mcp__") {
                     if let Some(end) = rest.find("__") {
                         servers.insert(rest[..end].to_string());

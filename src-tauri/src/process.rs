@@ -217,12 +217,16 @@ fn sync_permission_settings(auto_mode: bool, plan_mode: bool, permission_mode: &
     let mut settings: serde_json::Value = serde_json::from_str(&content)
         .map_err(|e| format!("Invalid settings.json: {}", e))?;
 
+    // 白名单校验 permission_mode，拒绝无效值
     let target = if auto_mode {
         "auto"
     } else if plan_mode {
         "plan"
     } else {
-        permission_mode
+        match permission_mode {
+            "default" | "acceptEdits" | "bypassPermissions" | "dontAsk" => permission_mode,
+            other => return Err(format!("无效的权限模式: {}", other)),
+        }
     };
     let current = settings["permissions"]["defaultMode"]
         .as_str()

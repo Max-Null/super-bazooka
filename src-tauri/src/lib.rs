@@ -337,7 +337,21 @@ async fn get_auto_mode_status() -> Result<bool, String> {
 
 #[tauri::command]
 async fn write_file(path: String, content: String) -> Result<(), String> {
-    std::fs::write(&path, &content)
+    // 只允许写入 ~/.claude/ 目录内的文件
+    let home = dirs::home_dir().ok_or("无法获取用户目录")?;
+    let claude_dir = home.join(".claude");
+    // normalize：统一用 backslash，便于 Windows 下前缀比较
+    let resolved = std::fs::canonicalize(&path).unwrap_or_else(|_| {
+        let p = std::path::Path::new(&path);
+        if p.is_absolute() { p.to_path_buf() } else { home.join(p) }
+    });
+    let resolved_s = resolved.to_string_lossy().replace("\\\\?\\", "");
+    let claude_s = claude_dir.to_string_lossy().replace("\\\\?\\", "");
+    let claude_json = home.join(".claude.json").to_string_lossy().replace("\\\\?\\", "");
+    if !resolved_s.starts_with(&claude_s) && resolved_s != claude_json {
+        return Err(format!("路径超出允许范围: {}", path));
+    }
+    std::fs::write(&resolved, &content)
         .map_err(|e| format!("写入文件失败 '{}': {}", path, e))
 }
 
@@ -346,6 +360,403 @@ async fn write_file(path: String, content: String) -> Result<(), String> {
 async fn get_claude_dir() -> Result<String, String> {
     let home = dirs::home_dir().ok_or("无法获取用户目录")?;
     Ok(home.join(".claude").to_string_lossy().to_string())
+}
+
+// ── 项目描述缓存（翻译 + 持久化）──
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+struct DescriptionItem {
+    item_type: String,
+    name: String,
+    #[serde(default)]
+    desc_en: Option<String>,
+    #[serde(default)]
+    desc_zh: Option<String>,
+}
+
+/// 确保每个 item 都有中英双语描述。已有翻译的直接从 DB 返回；
+/// 缺失中文的调用 DeepSeek API 翻译后存入 DB。
+#[tauri::command]
+async fn ensure_item_descriptions(
+    state: State<'_, AppState>,
+    items: Vec<DescriptionItem>,
+    api_key: String,
+    base_url: String,
+) -> Result<Vec<DescriptionItem>, String> {
+    // 如果 cc-gui 未配置 API Key，尝试从 ~/.claude/settings.json 读取 ANTHROPIC_AUTH_TOKEN
+    let api_key = if api_key.is_empty() {
+        read_claude_api_key().unwrap_or_default()
+    } else {
+        api_key
+    };
+
+    // 第一步：在 DB 锁内查询缓存，收集需要翻译的项
+    let (mut results, to_translate): (Vec<DescriptionItem>, Vec<(usize, String)>) = {
+        let db = state.db.conn.lock().map_err(|e| format!("DB lock: {}", e))?;
+        let mut results = Vec::new();
+        let mut to_translate = Vec::new();
+
+        for item in &items {
+            let mut out = item.clone();
+            let cached: Option<(Option<String>, Option<String>)> = db
+                .query_row(
+                    "SELECT desc_en, desc_zh FROM item_descriptions WHERE item_type = ?1 AND name = ?2",
+                    rusqlite::params![item.item_type, item.name],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
+                .ok();
+
+            if let Some((cached_en, cached_zh)) = cached {
+                // 英文变了，或中文缺失 → 重新翻译
+                let needs_retranslate = cached_zh.is_none()
+                    || match (&cached_en, &item.desc_en) {
+                        (Some(old), Some(new)) if old != new => true,
+                        (None, Some(_)) => true,
+                        _ => false,
+                    };
+                if needs_retranslate {
+                    if let Some(ref desc_en) = item.desc_en {
+                        to_translate.push((results.len(), desc_en.clone()));
+                    }
+                    out.desc_en = item.desc_en.clone().or(cached_en);
+                    out.desc_zh = cached_zh; // 暂时保旧
+                } else {
+                    out.desc_en = cached_en.or(item.desc_en.clone());
+                    out.desc_zh = cached_zh;
+                }
+            } else if let Some(ref desc_en) = item.desc_en {
+                to_translate.push((results.len(), desc_en.clone()));
+            }
+
+            results.push(out);
+        }
+        (results, to_translate)
+    }; // DB 锁在此释放
+
+    // 第二步：无锁状态下调用 API 翻译
+    let mut translations: Vec<(usize, String)> = Vec::new();
+    for (idx, desc_en) in &to_translate {
+        match translate_to_chinese(&api_key, &base_url, desc_en).await {
+            Ok(zh) => translations.push((*idx, zh)),
+            Err(e) => eprintln!("translate error for {}[{}]: {}", items[*idx].name, idx, e),
+        }
+    }
+
+    // 第三步：重新获取 DB 锁，保存翻译结果
+    {
+        let db = state.db.conn.lock().map_err(|e| format!("DB lock: {}", e))?;
+        for (idx, zh) in &translations {
+            let item = &items[*idx];
+            results[*idx].desc_zh = Some(zh.clone());
+            if let Some(ref desc_en) = item.desc_en {
+                let _ = db.execute(
+                    "INSERT OR REPLACE INTO item_descriptions (item_type, name, desc_en, desc_zh, translated_at) VALUES (?1, ?2, ?3, ?4, datetime('now'))",
+                    rusqlite::params![item.item_type, item.name, desc_en, zh],
+                );
+            }
+        }
+    }
+
+    Ok(results)
+}
+
+/// 调用 DeepSeek API 将英文描述翻译为中文
+/// 从 ~/.claude/settings.json 读取 cc-gui 相关配置
+#[derive(serde::Serialize)]
+struct ClaudeSettings {
+    api_key: String,
+    base_url: String,
+    model: String,
+    effort: String,
+    /// permissions.defaultMode: auto | plan | default | acceptEdits | bypassPermissions | dontAsk
+    permission_mode: String,
+}
+
+#[tauri::command]
+fn get_claude_settings() -> Result<ClaudeSettings, String> {
+    let home = dirs::home_dir().ok_or("无法获取用户目录")?;
+    let path = home.join(".claude").join("settings.json");
+    let raw = std::fs::read_to_string(&path)
+        .map_err(|e| format!("读取 settings.json 失败: {}", e))?;
+    let json: serde_json::Value = serde_json::from_str(&raw)
+        .map_err(|e| format!("解析 settings.json 失败: {}", e))?;
+
+    let env = &json["env"];
+    Ok(ClaudeSettings {
+        api_key: env["ANTHROPIC_AUTH_TOKEN"].as_str().unwrap_or("").to_string(),
+        base_url: env["ANTHROPIC_BASE_URL"].as_str().unwrap_or("https://api.deepseek.com").to_string(),
+        model: env["ANTHROPIC_MODEL"]
+            .as_str()
+            .or(env["ANTHROPIC_DEFAULT_OPUS_MODEL"].as_str())
+            .unwrap_or("deepseek-v4-pro[1M]")
+            .to_string(),
+        effort: json["effortLevel"].as_str().unwrap_or("high").to_string(),
+        permission_mode: json["permissions"]["defaultMode"]
+            .as_str()
+            .unwrap_or("default")
+            .to_string(),
+    })
+}
+
+/// 将 cc-gui 配置写入 ~/.claude/settings.json
+#[tauri::command]
+fn set_claude_settings(
+    api_key: String,
+    base_url: String,
+    model: String,
+    effort: String,
+    permission_mode: String,
+) -> Result<(), String> {
+    let home = dirs::home_dir().ok_or("无法获取用户目录")?;
+    let path = home.join(".claude").join("settings.json");
+
+    let raw = std::fs::read_to_string(&path)
+        .map_err(|e| format!("读取 settings.json 失败: {}", e))?;
+    let mut json: serde_json::Value = serde_json::from_str(&raw)
+        .map_err(|e| format!("解析 settings.json 失败: {}", e))?;
+
+    if json["env"].is_null() || !json["env"].is_object() {
+        json["env"] = serde_json::Value::Object(serde_json::Map::new());
+    }
+    if json["permissions"].is_null() || !json["permissions"].is_object() {
+        json["permissions"] = serde_json::Value::Object(serde_json::Map::new());
+    }
+
+    json["env"]["ANTHROPIC_AUTH_TOKEN"] = serde_json::Value::String(api_key);
+    json["env"]["ANTHROPIC_BASE_URL"] = serde_json::Value::String(base_url);
+    json["env"]["ANTHROPIC_MODEL"] = serde_json::Value::String(model);
+    json["effortLevel"] = serde_json::Value::String(effort);
+    json["permissions"]["defaultMode"] = serde_json::Value::String(permission_mode);
+
+    let out = serde_json::to_string_pretty(&json)
+        .map_err(|e| format!("序列化 settings.json 失败: {}", e))?;
+    std::fs::write(&path, out)
+        .map_err(|e| format!("写入 settings.json 失败: {}", e))?;
+
+    Ok(())
+}
+
+/// 清空翻译缓存，下次加载时全部重新翻译
+#[tauri::command]
+fn clear_item_descriptions(state: State<'_, AppState>) -> Result<(), String> {
+    let db = state.db.conn.lock().map_err(|e| format!("DB lock: {}", e))?;
+    db.execute("DELETE FROM item_descriptions", [])
+        .map_err(|e| format!("清空翻译缓存失败: {}", e))?;
+    Ok(())
+}
+
+/// 只清空 MCP 描述缓存
+#[tauri::command]
+fn clear_mcp_descriptions(state: State<'_, AppState>) -> Result<(), String> {
+    let db = state.db.conn.lock().map_err(|e| format!("DB lock: {}", e))?;
+    db.execute("DELETE FROM item_descriptions WHERE item_type = 'mcp'", [])
+        .map_err(|e| format!("清空 MCP 描述缓存失败: {}", e))?;
+    Ok(())
+}
+
+/// 从 ~/.claude/settings.json 读取 ANTHROPIC_AUTH_TOKEN（内部翻译用）
+fn read_claude_api_key() -> Option<String> {
+    let home = dirs::home_dir()?;
+    let path = home.join(".claude").join("settings.json");
+    let raw = std::fs::read_to_string(&path).ok()?;
+    let json: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    json["env"]["ANTHROPIC_AUTH_TOKEN"].as_str().map(|s| s.to_string())
+}
+
+/// 读取 CLAUDE_CODE_SUBAGENT_MODEL，fallback 到 deepseek-chat
+fn subagent_model() -> String {
+    let home = dirs::home_dir().unwrap_or_default();
+    let path = home.join(".claude").join("settings.json");
+    if let Ok(raw) = std::fs::read_to_string(&path) {
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&raw) {
+            if let Some(m) = json["env"]["CLAUDE_CODE_SUBAGENT_MODEL"].as_str() {
+                if !m.is_empty() { return m.to_string(); }
+            }
+        }
+    }
+    "deepseek-chat".into()
+}
+
+fn openai_base(base_url: &str) -> String {
+    base_url
+        .trim_end_matches('/')
+        .trim_end_matches("/anthropic")
+        .trim_end_matches("/v1")
+        .to_string()
+}
+
+async fn translate_to_chinese(
+    api_key: &str,
+    base_url: &str,
+    text: &str,
+) -> Result<String, String> {
+    let client = reqwest::Client::new();
+    let url = format!("{}/v1/chat/completions", openai_base(base_url));
+
+    let body = serde_json::json!({
+        "model": subagent_model(),
+        "messages": [
+            {"role": "system", "content": "你是一个专业翻译。将英文描述翻译为简洁的中文。只输出中文译文，不要任何解释。"},
+            {"role": "user", "content": format!("翻译: {}", text)}
+        ],
+        "max_tokens": 400,
+        "temperature": 0.3
+    });
+
+    let resp = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("HTTP error: {}", e))?;
+
+    let status = resp.status();
+    let body_text = resp.text().await.unwrap_or_default();
+
+    if !status.is_success() {
+        return Err(format!("API {} ({})", status, body_text));
+    }
+
+    // 解析 DeepSeek chat completions 响应
+    let json: serde_json::Value =
+        serde_json::from_str(&body_text).map_err(|e| format!("JSON parse: {}", e))?;
+
+    let translated = json["choices"][0]["message"]["content"]
+        .as_str()
+        .unwrap_or("")
+        .trim()
+        .to_string();
+
+    if translated.is_empty() {
+        Err("Empty translation result".into())
+    } else {
+        Ok(translated)
+    }
+}
+
+/// 用 DeepSeek API 为 MCP 服务器名称批量生成中文描述，优先读 DB 缓存
+#[tauri::command]
+async fn generate_mcp_descriptions(
+    state: State<'_, AppState>,
+    names: Vec<String>,
+    api_key: String,
+    base_url: String,
+) -> Result<Vec<DescriptionItem>, String> {
+    if names.is_empty() {
+        return Ok(vec![]);
+    }
+
+    // 第一步：查 DB 缓存，只对缺失的调 API
+    let (mut cached, missing): (Vec<DescriptionItem>, Vec<String>) = {
+        let db = state.db.conn.lock().map_err(|e| format!("DB lock: {}", e))?;
+        let mut cached = Vec::new();
+        let mut missing = Vec::new();
+        for name in &names {
+            let zh: Option<String> = db
+                .query_row(
+                    "SELECT desc_zh FROM item_descriptions WHERE item_type = 'mcp' AND name = ?1",
+                    rusqlite::params![name],
+                    |row| row.get(0),
+                )
+                .ok();
+            if let Some(zh) = zh {
+                cached.push(DescriptionItem {
+                    item_type: "mcp".into(),
+                    name: name.clone(),
+                    desc_en: None,
+                    desc_zh: Some(zh),
+                });
+            } else {
+                missing.push(name.clone());
+            }
+        }
+        (cached, missing)
+    };
+
+    if missing.is_empty() {
+        return Ok(cached);
+    }
+
+    let api_key = if api_key.is_empty() {
+        read_claude_api_key().unwrap_or_default()
+    } else {
+        api_key
+    };
+    if api_key.is_empty() {
+        return Err("未配置 API Key".into());
+    }
+
+    // 第二步：调 API 为缺失的名称生成描述
+    let client = reqwest::Client::new();
+    let url = format!("{}/v1/chat/completions", openai_base(&base_url));
+
+    let name_list = missing
+        .iter()
+        .enumerate()
+        .map(|(i, n)| format!("{}. {}", i + 1, n))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let body = serde_json::json!({
+        "model": subagent_model(),
+        "messages": [
+            {"role": "system", "content": "你是一个技术文档助手。为每个 MCP 服务器写一句 25 字以内的中文简介。仅输出 JSON 对象，格式：{\"名称\":\"简介\",...}。不要任何其他文字。"},
+            {"role": "user", "content": format!("以下 MCP 服务器各写一句简介：\n{}", name_list)}
+        ],
+        "max_tokens": 800,
+        "temperature": 0.3
+    });
+
+    let resp = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("HTTP error: {}", e))?;
+
+    let status = resp.status();
+    let body_text = resp.text().await.unwrap_or_default();
+    if !status.is_success() {
+        return Err(format!("API {} ({})", status, body_text));
+    }
+
+    let json: serde_json::Value =
+        serde_json::from_str(&body_text).map_err(|e| format!("JSON parse: {}", e))?;
+    let content = json["choices"][0]["message"]["content"]
+        .as_str()
+        .unwrap_or("")
+        .trim()
+        .to_string();
+
+    let descs: serde_json::Value =
+        serde_json::from_str(&content).map_err(|e| format!("解析描述 JSON 失败: {} — {}", e, content))?;
+
+    let mut fresh: Vec<DescriptionItem> = Vec::new();
+    if let Some(obj) = descs.as_object() {
+        let db = state.db.conn.lock().map_err(|e| format!("DB lock: {}", e))?;
+        for (name, desc_val) in obj {
+            if let Some(zh) = desc_val.as_str() {
+                let _ = db.execute(
+                    "INSERT OR REPLACE INTO item_descriptions (item_type, name, desc_zh, translated_at) VALUES ('mcp', ?1, ?2, datetime('now'))",
+                    rusqlite::params![name, zh],
+                );
+                fresh.push(DescriptionItem {
+                    item_type: "mcp".into(),
+                    name: name.clone(),
+                    desc_en: None,
+                    desc_zh: Some(zh.to_string()),
+                });
+            }
+        }
+    }
+
+    // 合并缓存 + 新生成的
+    cached.extend(fresh);
+    Ok(cached)
 }
 
 #[tauri::command]
@@ -422,6 +833,12 @@ pub fn run() {
             read_file_base64,
             write_file,
             get_claude_dir,
+            get_claude_settings,
+            set_claude_settings,
+            ensure_item_descriptions,
+            generate_mcp_descriptions,
+            clear_item_descriptions,
+            clear_mcp_descriptions,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

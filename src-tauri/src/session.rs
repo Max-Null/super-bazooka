@@ -299,7 +299,11 @@ impl SessionManager {
         model: &str,
     ) -> Result<String, String> {
         let client = reqwest::Client::new();
-        let url = format!("{}/v1/chat/completions", base_url.trim_end_matches('/'));
+        let base = base_url
+            .trim_end_matches('/')
+            .trim_end_matches("/anthropic")
+            .trim_end_matches("/v1");
+        let url = format!("{}/v1/chat/completions", base);
 
         let body = serde_json::json!({
             "model": model,
