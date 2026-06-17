@@ -4,6 +4,7 @@ import { useRouter, useRoute } from "vue-router";
 import SessionSidebar from "@/components/session/SessionSidebar.vue";
 import FilePanel from "@/components/files/FilePanel.vue";
 import CommandPalette from "@/components/shared/CommandPalette.vue";
+import ManagePanel from "@/components/shared/ManagePanel.vue";
 import { emitChatCommand } from "@/composables/useCommandPalette";
 import { useNewSession } from "@/composables/useNewSession";
 import { getWorkspaceRoot } from "@/lib/tauri-bridge";
@@ -14,6 +15,7 @@ const route = useRoute();
 const settings = useSettingsStore();
 const { handleNew } = useNewSession();
 const drawerOpen = ref(false);
+const showManagePanel = ref(false);
 const zenMode = ref(false);
 const fileNavCounter = ref(0);
 const filePanelForceClose = ref(0);
@@ -281,6 +283,14 @@ function openFilePanelTo(path: string) {
           </svg>
         </button>
 
+        <!-- Manage -->
+        <button
+          @click="showManagePanel = true"
+          class="w-7 h-7 flex items-center justify-center rounded-md transition-colors hover:bg-[var(--bg-hover)]"
+          style="color:var(--text-secondary)"
+          :title="$t('manage.title')"
+        >🔧</button>
+
         <!-- Settings -->
         <button
           @click="router.push(isActive('/settings') ? '/chat' : '/settings')"
@@ -318,7 +328,9 @@ function openFilePanelTo(path: string) {
 
       <!-- Main -->
       <main class="flex-1 flex overflow-hidden">
-        <router-view />
+        <div class="flex-1 flex flex-col overflow-hidden">
+          <router-view />
+        </div>
       </main>
 
       <!-- File panel (right side) -->
@@ -326,5 +338,6 @@ function openFilePanelTo(path: string) {
     </div>
 
     <CommandPalette @command="handleCommand" />
+    <ManagePanel :open="showManagePanel" @close="showManagePanel = false" />
   </div>
 </template>

@@ -55,7 +55,10 @@
     "themeLight": "浅色",
     "themeSystem": "跟随系统",
     "about": "关于 cc-gui",
-    "aboutDesc": "Tauri 2 + Vue 3 + TypeScript · Rust · SQLite · DeepSeek API"
+    "aboutDesc": "Tauri 2 + Vue 3 + TypeScript · Rust · SQLite · DeepSeek API",
+    "fromSettingsJson": "settings.json",
+    "editSettingsJson": "编辑 settings.json",
+    "settingsJsonReadError": "读取 settings.json 失败"
   },
 
   "session": {
@@ -171,8 +174,25 @@
     "memory": "Memory",
     "permissions": "Permissions",
     "styles": "Styles",
-    "mcpDetail": "配置",
-    "mcpDiscovered": "运行时发现"
+    "mcpConnected": "已连接",
+    "mcpDisabled": "已禁用",
+    "mcpOffline": "未连接",
+    "mcpToggleEnable": "启用",
+    "mcpToggleDisable": "禁用",
+    "mcpSourceUser": "用户配置",
+    "mcpSourcePlugin": "插件",
+    "mcpSourceRuntime": "运行时发现",
+    "mcpTypeStdio": "本地进程",
+    "mcpTypeSse": "SSE 远程服务",
+    "mcpTypeHttp": "HTTP 远程服务",
+    "mcpTypeWs": "WebSocket",
+    "translateError": "翻译失败",
+    "retranslate": "重新翻译",
+    "pluginsDesc": "插件描述来自 marketplace 中 .claude-plugin/plugin.json 元数据。按名称 key 后的 @ 确定 marketplace。",
+    "mcpDesc": "来源：用户配置来自 ~/.claude.json，插件来自已启用的插件。描述由 AI 自动生成并缓存，点击「重新翻译」刷新。",
+    "skillsDesc": "Skills 描述来自各技能 SKILL.md 的 YAML 头部 description 字段。点击「查看」可编辑 SKILL.md。",
+    "agentsDesc": "Agents 描述来自各 Agent .md 文件的 YAML 头部 description 字段。点击「编辑」可直接修改。",
+    "stylesDesc": "输出风格（outputStyles）控制 Claude 的回复格式和呈现方式。配置在 ~/.claude/settings.json 的 outputStyles 字段中。格式示例：{ \"json\": true } 使回复尽量以 JSON 格式输出。"
   },
 
   "error": {

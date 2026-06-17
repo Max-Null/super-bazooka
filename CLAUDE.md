@@ -12,13 +12,13 @@
 cc-gui/
 ├── src/                       # Vue 3 前端
 │   ├── components/
-│   │   ├── chat/              # ChatPanel, MessageBubble, InputBar, ModeBar, ThinkingIndicator, ContextIndicator
-│   │   ├── layout/            # AppShell (主布局容器)
+│   │   ├── chat/              # ChatPanel, MessageBubble, InputBar, InputBarToolbar, ModeBar, ThinkingIndicator, ContextIndicator
+│   │   ├── layout/            # AppShell (主布局容器，含全局键盘快捷键)
 │   │   ├── session/           # SessionSidebar (会话侧边栏)
 │   │   ├── files/             # FilePanel, FileTree, FilePreview, DiffViewer
-│   │   ├── settings/          # SettingsPanel (API配置/连接测试)
-│   │   └── shared/            # MarkdownRenderer, MermaidRenderer, CommandPalette, ModalShell, ContextUsageModal, ErrorBoundary, FilePreviewModal
-│   ├── composables/           # useStreamProcessor, useFilePreview, useCommandPalette, useDebugLog, useHighlight
+│   │   ├── settings/          # SettingsPanel (API配置/连接测试/主题语言)
+│   │   └── shared/            # ManagePanel(8合1管理), MarkdownRenderer, MermaidRenderer, CommandPalette, ModalShell, ContextUsageModal, ErrorBoundary, FilePreviewModal
+│   ├── composables/           # useStreamProcessor, useCommandRegistry, useNewSession, useFilePreview, useCommandPalette(含 ChatCommandBus), useDebugLog, useHighlight
 │   ├── stores/                # session.ts, chat.ts, settings.ts (Pinia)
 │   ├── lib/                   # utils.ts, tauri-bridge.ts, tauri-mock.ts, pinyin.ts
 │   ├── locales/               # zh.json, en.json (vue-i18n)
@@ -27,7 +27,7 @@ cc-gui/
 ├── src-tauri/                 # Rust 后端 (Tauri 2)
 │   ├── src/
 │   │   ├── main.rs            # 程序入口
-│   │   ├── lib.rs             # 28 个 Tauri commands + AppState
+│   │   ├── lib.rs             # 23 个 Tauri commands + AppState
 │   │   ├── process.rs         # 三线程进程模型 (Waiter / Stdout Reader / Stderr)
 │   │   ├── protocol.rs        # NDJSON stream-json 事件解析
 │   │   ├── session.rs         # 会话 CRUD + API 连接测试 + 批准场景
@@ -51,12 +51,35 @@ User Input (InputBar.vue)
               → useStreamProcessor.ts listen → Pinia store → Vue 3 reactive render
 ```
 
+### 功能索引（排查问题时先看这里）
+
+> 当用户报告某个功能异常时，此表可直接定位到实现文件和数据源，避免全项目 Grep。
+
+| 功能 | 前端入口 | 核心逻辑 | 后端命令 | 数据源/配置 |
+|------|----------|----------|----------|-------------|
+| 聊天消息 | `ChatPanel.vue` | `useStreamProcessor.ts` 监听 `stream-event` → `chat` store | `send_message`, `send_stdin`, `stop_session`, `list_messages`, `save_message` | SQLite `messages` 表 |
+| 流事件处理 | `useStreamProcessor.ts` | 注册/注销 Tauri 事件监听，去重，保存消息 | `spawn_claude_session` (`process.rs`) | Claude CLI `stream-json` stdout |
+| 会话管理 | `SessionSidebar.vue` | `session` store → `tauri-bridge.ts` | `create_session`, `list_sessions`, `delete_session`, `rename_session`, `get_session`, `store_claude_session` | SQLite `sessions` 表 |
+| **MCP 管理** | `ManagePanel.vue` (tab `"mcp"`) | `loadMCP()` 扫描 `settings.json` + `.mcp.json`；`extractMcpServers()` 解析配置；`connectedMcpServers` 追踪运行时连接 | `get_claude_dir`, `read_file_content`, `get_workspace_root` | `~/.claude/settings.json`, `.mcp.json`, CLI 运行时 `system/init` 事件 |
+| 插件管理 | `ManagePanel.vue` (tab `"plugins"`) | `loadJSON("enabledPlugins")` 读取启停状态 | `get_claude_dir`, `read_file_content`, `write_file` | `~/.claude/settings.json` |
+| 技能/Agent/Hooks | `ManagePanel.vue` (tabs) | 扫描 `~/.claude/` 对应子目录 | `get_claude_dir`, `list_dir`, `read_file_content`, `write_file` | `~/.claude/skills/`, `agents/`, `settings.json` hooks |
+| Memory | `ManagePanel.vue` (tab `"memory"`) | `loadMemory()` 递归扫描目录树 | `get_claude_dir`, `list_dir`, `read_file_content` | `~/.claude/memory/` |
+| 权限管理 | `ManagePanel.vue` (tab `"permissions"`) + `ChatPanel.vue` 审批栏 | `sync_permission_settings()` 写 `settings.json`；审批场景 CRUD | `add_approved_scenario`, `remove_approved_scenario`, `list_approved_scenarios` | `~/.claude/settings.json`, SQLite `approved_scenarios` 表 |
+| 输出样式 | `ManagePanel.vue` (tab `"styles"`) | `loadJSON("outputStyles")` | `get_claude_dir`, `read_file_content`, `write_file` | `~/.claude/settings.json` |
+| 命令面板 | `CommandPalette.vue` | `useCommandPaletteBus`(打开), `useCommandRegistry`(动态注册), `pinyin.ts`(拼音搜索) | 无 | 内置命令 + `localStorage` 最近使用 |
+| Token 监控 | `ContextIndicator.vue` + `ContextUsageModal.vue` | `chat` store 中的 token 统计字段 | 无 | `stream-event` 中的 `input_tokens`/`output_tokens` |
+| 文件浏览 | `FilePanel.vue` + `FileTree.vue` | 动态加载目录树，右键菜单 | `list_dir`, `read_file_content`, `get_workspace_root`, `reveal_in_explorer` | 本地文件系统 |
+| 文件预览 | `FilePreviewModal.vue` + `FilePreview.vue` | 自动检测类型（图片/code/md/文本/二进制） | `read_file_content`, `read_file_base64` | 本地文件 |
+| Diff 对比 | `DiffViewer.vue` | `diff` 库行级差异计算 | 无 | 传入的 `oldStr` / `newStr` |
+| API 设置 | `SettingsPanel.vue` | `settings` store → `localStorage`；连接测试 | `connect_llm` | `localStorage` (`cc-gui-settings`) |
+| 主题/语言 | `SettingsPanel.vue` + `AppShell.vue` | `settings` store，`data-theme` 属性 | 无 | `localStorage` |
+
 ### Rust 模块职责
 
 | 模块 | 职责 |
 |------|------|
 | `main.rs` | 程序入口，初始化 DB + 启动 Tauri |
-| `lib.rs` | 28 个 Tauri commands：会话 CRUD、消息管理、文件操作、进程管理 |
+| `lib.rs` | 23 个 Tauri commands：会话 CRUD、消息管理、文件操作、进程管理 |
 | `process.rs` | 三线程模型 spawn Claude CLI：Waiter（进程生命周期）、Stdout Reader（NDJSON 解析→事件发射）、Stderr Reader（错误转发） |
 | `protocol.rs` | `StreamLine`：解析 NDJSON → `StreamFrontendEvent`；支持 system/assistant/user/result/control_request/stream_event |
 | `session.rs` | `SessionManager`：SQLite 背书的会话 CRUD + 消息持久化 + DeepSeek API 连接测试 + BypassMode 批准场景 |
@@ -132,6 +155,28 @@ npm run test:quick        # 快速测试（vitest + rust，跳过 e2e）
 
 ---
 
+## 🔵 UI 风格一致性：写 UI 前先看同类界面
+
+> 类比"禁止手搓轮子"的 UI 版本。
+
+### 写任何 UI 前，必须执行以下检查：
+
+1. **看同类组件的模板**：这个按钮/标签/列表在项目中其他组件里怎么写的？直接用同样的 class 和 style 模式。
+2. **看 ModalShell 用法**：需要弹窗时，先看 `ModalShell.vue` 提供了哪些插槽（`#header` / `#footer` / default）。不要自己在子组件里用 flex hack 模拟三段式布局。
+3. **看颜色变量**：全部用 CSS 变量（`var(--accent)` / `var(--text-muted)` / `var(--border-dim)` / `var(--bg-hover)` 等），禁止硬编码色值或 inline style 写死颜色。
+
+### 常见 UI 违规：
+
+| 违规行为 | 正确做法 |
+|----------|----------|
+| 按钮放在文字行内（flex items-center gap-2） | 操作按钮独立一行，全宽、虚线边框、`border-color: var(--border-dim)` |
+| 自己写 flex-col + overflow hack 固定顶底 | 用 ModalShell 的 `#header` / `#footer` 插槽 |
+| `<span>` 标签不可点击 | 用 `<button>` + `hover:underline` + `var(--accent)` 色 |
+| 新增 UI 不参考已有同类界面 | Grep 搜索同类组件 → 复制其模板结构和 class 模式 |
+| 修改 ModalShell 默认行为（如加 `bodyScroll` prop） | 优先用插槽解决问题，不要为单个使用场景加全局 prop |
+
+---
+
 ## 工程规范
 
 > 继承自全局 CLAUDE.md，以下为 cc-gui 项目特定补充。
@@ -142,6 +187,17 @@ npm run test:quick        # 快速测试（vitest + rust，跳过 e2e）
 3. **先看文档**: 以官方文档为准，不猜 API 行为
 4. **写完后对照 spec 逐条验证，再回复用户**
 5. **多步骤操作前**：检查 `docs/` 目录是否有相关计划文档，将实施计划写入文件再执行
+
+### 0. 阶段性完成后必做（无需用户提醒）
+
+每完成一个功能/修复的阶段性工作后，**自动**执行以下收尾：
+
+1. **补充测试**：新增/修改的功能是否有单元测试覆盖？检查相关 `.test.ts` 文件
+2. **更新 CLAUDE.md**：设计决策、数据流、功能索引是否有变化？同步更新
+3. **更新 docs/ 计划**：如果此前写了实施计划，标记已完成项
+4. **git commit**：`git add -A && git commit -m "..."`（Conventional Commits 格式）
+
+> 用户不需要每次打字提醒。这是自动执行的流程。
 
 ### 1. Vue 3 组件规范
 - **单文件组件**: 每个 `.vue` 文件只负责一件事，超过 300 行考虑拆分
@@ -189,3 +245,11 @@ npm run test:quick        # 快速测试（vitest + rust，跳过 e2e）
 8. **亮色主题 CSS 顺序**: `[data-theme="light"]` 必须在 `:root` 之后，禁止 `@import` 独立亮色 CSS 文件（会被提升到 `:root` 前导致变量被覆盖）
 9. **ModalShell 统一样式**: 所有弹窗通过 `ModalShell.vue` 外壳实现，颜色用 CSS 变量，不写 inline style 或硬编码色值
 10. **拼音搜索**: 命令面板支持拼音首字母搜索，`lib/pinyin.ts` 覆盖 3755 个常用汉字
+11. **ManagePanel 8合1管理**: `ManagePanel.vue` 统一管理 8 个 Tab（plugins/mcp/skills/agents/hooks/memory/permissions/styles），通过 Tab 切换时清空数据并重新加载，避免 8 个独立弹窗
+12. **MCP 配置多源扫描**: `loadMCP()` 扫描 `~/.claude.json`（官方用户级 MCP 配置）→ `~/.claude/.mcp.json` → 项目根 `.mcp.json` → **已启用**插件的 `.mcp.json`（先读 `enabledPlugins` 过滤）→ 运行时连接状态。描述由 AI 生成并缓存到 `item_descriptions` 表。注意：`~/.claude/settings.json` 的 `mcpServers` 字段**会被 CLI 静默忽略**，不要扫它
+13. **文件写入安全域**: Rust `write_file` 命令只允许写入 `~/.claude/` 子树，拒绝越界路径
+14. **可扩展命令注册**: `useCommandRegistry` 允许各组件动态注册命令面板命令，`CommandPalette.vue` 启动时收集所有注册命令
+15. **流事件去重**: `useStreamProcessor` 对 `stream-event` 按 sessionId + content 前缀去重，防止 CLI 重复输出
+16. **OpenAI 兼容端点 URL 规范化**: 所有调 `/v1/chat/completions`（翻译、描述生成、连接测试）的地方必须先 `trim_end_matches("/anthropic").trim_end_matches("/v1")` 再拼接 URL。因为用户可能配置 `ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic`（Anthropic 格式），直接拼 `/v1/chat/completions` 会 404。Rust 端统一用 `fn openai_base(base_url)` 处理。
+17. **翻译和描述生成模型**: 翻译、MCP 描述生成等轻量 API 调用使用 `CLAUDE_CODE_SUBAGENT_MODEL` 环境变量（fallback `deepseek-chat`），不要硬编码模型名。Rust 端统一用 `fn subagent_model()` 读取。
+18. **ModalShell 三段式布局**: header（`#header` 插槽 + 关闭按钮）/ body（default slot，`overflow-y-auto`）/ footer（`#footer` 插槽，`v-if="$slots.footer"`）。子组件用插槽填充各段，不要自己在 default slot 里造 flex 三段式。

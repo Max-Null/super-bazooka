@@ -2,8 +2,10 @@
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { useSettingsStore } from "@/stores/settings";
-import { connectLLM } from "@/lib/tauri-bridge";
+import { connectLLM, readFileContent, writeFile, getClaudeDir } from "@/lib/tauri-bridge";
 import ErrorBoundary from "@/components/shared/ErrorBoundary.vue";
+import ModalShell from "@/components/shared/ModalShell.vue";
+import ManagePanel from "@/components/shared/ManagePanel.vue";
 
 const router = useRouter();
 const settings = useSettingsStore();
@@ -30,8 +32,9 @@ const activeMode = computed({
 });
 
 // ── 自定义下拉 ──
-const openDropdown = ref<"perm" | "effort" | null>(null);
-function toggleDropdown(k: "perm" | "effort") {
+type DropdownKind = "lang" | "theme" | "perm" | "effort" | "model";
+const openDropdown = ref<DropdownKind | null>(null);
+function toggleDropdown(k: DropdownKind) {
   openDropdown.value = openDropdown.value === k ? null : k;
 }
 function closeDropdowns() { openDropdown.value = null; }
@@ -65,6 +68,20 @@ const effortOptions: EffortOption[] = [
 ];
 const currentEffort = computed(() => effortOptions.find(o => o.value === settings.effort)!);
 
+// ── 语言 / 主题选项 ──
+interface SimpleOption<V extends string> { value: V; labelKey: string }
+const langOptions: SimpleOption<"zh" | "en">[] = [
+  { value: "zh", labelKey: "中文" },
+  { value: "en", labelKey: "English" },
+];
+const themeOptions: SimpleOption<"dark" | "light" | "system">[] = [
+  { value: "dark", labelKey: "settings.themeDark" },
+  { value: "light", labelKey: "settings.themeLight" },
+  { value: "system", labelKey: "settings.themeSystem" },
+];
+const currentLang = computed(() => langOptions.find(o => o.value === settings.locale)!);
+const currentTheme = computed(() => themeOptions.find(o => o.value === settings.theme)!);
+
 // ── 连接测试 ──
 const testResult = ref<string | null>(null);
 const testError = ref<string | null>(null);
@@ -72,7 +89,9 @@ const isTesting = ref(false);
 
 async function handleTest() {
   testResult.value = null; testError.value = null; isTesting.value = true;
-  try { testResult.value = await connectLLM(settings.apiKey, settings.baseUrl, settings.model); }
+  // 去掉 [1M] 等上下文窗口标注，API 不接受
+  const model = settings.model.replace(/\[.*\]/, '').trim();
+  try { testResult.value = await connectLLM(settings.apiKey, settings.baseUrl, model); }
   catch (err) { testError.value = String(err); }
   finally { isTesting.value = false; }
 }
@@ -82,12 +101,48 @@ const modelPresets = [
   "deepseek-v4-flash",
   "deepseek-v4",
 ];
+
+// ── settings.json 编辑器弹窗 ──
+const showJsonEditor = ref(false);
+const showManagePanel = ref(false);
+const manageInitialTab = ref("");
+
+function openManageTo(tab: string) {
+  manageInitialTab.value = tab;
+  showManagePanel.value = true;
+}
+const jsonEditorContent = ref("");
+const jsonEditorSaved = ref(false);
+const jsonEditorError = ref("");
+
+async function openSettingsJson() {
+  jsonEditorError.value = "";
+  try {
+    const dir = await getClaudeDir();
+    const path = `${dir}/settings.json`;
+    jsonEditorContent.value = await readFileContent(path);
+    showJsonEditor.value = true;
+  } catch {
+    jsonEditorError.value = "settingsJsonReadError";
+  }
+}
+
+async function saveSettingsJson() {
+  try {
+    const dir = await getClaudeDir();
+    const path = `${dir}/settings.json`;
+    await writeFile(path, jsonEditorContent.value);
+    jsonEditorSaved.value = true;
+    setTimeout(() => (jsonEditorSaved.value = false), 2000);
+  } catch (e) {
+    jsonEditorError.value = String(e);
+  }
+}
 </script>
 
 <template>
   <ErrorBoundary name="SettingsPanel">
-    <div class="h-full overflow-y-auto">
-    <div class="max-w-3xl mx-auto p-8 flex flex-col min-h-full">
+    <div style="flex:1;min-height:0;overflow-y:auto;padding:2rem" class="flex flex-col">
       <!-- Header -->
       <div class="flex items-center gap-3 mb-8">
         <button @click="router.push('/chat')" class="w-7 h-7 flex items-center justify-center rounded-md transition-colors hover:bg-[var(--bg-hover)]" style="color:var(--text-muted)">
@@ -96,32 +151,56 @@ const modelPresets = [
         <h2 class="text-lg font-semibold tracking-tight" style="color:var(--text-bright)">{{ $t('settings.title') }}</h2>
       </div>
 
-      <!-- 两栏布局 -->
-      <div class="grid grid-cols-2 gap-8 flex-1">
+      <!-- 三区平铺 -->
+      <div class="flex flex-wrap gap-8 flex-1">
 
-        <!-- 左：API 配置 -->
-        <section class="space-y-4">
-          <h3 class="text-[10px] font-semibold uppercase tracking-widest" :style="{ color: 'var(--text-muted)' }">{{ $t('settings.apiConfig') }}</h3>
+        <!-- API 配置 -->
+        <section class="space-y-4 w-[300px] shrink-0">
+          <div class="flex items-center gap-2 mb-1">
+            <h3 class="text-[10px] font-semibold uppercase tracking-widest" :style="{ color: 'var(--text-muted)' }">{{ $t('settings.apiConfig') }}</h3>
+            <button @click="openSettingsJson" class="text-[9px] px-1.5 py-0.5 rounded-full font-medium transition-colors hover:underline" :style="{ background: 'var(--accent-glow)', color: 'var(--accent)', cursor: 'pointer' }">{{ $t('settings.fromSettingsJson') }} ↗</button>
+          </div>
           <div>
             <label class="block text-xs font-medium mb-1.5" style="color:var(--text-muted)">{{ $t('settings.baseUrl') }}</label>
             <input v-model="settings.baseUrl" type="text" placeholder="https://api.deepseek.com"
-              class="w-full rounded-lg px-3.5 py-2 text-sm outline-none"
-              style="background:var(--bg-elevated); border:1px solid var(--border-default); color:var(--text-primary); caret-color:var(--accent)" />
+              class="settings-input w-full rounded-lg px-3.5 py-2 text-sm outline-none" />
           </div>
           <div>
             <label class="block text-xs font-medium mb-1.5" style="color:var(--text-muted)">{{ $t('settings.apiKey') }}</label>
             <input v-model="settings.apiKey" type="password" placeholder="sk-…"
-              class="w-full rounded-lg px-3.5 py-2 text-sm outline-none"
-              style="background:var(--bg-elevated); border:1px solid var(--border-default); color:var(--text-primary); caret-color:var(--accent)" />
+              class="settings-input w-full rounded-lg px-3.5 py-2 text-sm outline-none" />
           </div>
           <div>
             <label class="block text-xs font-medium mb-1.5" style="color:var(--text-muted)">{{ $t('settings.model') }}</label>
-            <input v-model="settings.model" type="text" :list="'model-list'" placeholder="deepseek-v4-pro[1M]"
-              class="w-full rounded-lg px-3.5 py-2 text-sm outline-none"
-              style="background:var(--bg-elevated); border:1px solid var(--border-default); color:var(--text-primary); caret-color:var(--accent)" />
-            <datalist id="model-list">
-              <option v-for="m in modelPresets" :key="m" :value="m" />
-            </datalist>
+            <div
+              class="settings-dropdown relative cursor-pointer rounded-lg px-3.5 py-2 text-sm flex items-center select-none transition-colors"
+              :style="{
+                background: 'var(--bg-elevated)',
+                border: openDropdown === 'model' ? '1px solid var(--accent)' : '1px solid var(--border-default)'
+              }"
+              @click.stop="toggleDropdown('model')"
+            >
+              <span class="font-medium truncate flex-1">{{ settings.model || 'deepseek-v4-pro[1M]' }}</span>
+              <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
+                :style="{ opacity: 0.4, transition: 'transform 150ms', transform: openDropdown === 'model' ? 'rotate(180deg)' : '' }">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+              <Transition name="drop-settings">
+                <div
+                  v-if="openDropdown === 'model'"
+                  class="absolute right-0 top-full mt-1 py-1 rounded-lg z-30 w-full"
+                  style="background: var(--bg-elevated); border: 1px solid var(--border-default); box-shadow: 0 8px 24px rgba(0,0,0,0.35)"
+                >
+                  <button
+                    v-for="m in modelPresets"
+                    :key="m"
+                    @click="settings.model = m; closeDropdowns()"
+                    class="w-full text-left px-3 py-2 text-sm font-mono transition-colors hover:bg-[var(--bg-hover)]"
+                    :style="{ background: settings.model === m ? 'var(--accent-glow)' : 'transparent', color: settings.model === m ? 'var(--accent)' : 'var(--text-primary)' }"
+                  >{{ m }}</button>
+                </div>
+              </Transition>
+            </div>
           </div>
           <button @click="handleTest" :disabled="isTesting || !settings.apiKey"
             class="w-full py-2.5 rounded-lg text-sm font-medium transition-all duration-150"
@@ -129,50 +208,129 @@ const modelPresets = [
             {{ isTesting ? $t('settings.testing') : $t('settings.test') }}
           </button>
           <div v-if="testResult" class="p-3 rounded-lg text-xs" style="background:var(--accent-glow); color:var(--accent)">✓ {{ testResult }}</div>
-          <div v-if="testError" class="p-3 rounded-lg text-xs" style="background:var(--coral-glow); color:var(--coral); border:1px solid var(--coral); --tw-border-opacity:0.3">✕ {{ testError }}</div>
+          <div v-if="testError" class="p-3 rounded-lg text-xs break-all" style="background:var(--coral-glow); color:var(--coral); border:1px solid var(--coral); --tw-border-opacity:0.3">✕ {{ testError }}</div>
         </section>
 
-        <!-- 右：cc-gui 设置 -->
-        <section class="space-y-4">
-          <h3 class="text-[10px] font-semibold uppercase tracking-widest" :style="{ color: 'var(--text-muted)' }">{{ $t('settings.ccGuiSettings') }}</h3>
+        <!-- CC 管理 -->
+        <section class="space-y-4 w-[300px] shrink-0">
+          <h3 class="text-[10px] font-semibold uppercase tracking-widest" :style="{ color: 'var(--text-muted)' }">CC 管理</h3>
+          <div class="grid grid-cols-2 gap-1.5">
+            <button @click="openManageTo('plugins')" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-secondary)' }">
+              <span class="text-[13px]">🧩</span> 插件
+            </button>
+            <button @click="openManageTo('mcp')" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-secondary)' }">
+              <span class="text-[13px]">🔌</span> MCP 服务器
+            </button>
+            <button @click="openManageTo('skills')" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-secondary)' }">
+              <span class="text-[13px]">🎯</span> Skills
+            </button>
+            <button @click="openManageTo('agents')" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-secondary)' }">
+              <span class="text-[13px]">🤖</span> Agents
+            </button>
+            <button @click="openManageTo('hooks')" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-secondary)' }">
+              <span class="text-[13px]">🪝</span> Hooks
+            </button>
+            <button @click="openManageTo('memory')" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-secondary)' }">
+              <span class="text-[13px]">🧠</span> Memory
+            </button>
+            <button @click="openManageTo('permissions')" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-secondary)' }">
+              <span class="text-[13px]">🛡️</span> 权限规则
+            </button>
+            <button @click="openManageTo('styles')" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-secondary)' }">
+              <span class="text-[13px]">🎨</span> 输出样式
+            </button>
+          </div>
+
+        </section>
+
+        <!-- cc-gui 设置 -->
+        <section class="space-y-4 w-[300px] shrink-0">
+          <div class="flex items-center gap-2">
+            <h3 class="text-[10px] font-semibold uppercase tracking-widest" :style="{ color: 'var(--text-muted)' }">{{ $t('settings.ccGuiSettings') }}</h3>
+            <button @click="openSettingsJson" class="text-[9px] px-1.5 py-0.5 rounded-full font-medium transition-colors hover:underline" :style="{ background: 'var(--accent-glow)', color: 'var(--accent)', cursor: 'pointer' }">{{ $t('settings.fromSettingsJson') }} ↗</button>
+          </div>
 
           <!-- 语言 -->
           <div>
             <label class="block text-xs font-medium mb-1.5" style="color:var(--text-muted)">{{ $t('settings.language') }}</label>
-            <select v-model="settings.locale"
-              class="w-full rounded-lg px-3.5 py-2 text-xs outline-none"
-              style="background:var(--bg-elevated); border:1px solid var(--border-default); color:var(--text-primary)">
-              <option value="zh">中文</option>
-              <option value="en">English</option>
-            </select>
+            <div
+              class="settings-dropdown relative cursor-pointer rounded-lg px-3.5 py-2 text-sm flex items-center gap-1.5 select-none transition-colors"
+              :style="{
+                background: 'var(--bg-elevated)',
+                border: openDropdown === 'lang' ? '1px solid var(--accent)' : '1px solid var(--border-default)'
+              }"
+              @click.stop="toggleDropdown('lang')"
+            >
+              <span class="font-medium truncate flex-1">{{ currentLang.labelKey }}</span>
+              <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
+                :style="{ opacity: 0.4, transition: 'transform 150ms', transform: openDropdown === 'lang' ? 'rotate(180deg)' : '' }">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+              <Transition name="drop-settings">
+                <div
+                  v-if="openDropdown === 'lang'"
+                  class="absolute right-0 top-full mt-1 py-1 rounded-lg z-30 w-full"
+                  style="background: var(--bg-elevated); border: 1px solid var(--border-default); box-shadow: 0 8px 24px rgba(0,0,0,0.35)"
+                >
+                  <button
+                    v-for="o in langOptions"
+                    :key="o.value"
+                    @click="settings.locale = o.value; closeDropdowns()"
+                    class="w-full text-left px-3 py-2 text-sm transition-colors hover:bg-[var(--bg-hover)]"
+                    :style="{ background: settings.locale === o.value ? 'var(--accent-glow)' : 'transparent', color: settings.locale === o.value ? 'var(--accent)' : 'var(--text-primary)' }"
+                  >{{ o.labelKey }}</button>
+                </div>
+              </Transition>
+            </div>
           </div>
 
           <!-- 主题 -->
           <div>
             <label class="block text-xs font-medium mb-1.5" style="color:var(--text-muted)">{{ $t('settings.theme') }}</label>
-            <select v-model="settings.theme"
-              class="w-full rounded-lg px-3.5 py-2 text-xs outline-none"
-              style="background:var(--bg-elevated); border:1px solid var(--border-default); color:var(--text-primary)">
-              <option value="dark">{{ $t('settings.themeDark') }}</option>
-              <option value="light">{{ $t('settings.themeLight') }}</option>
-              <option value="system">{{ $t('settings.themeSystem') }}</option>
-            </select>
+            <div
+              class="settings-dropdown relative cursor-pointer rounded-lg px-3.5 py-2 text-sm flex items-center gap-1.5 select-none transition-colors"
+              :style="{
+                background: 'var(--bg-elevated)',
+                border: openDropdown === 'theme' ? '1px solid var(--accent)' : '1px solid var(--border-default)'
+              }"
+              @click.stop="toggleDropdown('theme')"
+            >
+              <span class="font-medium truncate flex-1">{{ $t(currentTheme.labelKey) }}</span>
+              <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
+                :style="{ opacity: 0.4, transition: 'transform 150ms', transform: openDropdown === 'theme' ? 'rotate(180deg)' : '' }">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+              <Transition name="drop-settings">
+                <div
+                  v-if="openDropdown === 'theme'"
+                  class="absolute right-0 top-full mt-1 py-1 rounded-lg z-30 w-full"
+                  style="background: var(--bg-elevated); border: 1px solid var(--border-default); box-shadow: 0 8px 24px rgba(0,0,0,0.35)"
+                >
+                  <button
+                    v-for="o in themeOptions"
+                    :key="o.value"
+                    @click="settings.theme = o.value; closeDropdowns()"
+                    class="w-full text-left px-3 py-2 text-sm transition-colors hover:bg-[var(--bg-hover)]"
+                    :style="{ background: settings.theme === o.value ? 'var(--accent-glow)' : 'transparent', color: settings.theme === o.value ? 'var(--accent)' : 'var(--text-primary)' }"
+                  >{{ $t(o.labelKey) }}</button>
+                </div>
+              </Transition>
+            </div>
           </div>
 
           <!-- 权限模式 -->
           <div>
-            <label class="block text-xs font-medium mb-1.5" style="color:var(--text-muted)">{{ $t('settings.defaultMode') }}</label>
+            <label class="block text-xs font-medium mb-1.5" style="color:var(--text-muted)">{{ $t('settings.defaultMode') }} <button @click="openSettingsJson" class="text-[9px] px-1.5 py-0.5 rounded-full font-medium transition-colors hover:underline ml-1" :style="{ background: 'var(--accent-glow)', color: 'var(--accent)', cursor: 'pointer' }">{{ $t('settings.fromSettingsJson') }} ↗</button></label>
             <div
-              class="settings-dropdown relative cursor-pointer rounded-lg px-3.5 py-2 text-xs flex items-center gap-1.5 select-none transition-colors"
+              class="settings-dropdown relative cursor-pointer rounded-lg px-3.5 py-2 text-sm flex items-center gap-1.5 select-none transition-colors"
               :style="{
                 background: 'var(--bg-elevated)',
-                border: openDropdown === 'perm' ? '1px solid var(--accent)' : '1px solid var(--border-default)',
-                color: 'var(--text-primary)'
+                border: openDropdown === 'perm' ? '1px solid var(--accent)' : '1px solid var(--border-default)'
               }"
               @click.stop="toggleDropdown('perm')"
             >
               <span class="text-[13px]">{{ currentPerm.icon }}</span>
-              <span class="font-medium truncate">{{ $t(currentPerm.labelKey) }}</span>
+              <span class="font-medium truncate flex-1">{{ $t(currentPerm.labelKey) }}</span>
               <span class="italic text-[10px] opacity-50 hidden sm:inline" style="color:var(--text-muted)">{{ currentPerm.cliKey }}</span>
               <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
                 :style="{ opacity: 0.4, transition: 'transform 150ms', transform: openDropdown === 'perm' ? 'rotate(180deg)' : '' }">
@@ -205,9 +363,9 @@ const modelPresets = [
 
           <!-- 思考深度 -->
           <div>
-            <label class="block text-xs font-medium mb-1.5" style="color:var(--text-muted)">{{ $t('settings.defaultEffort') }}</label>
+            <label class="block text-xs font-medium mb-1.5" style="color:var(--text-muted)">{{ $t('settings.defaultEffort') }} <button @click="openSettingsJson" class="text-[9px] px-1.5 py-0.5 rounded-full font-medium transition-colors hover:underline ml-1" :style="{ background: 'var(--accent-glow)', color: 'var(--accent)', cursor: 'pointer' }">{{ $t('settings.fromSettingsJson') }} ↗</button></label>
             <div
-              class="settings-dropdown relative cursor-pointer rounded-lg px-3.5 py-2 text-xs flex items-center gap-1.5 select-none transition-colors"
+              class="settings-dropdown relative cursor-pointer rounded-lg px-3.5 py-2 text-sm flex items-center gap-1.5 select-none transition-colors"
               :style="{
                 background: 'var(--bg-elevated)',
                 border: openDropdown === 'effort' ? '1px solid var(--accent)' : '1px solid var(--border-default)',
@@ -216,7 +374,7 @@ const modelPresets = [
               @click.stop="toggleDropdown('effort')"
             >
               <span class="text-[13px]">{{ currentEffort.icon }}</span>
-              <span class="font-medium">{{ $t(currentEffort.labelKey) }}</span>
+              <span class="font-medium truncate flex-1">{{ $t(currentEffort.labelKey) }}</span>
               <span class="italic text-[10px] opacity-50 hidden sm:inline" style="color:var(--text-muted)">{{ currentEffort.cliKey }}</span>
               <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
                 :style="{ opacity: 0.4, transition: 'transform 150ms', transform: openDropdown === 'effort' ? 'rotate(180deg)' : '' }">
@@ -225,7 +383,7 @@ const modelPresets = [
               <Transition name="drop-settings">
                 <div
                   v-if="openDropdown === 'effort'"
-                  class="absolute right-0 top-full mt-1 py-1 rounded-lg z-30 min-w-[220px]"
+                  class="absolute right-0 top-full mt-1 py-1 rounded-lg z-30 w-[300px] shrink-0 max-w-[420px]"
                   style="background: var(--bg-elevated); border: 1px solid var(--border-default); box-shadow: 0 8px 24px rgba(0,0,0,0.35)"
                 >
                   <button
@@ -256,11 +414,45 @@ const modelPresets = [
         </div>
       </footer>
     </div>
-  </div>
+  <!-- settings.json 编辑器弹窗 -->
+  <ModalShell :open="showJsonEditor" size="lg" position="top" @close="showJsonEditor = false">
+    <template #header>
+      <span class="text-sm font-semibold" :style="{ color: 'var(--text-bright)' }">{{ $t('settings.editSettingsJson') }}</span>
+    </template>
+    <div v-if="jsonEditorError" class="text-xs mb-2 px-3 py-2 rounded" :style="{ background: 'var(--coral-glow)', color: 'var(--coral)' }">{{ jsonEditorError === 'settingsJsonReadError' ? $t('settings.settingsJsonReadError') : jsonEditorError }}</div>
+    <textarea
+      v-model="jsonEditorContent"
+      class="w-full rounded-lg p-3 text-xs font-mono leading-relaxed resize-none outline-none"
+      :style="{ background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-dim)', minHeight: '420px' }"
+      rows="24"
+      spellcheck="false"
+    ></textarea>
+    <div class="flex items-center justify-end gap-2 mt-3">
+      <button @click="showJsonEditor = false" class="text-xs px-3 py-1.5 rounded transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.back') }}</button>
+      <button
+        @click="saveSettingsJson"
+        class="px-4 py-1.5 rounded text-xs font-medium transition-colors"
+        :style="{ background: jsonEditorSaved ? 'var(--accent-dim)' : 'var(--accent)', color: 'var(--bg-root)' }"
+      >{{ jsonEditorSaved ? $t('manage.saved') : $t('manage.save') }}</button>
+    </div>
+  </ModalShell>
+  <ManagePanel :open="showManagePanel" :initial-tab="manageInitialTab" @close="showManagePanel = false; manageInitialTab = ''" />
   </ErrorBoundary>
 </template>
 
 <style scoped>
+/* 统一样式：input / 自定义下拉 */
+.settings-input,
+.settings-dropdown {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+  caret-color: var(--accent);
+}
+.settings-input:focus {
+  border-color: var(--accent);
+}
+
 /* 下拉动画 */
 .drop-settings-enter-active { transition: all 120ms ease-out; }
 .drop-settings-leave-active { transition: all 100ms ease-in; }

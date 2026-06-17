@@ -10,7 +10,6 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ close: [] }>();
 
-// 顶部定位时留出底部空间，防止超出屏幕
 const maxHClass = computed(() =>
   props.position === "top" ? "max-h-[70vh]" : "max-h-[85vh]"
 );
@@ -44,7 +43,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
         ]"
       >
         <!-- 头部 -->
-        <div class="shrink-0 flex items-center justify-between px-5 h-12 border-b modal-shell-header">
+        <div class="shrink-0 flex items-center justify-between px-5 pt-3 pb-2 border-b modal-shell-header">
           <slot name="header" />
           <button
             @click="emit('close')"
@@ -53,9 +52,14 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
           >&times;</button>
         </div>
 
-        <!-- 内容 -->
+        <!-- 内容（可滚动） -->
         <div class="overflow-y-auto flex-1 px-5 py-3 modal-shell-body">
           <slot />
+        </div>
+
+        <!-- 底部（固定） -->
+        <div v-if="$slots.footer" class="shrink-0 px-5 py-2 border-t modal-shell-footer" :style="{ borderColor: 'var(--border-dim)' }">
+          <slot name="footer" />
         </div>
       </div>
     </div>

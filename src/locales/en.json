@@ -55,7 +55,10 @@
     "themeLight": "Light",
     "themeSystem": "System",
     "about": "About cc-gui",
-    "aboutDesc": "Tauri 2 + Vue 3 + TypeScript · Rust · SQLite · DeepSeek API"
+    "aboutDesc": "Tauri 2 + Vue 3 + TypeScript · Rust · SQLite · DeepSeek API",
+    "fromSettingsJson": "settings.json",
+    "editSettingsJson": "Edit settings.json",
+    "settingsJsonReadError": "Failed to read settings.json"
   },
 
   "session": {
@@ -171,8 +174,25 @@
     "memory": "Memory",
     "permissions": "Permissions",
     "styles": "Styles",
-    "mcpDetail": "configured",
-    "mcpDiscovered": "discovered"
+    "mcpConnected": "Connected",
+    "mcpDisabled": "Disabled",
+    "mcpOffline": "Offline",
+    "mcpToggleEnable": "Enable",
+    "mcpToggleDisable": "Disable",
+    "mcpSourceUser": "user config",
+    "mcpSourcePlugin": "plugin",
+    "mcpSourceRuntime": "runtime",
+    "mcpTypeStdio": "local process",
+    "mcpTypeSse": "SSE remote",
+    "mcpTypeHttp": "HTTP remote",
+    "mcpTypeWs": "WebSocket",
+    "translateError": "Translation failed",
+    "retranslate": "Retranslate",
+    "pluginsDesc": "Plugin descriptions are read from .claude-plugin/plugin.json metadata in the marketplace. Marketplace is determined by the @ suffix in the plugin key.",
+    "mcpDesc": "Sources: user config from ~/.claude.json, plugins from enabled plugins only. Descriptions are AI-generated and cached locally — click \"Retranslate\" to refresh.",
+    "skillsDesc": "Skill descriptions are parsed from the YAML frontmatter description field in each skill's SKILL.md. Click \"View\" to edit SKILL.md.",
+    "agentsDesc": "Agent descriptions are parsed from the YAML frontmatter description field in each agent's .md file. Click \"Edit\" to modify directly.",
+    "stylesDesc": "Output styles control how Claude formats responses. Configured in ~/.claude/settings.json under the outputStyles field. Example: { \"json\": true } formats responses as JSON."
   },
 
   "error": {
