@@ -340,15 +340,16 @@ async fn write_file(path: String, content: String) -> Result<(), String> {
     // 只允许写入 ~/.claude/ 目录内的文件
     let home = dirs::home_dir().ok_or("无法获取用户目录")?;
     let claude_dir = home.join(".claude");
-    // normalize：统一用 backslash，便于 Windows 下前缀比较
-    let resolved = std::fs::canonicalize(&path).unwrap_or_else(|_| {
-        let p = std::path::Path::new(&path);
-        if p.is_absolute() { p.to_path_buf() } else { home.join(p) }
-    });
-    let resolved_s = resolved.to_string_lossy().replace("\\\\?\\", "");
-    let claude_s = claude_dir.to_string_lossy().replace("\\\\?\\", "");
-    let claude_json = home.join(".claude.json").to_string_lossy().replace("\\\\?\\", "");
-    if !resolved_s.starts_with(&claude_s) && resolved_s != claude_json {
+    let claude_json = home.join(".claude.json");
+    // canonicalize 父目录（父目录必须存在），再拼接文件名，防止路径穿越
+    let p = std::path::Path::new(&path);
+    let abs = if p.is_absolute() { p.to_path_buf() } else { home.join(p) };
+    let parent = abs.parent().unwrap_or(&abs);
+    let canonical_parent = std::fs::canonicalize(parent).unwrap_or_else(|_| parent.to_path_buf());
+    let canonical_claude = std::fs::canonicalize(&claude_dir).unwrap_or_else(|_| claude_dir.clone());
+    let canonical_json = std::fs::canonicalize(&claude_json).unwrap_or_else(|_| claude_json.clone());
+    let resolved = canonical_parent.join(abs.file_name().unwrap_or_default());
+    if !resolved.starts_with(&canonical_claude) && resolved != canonical_json {
         return Err(format!("路径超出允许范围: {}", path));
     }
     std::fs::write(&resolved, &content)
