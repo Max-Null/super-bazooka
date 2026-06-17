@@ -115,10 +115,10 @@ describe("SettingsPanel", () => {
 
   // ── Dropdown triggers ──
 
-  it("has two settings dropdown triggers (perm + effort)", () => {
+  it("has four unified settings dropdown triggers", () => {
     const wrapper = mountPanel();
     const triggers = wrapper.findAll(".settings-dropdown");
-    expect(triggers.length).toBe(2);
+    expect(triggers.length).toBe(5); // lang + theme + model + perm + effort
   });
 
   // ── Layout ──

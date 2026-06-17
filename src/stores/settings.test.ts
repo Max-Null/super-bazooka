@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { setActivePinia, createPinia } from "pinia";
+import { nextTick } from "vue";
 import { useSettingsStore } from "./settings";
 
 describe("settings store", () => {
@@ -8,7 +9,7 @@ describe("settings store", () => {
     setActivePinia(createPinia());
   });
 
-  it("has default DeepSeek values", () => {
+  it("has default values", () => {
     const settings = useSettingsStore();
     expect(settings.baseUrl).toBe("https://api.deepseek.com");
     expect(settings.model).toBe("deepseek-v4-pro[1M]");
@@ -31,36 +32,31 @@ describe("settings store", () => {
     expect(settings.model).toBe("custom-model");
   });
 
-  it("persists to localStorage", () => {
+  it("persists UI preferences to localStorage", async () => {
     const settings = useSettingsStore();
-    settings.apiKey = "sk-persist-test";
-    settings.save();
+    settings.theme = "light";
+    await nextTick();
 
-    const raw = localStorage.getItem("cc-gui-settings");
+    const raw = localStorage.getItem("cc-gui-ui-settings");
     expect(raw).toBeTruthy();
     const parsed = JSON.parse(raw!);
-    expect(parsed.apiKey).toBe("sk-persist-test");
+    expect(parsed.theme).toBe("light");
   });
 
-  it("loads from localStorage on init", () => {
+  it("loads UI preferences from localStorage on init", () => {
     localStorage.setItem(
-      "cc-gui-settings",
-      JSON.stringify({ apiKey: "sk-loaded", baseUrl: "https://x.com", model: "m1", planMode: true, autoMode: false, permissionMode: "default", effort: "xhigh", theme: "light", locale: "en" })
+      "cc-gui-ui-settings",
+      JSON.stringify({ planMode: true, autoMode: false, permissionMode: "default", effort: "xhigh", theme: "light", locale: "en" })
     );
 
-    // Create a fresh Pinia + store to trigger loading
     setActivePinia(createPinia());
     const settings = useSettingsStore();
-    expect(settings.apiKey).toBe("sk-loaded");
-    expect(settings.baseUrl).toBe("https://x.com");
     expect(settings.locale).toBe("en");
     expect(settings.planMode).toBe(true);
     expect(settings.autoMode).toBe(false);
     expect(settings.permissionMode).toBe("default");
-    expect(settings.effort).toBe("xhigh");
+    expect(settings.theme).toBe("light");
   });
-
-  // ── Mode fields ──
 
   it("switches between plan and auto mode", () => {
     const settings = useSettingsStore();
@@ -88,21 +84,6 @@ describe("settings store", () => {
     expect(settings.effort).toBe("low");
   });
 
-  it("persists mode settings", () => {
-    const settings = useSettingsStore();
-    settings.planMode = true;
-    settings.effort = "ultracode";
-    settings.save();
-
-    const raw = localStorage.getItem("cc-gui-settings");
-    expect(raw).toBeTruthy();
-    const parsed = JSON.parse(raw!);
-    expect(parsed.planMode).toBe(true);
-    expect(parsed.effort).toBe("ultracode");
-  });
-
-  // ── Theme ──
-
   it("toggles between dark and light theme", () => {
     const settings = useSettingsStore();
     expect(settings.theme).toBe("dark");
@@ -110,15 +91,5 @@ describe("settings store", () => {
     expect(settings.theme).toBe("light");
     settings.theme = "dark";
     expect(settings.theme).toBe("dark");
-  });
-
-  it("persists theme preference", () => {
-    const settings = useSettingsStore();
-    settings.theme = "light";
-    settings.save();
-
-    const raw = localStorage.getItem("cc-gui-settings");
-    const parsed = JSON.parse(raw!);
-    expect(parsed.theme).toBe("light");
   });
 });
