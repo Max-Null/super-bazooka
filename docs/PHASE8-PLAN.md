@@ -1,6 +1,6 @@
 # Phase 8 计划
 
-> 2026-06-17 规划 | 2026-06-18 更新 — Settings 面板增强已完成
+> 2026-06-17 规划 | 2026-06-18 更新 — Settings 面板增强 + MCP 状态监控已完成
 
 ---
 
@@ -53,6 +53,15 @@
 
 ### 估时
 约 2-3 小时
+
+### ✅ 已完成（2026-06-18）
+
+实际实现与计划有差异：
+- **数据源修正**：静态 MCP 配置实际存储在 `~/.claude.json`（非 `settings.json`，后者被 CLI 静默忽略）。`~/.claude.json` 的 `projects.<cwd>.disabledMcpServers` 支持启用/禁用。
+- **运行状态**：从 `system/init` 的 `mcp_servers` 原生字段读取（非 tools 解析），更准确。
+- **AI 描述生成**：用 `CLAUDE_CODE_SUBAGENT_MODEL` 模型为无描述 MCP 自动生成中文简介，缓存到 `item_descriptions` 表。
+- **过滤**：只显示已启用插件的 MCP。
+- **额外**：ModalShell 新增 `#footer` 插槽，设置页三区平铺布局。
 
 ---
 
