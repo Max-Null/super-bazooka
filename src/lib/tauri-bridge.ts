@@ -192,6 +192,14 @@ export async function getWorkspaceRoot(): Promise<string> {
   return invoke("get_workspace_root");
 }
 
+export async function writeFile(path: string, content: string): Promise<void> {
+  return invoke("write_file", { path, content });
+}
+
+export async function getClaudeDir(): Promise<string> {
+  return invoke("get_claude_dir");
+}
+
 export async function revealInExplorer(path: string): Promise<void> {
   return invoke("reveal_in_explorer", { path });
 }

@@ -142,9 +142,14 @@ function getCommands(): Command[]
 | **P1** | 上下文用量弹窗 | `ContextUsageModal.vue` | ✅ |
 | **P1** | 弹窗统一 (ModalShell) | `ModalShell.vue` | ✅ |
 | **P2** | 最近使用 | `CommandPalette.vue` + localStorage | ✅ |
-| **P2** | 可扩展注册系统 | `useCommandRegistry.ts`(新) | ⏳ |
-| **P2** | 组件迁移到注册方式 | `ChatPanel.vue` 等 | ⏳ |
-| **P3** | 单元测试 | `CommandPalette.test.ts`(新) | ⏳ |
+| **P2** | 可扩展注册系统 | `useCommandRegistry.ts`(新) | ✅ |
+| **P2** | 组件迁移到注册方式 | `ChatPanel.vue` 等 | ✅ |
+| **P2** | 管理面板（ManagePanel） | `ManagePanel.vue`(新) | ✅ |
+| **P3** | 拼音库 + 命令面板测试 | `pinyin.test.ts`, `CommandPalette.test.ts`(新) | ✅ |
+| **P3** | 上下文用量弹窗 | `ContextUsageModal.vue`(新) | ✅ |
+| **P3** | 弹窗统一 (ModalShell) | `ModalShell.vue`(新) | ✅ |
+| **P3** | 聊天命令总线 | `useChatCommandBus` | ✅ |
+| **P3** | 滚动优化 + 亮色修复 | `ChatPanel.vue`, `main.css` | ✅ |
 
 ### 实施原则
 1. **i18n first**：P0 一次性覆盖全部命令 key，后续直接引用

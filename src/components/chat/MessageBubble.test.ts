@@ -9,11 +9,11 @@ const i18n = createI18n({
   locale: "en",
   messages: {
     en: {
-      chat: { thinking: "Thinking...", thinkingDone: "Thinking" },
+      chat: { thinking: "Thinking...", thinkingDone: "Thinking", copy: "Copy", copied: "Copied", edit: "Edit", resend: "Resend", cancel: "Cancel", saveResend: "Save & Resend" },
       mode: { askBefore: "Ask", editAuto: "Edit", plan: "Plan", auto: "Auto" },
     },
     zh: {
-      chat: { thinking: "思考中...", thinkingDone: "思考过程" },
+      chat: { thinking: "思考中...", thinkingDone: "思考过程", copy: "复制", copied: "已复制", edit: "编辑", resend: "重发", cancel: "取消", saveResend: "保存并重发" },
       mode: { askBefore: "询问", editAuto: "编辑", plan: "计划", auto: "自动" },
     },
   },

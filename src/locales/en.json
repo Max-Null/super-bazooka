@@ -1,34 +1,90 @@
 {
-  "app": {
-    "title": "cc-gui - Claude Code Desktop GUI"
-  },
+  "app": { "title": "cc-gui - Claude Code Desktop GUI" },
+
   "chat": {
     "placeholder": "Type a message, Enter to send...",
     "send": "Send",
+    "stop": "Stop",
     "thinking": "Thinking...",
     "thinkingDone": "Thinking",
-    "loading": "Loading..."
+    "loading": "Loading...",
+    "export": "Export",
+    "exportTitle": "Export session as Markdown",
+    "scrollToBottom": "Scroll to bottom",
+    "allow": "Allow",
+    "deny": "Deny",
+    "remove": "Remove",
+    "copy": "Copy",
+    "copied": "Copied",
+    "edit": "Edit",
+    "resend": "Resend",
+    "cancel": "Cancel",
+    "saveResend": "Save & Resend",
+    "exportPreviewTitle": "Export Preview — {name}",
+    "exportSave": "Choose Directory & Export",
+    "exportCancel": "Cancel",
+    "renameTitle": "Rename Session",
+    "renameConfirm": "Confirm",
+    "renameCancel": "Cancel",
+    "welcome": "Claude Code Desktop GUI",
+    "welcomeSend": "send",
+    "welcomeNewline": "newline",
+    "aboutTitle": "About cc-gui",
+    "aboutVersion": "v0.1.0",
+    "aboutTech": "Tauri 2 + Vue 3 + TypeScript · Rust · SQLite · DeepSeek API",
+    "aboutCopyright": "© 2026 cc-gui contributors · MIT"
   },
+
   "settings": {
     "title": "Settings",
     "apiKey": "API Key",
     "baseUrl": "API Base URL",
     "model": "Model",
     "test": "Test Connection",
-    "save": "Save"
+    "testing": "Testing…",
+    "save": "Save",
+    "language": "Language",
+    "theme": "Theme",
+    "defaultMode": "Permission Mode",
+    "defaultEffort": "Effort Level",
+    "apiConfig": "API Configuration",
+    "ccGuiSettings": "cc-gui Settings",
+    "quickPresets": "Quick Presets",
+    "deepseekPreset": "api.deepseek.com",
+    "themeDark": "Dark",
+    "themeLight": "Light",
+    "themeSystem": "System",
+    "about": "About cc-gui",
+    "aboutDesc": "Tauri 2 + Vue 3 + TypeScript · Rust · SQLite · DeepSeek API"
   },
+
   "session": {
-    "new": "New Session"
+    "new": "New Session",
+    "title": "Sessions",
+    "search": "Search sessions…",
+    "rename": "Rename",
+    "delete": "Delete",
+    "confirmDelete": "Delete session \"{title}\"? This cannot be undone.",
+    "switchSuccess": "Switched to: {title}",
+    "loadFailed": "Failed to load messages",
+    "clear": "Clear",
+    "noSessions": "No sessions yet",
+    "noMatching": "No matching sessions"
   },
+
   "mode": {
     "plan": "Plan mode",
-    "planDesc": "Claude will explore the code and present a plan before editing",
+    "planDesc": "Claude will explore code and present a plan before editing",
     "askBefore": "Ask before edits",
-    "askBeforeDesc": "Claude will ask for approval before making each edit",
+    "askBeforeDesc": "Claude will ask for approval before each edit",
     "editAuto": "Edit automatically",
-    "editAutoDesc": "Claude will edit your selected text or the whole file",
+    "editAutoDesc": "Claude will edit selected text or the whole file",
     "auto": "Auto mode",
-    "autoDesc": "Claude will automatically choose the best permission mode for each task",
+    "autoDesc": "Claude will automatically choose the best permission mode",
+    "bypass": "Bypass",
+    "bypassDesc": "No safety checks, sandbox only",
+    "dontAsk": "Don't Ask",
+    "dontAskDesc": "Pre-approved tools only, for CI/scripts",
     "effort": {
       "low": "Low",
       "medium": "Medium",
@@ -38,23 +94,95 @@
       "ultracode": "UltraCode (xhigh + auto workflows)"
     }
   },
+
   "file": {
     "title": "Files",
     "empty": "Empty directory",
     "reveal": "Reveal in Explorer",
     "copyPath": "Copy Path",
-    "copyName": "Copy Name"
+    "copyName": "Copy Name",
+    "backToRoot": "Back to workspace root",
+    "openPreview": "Open in preview window",
+    "closePreview": "Close preview"
   },
+
   "preview": {
     "loading": "Loading...",
     "unsupported": "Preview not available for this file type",
     "unsupportedHint": "Binary / proprietary format — open externally"
   },
+
   "effortWarning": "xhigh + DeepSeek may cause API errors (WebSearch/WebFetch tools)",
+
   "toolbar": {
     "attach": "Attach",
-    "commands": "Commands"
+    "attachTitle": "Attach file",
+    "commands": "Commands",
+    "commandsTitle": "Commands (Ctrl+K)"
   },
+
+  "status": {
+    "exportDone": "Export complete",
+    "exportFail": "Export failed: {error}",
+    "exportEmpty": "No messages to export",
+    "renamed": "Renamed to: {title}",
+    "sessionDeleted": "Session deleted",
+    "conversationCleared": "Conversation cleared",
+    "compactSent": "/compact sent"
+  },
+
+  "header": {
+    "newSession": "New Session",
+    "toggleSidebar": "Toggle sidebar",
+    "zenMode": "Zen Mode",
+    "exitZenMode": "Exit Zen Mode",
+    "fullscreen": "Fullscreen",
+    "exitFullscreen": "Exit Fullscreen",
+    "lightMode": "Light mode",
+    "darkMode": "Dark mode",
+    "refresh": "Refresh",
+    "settings": "Settings",
+    "cwdTitle": " — click to browse"
+  },
+
+  "manage": {
+    "title": "Manage",
+    "loading": "Loading…",
+    "back": "← Back",
+    "save": "Save",
+    "saved": "✓",
+    "edit": "Edit",
+    "view": "View",
+    "noData": "No data",
+    "noMemory": "No memory files",
+    "globalMemory": "🌐 Global Memory",
+    "localMemory": "📌 Local Memory (project root CLAUDE.md)",
+    "enable": "Enable",
+    "disable": "Disable",
+    "deletePlugin": "Delete plugin",
+    "addPlugin": "+ Add Plugin",
+    "readError": "Read failed",
+    "dirError": "Cannot access .claude directory",
+    "plugins": "Plugins",
+    "mcp": "MCP",
+    "skills": "Skills",
+    "agents": "Agents",
+    "hooks": "Hooks",
+    "memory": "Memory",
+    "permissions": "Permissions",
+    "styles": "Styles",
+    "mcpDetail": "configured",
+    "mcpDiscovered": "discovered"
+  },
+
+  "error": {
+    "retry": "Retry"
+  },
+
+  "modal": {
+    "close": "Close"
+  },
+
   "command": {
     "placeholder": "Type a command (pinyin supported)…",
     "noResults": "No matching commands",
@@ -63,16 +191,15 @@
     "allCommands": "All Commands",
     "groups": {
       "session": "Session",
-      "view": "View",
       "permission": "Permission & Mode",
       "effort": "Effort",
       "context": "Context",
       "tools": "Tools",
+      "manage": "Manage",
       "settings": "Settings"
     },
     "newSession": "New Session",
-    "continueSession": "Continue Latest Session",
-    "resumeSession": "Resume Session…",
+    "continueSession": "Continue Latest",
     "renameSession": "Rename Session",
     "deleteSession": "Delete Session",
     "clearConversation": "Clear Conversation",
@@ -80,10 +207,6 @@
     "exportSession": "Export Session",
     "exportSessionDesc": "Export current session as Markdown",
     "switchSession": "Switch Session",
-    "toggleSidebar": "Toggle Sidebar",
-    "toggleFiles": "Toggle File Panel",
-    "focusInput": "Focus Input",
-    "toggleFullscreen": "Toggle Fullscreen",
     "zenMode": "Zen Mode",
     "zenModeDesc": "Hide sidebar & file panel, chat only",
     "permDefault": "Default Mode",
@@ -120,32 +243,28 @@
     "codeSimplifyDesc": "Simplify recently modified code",
     "securityAudit": "Security Audit",
     "securityAuditDesc": "Triple-layer security review",
-    "modernizeAssess": "Modernize Assess",
-    "modernizeAssessDesc": "Evaluate tech debt & migration cost",
-    "openTerminal": "Open in Terminal",
-    "openTerminalDesc": "Open external terminal at workspace root",
     "openExplorer": "Reveal in Explorer",
     "openExplorerDesc": "Open workspace directory in file manager",
-    "devTools": "Developer Tools",
-    "devToolsDesc": "Open DevTools debug panel",
     "runDoctor": "Run Doctor",
     "runDoctorDesc": "Diagnose Claude Code configuration",
     "initClaudeMd": "Initialize CLAUDE.md",
     "initClaudeMdDesc": "Generate CLAUDE.md for this project",
-    "keybindingsReference": "Keyboard Shortcuts Reference",
-    "keybindingsReferenceDesc": "Show all keyboard shortcuts",
-    "manageApprovals": "Manage Approved Scenarios",
-    "manageApprovalsDesc": "Open auto-approval rules manager",
-    "testConnection": "Test API Connection",
-    "testConnectionDesc": "Test DeepSeek API connection",
     "openSettings": "Open Settings",
     "themeDark": "Dark Theme",
     "themeLight": "Light Theme",
     "themeSystem": "Follow System Theme",
-    "checkUpdate": "Check for Updates",
     "about": "About cc-gui",
-    "aboutDesc": "Version info & open source credits"
+    "aboutDesc": "Version info & open source credits",
+    "managePlugins": "Manage Plugins",
+    "manageMCP": "Manage MCP Servers",
+    "manageSkills": "Manage Skills",
+    "manageAgents": "Manage Agents",
+    "manageHooks": "Manage Hooks",
+    "manageMemory": "Manage Memory",
+    "managePermissions": "Manage Permissions",
+    "manageOutputStyles": "Output Styles"
   },
+
   "contextUsage": {
     "title": "Context Usage",
     "category": "Category",
@@ -159,6 +278,6 @@
     "memoryFiles": "Memory Files",
     "skills": "Skills",
     "messages": "Messages",
-    "note": "System / Tools / Agents / Memory / Skills are static estimates. Message tokens from actual API response. For exact values run"
+    "note": "System / Tools / Agents / Memory / Skills are static estimates. Message tokens from actual API response. For exact values run /context"
   }
 }

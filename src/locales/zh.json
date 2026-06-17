@@ -1,25 +1,77 @@
 {
-  "app": {
-    "title": "cc-gui - Claude Code 桌面 GUI"
-  },
+  "app": { "title": "cc-gui - Claude Code 桌面 GUI" },
+
   "chat": {
     "placeholder": "输入消息，Enter 发送...",
     "send": "发送",
+    "stop": "停止",
     "thinking": "思考中...",
     "thinkingDone": "思考过程",
-    "loading": "加载中..."
+    "loading": "加载中...",
+    "export": "导出",
+    "exportTitle": "导出会话为 Markdown",
+    "scrollToBottom": "滚动到底部",
+    "allow": "允许",
+    "deny": "拒绝",
+    "remove": "移除",
+    "copy": "复制",
+    "copied": "已复制",
+    "edit": "编辑",
+    "resend": "重发",
+    "cancel": "取消",
+    "saveResend": "保存并重发",
+    "exportPreviewTitle": "导出预览 — {name}",
+    "exportSave": "选择目录并导出",
+    "exportCancel": "取消",
+    "renameTitle": "重命名会话",
+    "renameConfirm": "确认",
+    "renameCancel": "取消",
+    "welcome": "Claude Code Desktop GUI",
+    "welcomeSend": "发送",
+    "welcomeNewline": "换行",
+    "aboutTitle": "关于 cc-gui",
+    "aboutVersion": "v0.1.0",
+    "aboutTech": "Tauri 2 + Vue 3 + TypeScript · Rust · SQLite · DeepSeek API",
+    "aboutCopyright": "© 2026 cc-gui contributors · MIT"
   },
+
   "settings": {
     "title": "设置",
     "apiKey": "API Key",
     "baseUrl": "API 地址",
     "model": "模型",
     "test": "测试连接",
-    "save": "保存"
+    "testing": "测试中…",
+    "save": "保存",
+    "language": "语言",
+    "theme": "主题",
+    "defaultMode": "权限模式",
+    "defaultEffort": "思考深度",
+    "apiConfig": "API 配置",
+    "ccGuiSettings": "cc-gui 设置",
+    "quickPresets": "快速预设",
+    "deepseekPreset": "api.deepseek.com",
+    "themeDark": "深色",
+    "themeLight": "浅色",
+    "themeSystem": "跟随系统",
+    "about": "关于 cc-gui",
+    "aboutDesc": "Tauri 2 + Vue 3 + TypeScript · Rust · SQLite · DeepSeek API"
   },
+
   "session": {
-    "new": "新会话"
+    "new": "新会话",
+    "title": "会话",
+    "search": "搜索会话…",
+    "rename": "重命名",
+    "delete": "删除",
+    "confirmDelete": "删除会话 \"{title}\"？此操作不可撤销。",
+    "switchSuccess": "已切换到: {title}",
+    "loadFailed": "加载消息失败",
+    "clear": "清空",
+    "noSessions": "暂无会话",
+    "noMatching": "无匹配会话"
   },
+
   "mode": {
     "plan": "计划模式",
     "planDesc": "Claude 将先探索代码并制定计划，然后再进行编辑",
@@ -29,6 +81,10 @@
     "editAutoDesc": "Claude 将编辑你选中的文本或整个文件",
     "auto": "自动模式",
     "autoDesc": "Claude 将自动为每个任务选择最佳权限模式",
+    "bypass": "完全放行",
+    "bypassDesc": "无安全检查，仅隔离环境使用",
+    "dontAsk": "无询问",
+    "dontAskDesc": "仅预批准工具，适合 CI/脚本",
     "effort": {
       "low": "低思考",
       "medium": "中等思考",
@@ -38,23 +94,95 @@
       "ultracode": "极高级 (xhigh + 自动工作流编排)"
     }
   },
+
   "file": {
     "title": "文件",
     "empty": "空目录",
     "reveal": "在资源管理器中打开",
     "copyPath": "复制路径",
-    "copyName": "复制文件名"
+    "copyName": "复制文件名",
+    "backToRoot": "回到工作区根目录",
+    "openPreview": "在预览窗口中打开",
+    "closePreview": "关闭预览"
   },
+
   "preview": {
     "loading": "加载中...",
     "unsupported": "此文件类型不支持预览",
     "unsupportedHint": "二进制/专有格式 — 请在外部打开"
   },
+
   "effortWarning": "xhigh + DeepSeek 可能导致 API 错误（WebSearch/WebFetch 等工具）",
+
   "toolbar": {
     "attach": "附件",
-    "commands": "指令"
+    "attachTitle": "附加文件",
+    "commands": "指令",
+    "commandsTitle": "指令 (Ctrl+K)"
   },
+
+  "status": {
+    "exportDone": "导出完成",
+    "exportFail": "导出失败: {error}",
+    "exportEmpty": "没有可导出的消息",
+    "renamed": "已重命名为: {title}",
+    "sessionDeleted": "会话已删除",
+    "conversationCleared": "已清空对话",
+    "compactSent": "已发送 /compact"
+  },
+
+  "header": {
+    "newSession": "新会话",
+    "toggleSidebar": "切换侧边栏",
+    "zenMode": "禅模式",
+    "exitZenMode": "退出禅模式",
+    "fullscreen": "全屏",
+    "exitFullscreen": "退出全屏",
+    "lightMode": "亮色模式",
+    "darkMode": "暗色模式",
+    "refresh": "刷新",
+    "settings": "设置",
+    "cwdTitle": " — 点击浏览"
+  },
+
+  "manage": {
+    "title": "管理",
+    "loading": "加载中…",
+    "back": "← 返回",
+    "save": "保存",
+    "saved": "✓",
+    "edit": "编辑",
+    "view": "查看",
+    "noData": "暂无数据",
+    "noMemory": "暂无记忆文件",
+    "globalMemory": "🌐 全局 Memory",
+    "localMemory": "📌 本地 Memory（项目根目录 CLAUDE.md）",
+    "enable": "启用",
+    "disable": "停用",
+    "deletePlugin": "删除插件",
+    "addPlugin": "+ 添加插件",
+    "readError": "读取失败",
+    "dirError": "无法获取 .claude 目录",
+    "plugins": "Plugins",
+    "mcp": "MCP",
+    "skills": "Skills",
+    "agents": "Agents",
+    "hooks": "Hooks",
+    "memory": "Memory",
+    "permissions": "Permissions",
+    "styles": "Styles",
+    "mcpDetail": "配置",
+    "mcpDiscovered": "运行时发现"
+  },
+
+  "error": {
+    "retry": "重试"
+  },
+
+  "modal": {
+    "close": "关闭"
+  },
+
   "command": {
     "placeholder": "输入命令（支持拼音搜索）…",
     "noResults": "无匹配命令",
@@ -63,16 +191,15 @@
     "allCommands": "所有命令",
     "groups": {
       "session": "会话",
-      "view": "视图",
       "permission": "权限与模式",
       "effort": "思考深度",
       "context": "上下文",
       "tools": "工具",
+      "manage": "管理",
       "settings": "设置"
     },
     "newSession": "新建会话",
     "continueSession": "继续最近会话",
-    "resumeSession": "恢复会话…",
     "renameSession": "重命名会话",
     "deleteSession": "删除会话",
     "clearConversation": "清空对话",
@@ -80,10 +207,6 @@
     "exportSession": "导出会话",
     "exportSessionDesc": "将当前会话导出为 Markdown",
     "switchSession": "切换会话",
-    "toggleSidebar": "切换侧边栏",
-    "toggleFiles": "切换文件面板",
-    "focusInput": "聚焦输入框",
-    "toggleFullscreen": "切换全屏",
     "zenMode": "禅模式",
     "zenModeDesc": "隐藏侧边栏和文件面板，仅对话区",
     "permDefault": "默认模式",
@@ -120,32 +243,28 @@
     "codeSimplifyDesc": "简化最近修改的代码",
     "securityAudit": "安全检查",
     "securityAuditDesc": "三层安全审查",
-    "modernizeAssess": "现代化评估",
-    "modernizeAssessDesc": "评估旧代码技术债和迁移代价",
-    "openTerminal": "在终端中打开",
-    "openTerminalDesc": "在当前工作目录打开外部终端",
     "openExplorer": "在文件管理器打开",
     "openExplorerDesc": "在资源管理器中打开工作目录",
-    "devTools": "开发者工具",
-    "devToolsDesc": "打开 DevTools 调试面板",
     "runDoctor": "诊断",
     "runDoctorDesc": "诊断 Claude Code 配置问题",
     "initClaudeMd": "初始化 CLAUDE.md",
     "initClaudeMdDesc": "为当前项目生成 CLAUDE.md",
-    "keybindingsReference": "键盘快捷键参考",
-    "keybindingsReferenceDesc": "显示所有快捷键列表",
-    "manageApprovals": "管理批准场景",
-    "manageApprovalsDesc": "打开自动批准规则管理",
-    "testConnection": "API 连接测试",
-    "testConnectionDesc": "测试 DeepSeek API 连接",
     "openSettings": "打开设置",
     "themeDark": "深色主题",
     "themeLight": "浅色主题",
     "themeSystem": "跟随系统主题",
-    "checkUpdate": "检查更新",
     "about": "关于 cc-gui",
-    "aboutDesc": "版本号和开源声明"
+    "aboutDesc": "版本号和开源声明",
+    "managePlugins": "插件管理",
+    "manageMCP": "MCP 服务器管理",
+    "manageSkills": "Skills 管理",
+    "manageAgents": "Agents 管理",
+    "manageHooks": "Hooks 管理",
+    "manageMemory": "Memory 管理",
+    "managePermissions": "权限规则管理",
+    "manageOutputStyles": "输出风格"
   },
+
   "contextUsage": {
     "title": "上下文用量",
     "category": "分类",
@@ -159,6 +278,6 @@
     "memoryFiles": "记忆文件",
     "skills": "技能",
     "messages": "消息",
-    "note": "System / Tools / Agents / Memory / Skills 为静态估算值。消息 tokens 来自实际 API 返回。精确值请运行"
+    "note": "System / Tools / Agents / Memory / Skills 为静态估算值。消息 tokens 来自实际 API 返回。精确值请运行 /context"
   }
 }

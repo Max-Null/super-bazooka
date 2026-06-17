@@ -31,19 +31,8 @@ interface CommandAction {
 
 // ── 命令定义（对标 Claude Code 功能域，6 大分组）──
 const actions: CommandAction[] = [
-  // ── 💬 会话 ──
+  // ── 💬 会话（大部分由 ChatPanel 动态注册）──
   { id: "new-session",     group: "session",    labelKey: "command.newSession",     keys: "Ctrl+N", icon: "🆕" },
-  { id: "continue-session",group: "session",    labelKey: "command.continueSession", cliKey: "--continue",  icon: "📋" },
-  { id: "resume-session",  group: "session",    labelKey: "command.resumeSession",   cliKey: "--resume",    icon: "📂" },
-  { id: "rename-session",  group: "session",    labelKey: "command.renameSession",  keys: "F2",       icon: "✏️" },
-  { id: "delete-session",  group: "session",    labelKey: "command.deleteSession",  keys: "Del",      icon: "🗑️" },
-  { id: "switch-session",  group: "session",    labelKey: "command.switchSession",  keys: "Ctrl+P",   icon: "🔀" },
-
-  // ── 🖥 视图 ──
-  { id: "toggle-sidebar",  group: "view",       labelKey: "command.toggleSidebar",  keys: "Ctrl+B",   icon: "📋" },
-  { id: "toggle-files",    group: "view",       labelKey: "command.toggleFiles",    keys: "Ctrl+E",   icon: "📂" },
-  { id: "toggle-fullscreen", group: "view",     labelKey: "command.toggleFullscreen", keys: "F11",     icon: "🖥️" },
-  { id: "zen-mode",        group: "view",       labelKey: "command.zenMode",        descKey: "command.zenModeDesc", icon: "🧘" },
 
   // ── 🛡 权限与模式 ──
   { id: "perm-default",    group: "permission", labelKey: "command.permDefault",    descKey: "command.permDefaultDesc",    cliKey: "default", icon: "🔒" },
@@ -62,26 +51,34 @@ const actions: CommandAction[] = [
   { id: "effort-ultracode",group: "effort",     labelKey: "command.effortUltracode", descKey: "command.effortUltracodeDesc", cliKey: "ultracode", icon: "⚡" },
 
 
+  // ── 📊 上下文 ──
+  { id: "slash-compact",   group: "context",    labelKey: "command.compactContext",  descKey: "command.compactContextDesc",  cliKey: "/compact",          icon: "🗜️" },
+  { id: "slash-context",   group: "context",    labelKey: "command.viewUsage",       descKey: "command.viewUsageDesc",      cliKey: "/context",          icon: "📊" },
+  { id: "slash-cost",      group: "context",    labelKey: "command.viewCost",        cliKey: "/cost",                       icon: "💰" },
+
   // ── 🔌 工具 ──
-  { id: "code-review",     group: "tools",      labelKey: "command.codeReview",      descKey: "command.codeReviewDesc",     cliKey: "code-review", icon: "🔍" },
-  { id: "code-simplify",   group: "tools",      labelKey: "command.codeSimplify",    descKey: "command.codeSimplifyDesc",   cliKey: "code-simplifier", icon: "✨" },
-  { id: "security-audit",  group: "tools",      labelKey: "command.securityAudit",   descKey: "command.securityAuditDesc",  cliKey: "security-review", icon: "🛡️" },
-  { id: "modernize-assess",group: "tools",      labelKey: "command.modernizeAssess", descKey: "command.modernizeAssessDesc",cliKey: "modernize", icon: "🏗️" },
-  { id: "open-terminal",   group: "tools",      labelKey: "command.openTerminal",    descKey: "command.openTerminalDesc",   icon: "💻" },
   { id: "open-explorer",   group: "tools",      labelKey: "command.openExplorer",    descKey: "command.openExplorerDesc",   icon: "📁" },
-  { id: "dev-tools",       group: "tools",      labelKey: "command.devTools",        descKey: "command.devToolsDesc",       icon: "🔧" },
-  { id: "run-doctor",      group: "tools",      labelKey: "command.runDoctor",       descKey: "command.runDoctorDesc",      cliKey: "/doctor", icon: "🩺" },
-  { id: "init-claude-md",  group: "tools",      labelKey: "command.initClaudeMd",    descKey: "command.initClaudeMdDesc",   cliKey: "/init",   icon: "📝" },
-  { id: "keybindings-ref", group: "tools",      labelKey: "command.keybindingsReference", descKey: "command.keybindingsReferenceDesc", icon: "⌨️" },
+  { id: "slash-review",    group: "tools",      labelKey: "command.codeReview",      descKey: "command.codeReviewDesc",     cliKey: "/review",           icon: "🔍" },
+  { id: "slash-simplify",  group: "tools",      labelKey: "command.codeSimplify",    descKey: "command.codeSimplifyDesc",   cliKey: "/simplify",         icon: "✨" },
+  { id: "slash-security",  group: "tools",      labelKey: "command.securityAudit",   descKey: "command.securityAuditDesc",  cliKey: "/security-review",  icon: "🛡️" },
+  { id: "slash-doctor",    group: "tools",      labelKey: "command.runDoctor",       descKey: "command.runDoctorDesc",      cliKey: "/doctor",           icon: "🩺" },
+  { id: "slash-init",      group: "tools",      labelKey: "command.initClaudeMd",    descKey: "command.initClaudeMdDesc",   cliKey: "/init",             icon: "📝" },
+
+  // ── 🛠 管理 ──
+  { id: "manage-plugins",    group: "manage",   labelKey: "command.managePlugins",     icon: "🧩" },
+  { id: "manage-mcp",        group: "manage",   labelKey: "command.manageMCP",         icon: "🔌" },
+  { id: "manage-skills",     group: "manage",   labelKey: "command.manageSkills",      icon: "🎯" },
+  { id: "manage-agents",     group: "manage",   labelKey: "command.manageAgents",      icon: "🤖" },
+  { id: "manage-hooks",      group: "manage",   labelKey: "command.manageHooks",       icon: "🪝" },
+  { id: "manage-memory",     group: "manage",   labelKey: "command.manageMemory",      icon: "🧠" },
+  { id: "manage-permissions",group: "manage",   labelKey: "command.managePermissions", icon: "🛡️" },
+  { id: "manage-styles",     group: "manage",   labelKey: "command.manageOutputStyles", icon: "🎨" },
 
   // ── ⚙ 设置 ──
   { id: "settings",        group: "settings",   labelKey: "command.openSettings",    keys: "Ctrl+,",   icon: "⚙️" },
   { id: "theme-dark",      group: "settings",   labelKey: "command.themeDark",                          icon: "🌙" },
   { id: "theme-light",     group: "settings",   labelKey: "command.themeLight",                         icon: "☀️" },
   { id: "theme-system",    group: "settings",   labelKey: "command.themeSystem",                        icon: "🔄" },
-  { id: "manage-approvals",group: "settings",   labelKey: "command.manageApprovals", descKey: "command.manageApprovalsDesc", icon: "✅" },
-  { id: "test-connection", group: "settings",   labelKey: "command.testConnection",  descKey: "command.testConnectionDesc", icon: "🔌" },
-  { id: "check-update",    group: "settings",   labelKey: "command.checkUpdate",                         icon: "🆙" },
   { id: "about",           group: "settings",   labelKey: "command.about",           descKey: "command.aboutDesc",          icon: "ℹ️" },
 ];
 
@@ -102,7 +99,7 @@ const allActions = computed<CommandAction[]>(() => {
 });
 
 // ── 分组顺序 ──
-const groupOrder = ["session", "view", "permission", "effort", "context", "tools", "settings"];
+const groupOrder = ["session", "permission", "effort", "context", "tools", "manage", "settings"];
 
 // ── 状态 ──
 const open = ref(false);
@@ -269,7 +266,7 @@ defineExpose({ show, hide });
       <input
         ref="inputEl"
         v-model="query"
-        :placeholder="t('command.placeholder')"
+        :placeholder="$t('command.placeholder')"
         class="flex-1 bg-transparent text-sm outline-none focus:outline-none min-w-0 ml-2.5"
         :style="{ color: 'var(--text-bright)', caretColor: 'var(--accent)' }"
       />
@@ -278,7 +275,7 @@ defineExpose({ show, hide });
     <!-- 最近使用（无搜索词时显示） -->
     <template v-if="recentActions.length > 0">
       <div class="px-1 pt-1 pb-1 text-[10px] font-semibold tracking-wider uppercase select-none" :style="{ color: 'var(--text-muted)' }">
-        {{ t('command.recent') }}
+        {{ $t('command.recent') }}
       </div>
       <button
         v-for="a in recentActions"
@@ -289,7 +286,7 @@ defineExpose({ show, hide });
         <span v-if="a.icon" class="text-base shrink-0 w-5 text-center">{{ a.icon }}</span>
         <span v-else class="w-5 shrink-0"></span>
         <span class="flex-1 text-sm truncate" :style="{ color: 'var(--text-secondary)' }">
-          {{ t(a.labelKey) }}
+          {{ $t(a.labelKey) }}
           <span v-if="a.cliKey" class="italic text-[11px] ml-1.5" :style="{ color: 'var(--text-muted)' }">{{ a.cliKey }}</span>
         </span>
         <kbd v-if="a.keys" class="text-[10px] px-1.5 py-0.5 rounded shrink-0" :style="{ background: 'var(--bg-root)', color: 'var(--text-muted)' }">{{ a.keys }}</kbd>
@@ -304,7 +301,7 @@ defineExpose({ show, hide });
         class="px-1 pt-3 pb-1 text-[10px] font-semibold tracking-wider uppercase select-none"
         :style="{ color: 'var(--text-muted)' }"
       >
-        {{ t(`command.groups.${item.groupId}`) }}
+        {{ $t(`command.groups.${item.groupId}`) }}
       </div>
 
       <button
@@ -322,14 +319,13 @@ defineExpose({ show, hide });
 
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-1.5">
-            <span class="text-sm" :style="{ color: item.actionIndex === selectedIdx ? 'var(--accent)' : 'var(--text-secondary)' }">
-              <span class="truncate">{{ t(item.action!.labelKey) }}</span>
+            <span class="text-sm" :style="{ color: (item.actionIndex === selectedIdx || (item.action && isActive(item.action))) ? 'var(--accent)' : 'var(--text-secondary)' }">
+              <span class="truncate">{{ $t(item.action!.labelKey) }}</span>
               <span v-if="item.action!.cliKey" class="italic text-[11px] ml-1.5 shrink-0" :style="{ color: 'var(--text-muted)' }">{{ item.action!.cliKey }}</span>
             </span>
-            <span v-if="item.action && isActive(item.action)" class="shrink-0 w-1.5 h-1.5 rounded-full" style="background: var(--accent)"></span>
           </div>
           <div v-if="item.action!.descKey" class="text-[11px] truncate mt-0.5" :style="{ color: 'var(--text-muted)' }">
-            {{ t(item.action!.descKey) }}
+            {{ $t(item.action!.descKey) }}
           </div>
         </div>
 
@@ -342,7 +338,7 @@ defineExpose({ show, hide });
       class="px-1 py-8 text-center text-sm"
       :style="{ color: 'var(--text-muted)' }"
     >
-      {{ t('command.noResults') }}
+      {{ $t('command.noResults') }}
     </div>
   </ModalShell>
 </template>

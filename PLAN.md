@@ -426,16 +426,80 @@ Total      148 tests
 
 全部 10 项已完成，详见各分节。
 
-### 后续 · 2026-06-11（文档与深度集成）🔄 进行中
+### Phase 7：完善打磨 ✅ 已完成（2026-06-12）
 
-- [ ] CommandPalette 升级至 40+ 命令、6 大分类
-- [ ] ContextIndicator 上下文窗口用量可视化
-- [ ] useStreamProcessor 增强（事件回放、通知分级）
-- [ ] Light 主题完善
-- [ ] i18n 补全（91 行新条目）
-- [ ] Settings Token 持久化
+**Bug 修复**:
+- [x] DeepSeek 文本丢失（protocol.rs text 提取恢复 + 前端去重）
+- [x] 用户消息双写（ChatPanel 移除重复 saveMessage）
+- [x] 亮色主题 CSS 级联（`[data-theme]` 在 `:root` 之后）
+- [x] 亮色对比度（`text-muted`/`border-dim` 色值修正）
+- [x] 代码块亮色适配（保持暗底）
+- [x] 上下文上限 128k→1M（支持 `[1M]` 后缀）
+- [x] 拼音映射 3 处字符混入（O-P/Q-R/W-X 组）
 
-> 📖 完整开发时间线见 [README.md § 开发时间线](README.md#开发时间线)
+**命令面板全面升级**:
+- [x] 7 大分组、40 条命令（对标 Claude Code CLI 实测）
+- [x] 拼音首字母搜索（`xjhh`→新建会话），3755 汉字覆盖
+- [x] 最近使用追踪（localStorage 5 条）
+- [x] 权限/思考/主题选中标识
+- [x] 可扩展注册系统（useCommandRegistry + ChatPanel 迁移）
+- [x] 管理模块（ManagePanel：Plugins/MCP/Skills/Agents/Hooks/Memory/Permissions/Styles）
+- [x] Memory 三级管理（全局/项目/本地，可折叠，可编辑保存）
+- [x] Plugins 增删启停（直接读写 settings.json）
+- [x] 视图分组删除（功能移入头栏按钮）
+
+**聊天增强**:
+- [x] 滚动到底按钮（smooth 动画、即时 autoScroll 检测）
+- [x] 上下文用量弹窗（ContextUsageModal）
+- [x] 会话命令实现（继续/重命名/删除/清空/导出）
+- [x] Slash 命令一键发送（/compact /review 等）
+- [x] 导出预览 + 选择目录保存（Tauri save dialog）
+- [x] 头栏按钮（新会话、禅模式、全屏）
+
+**弹窗统一**:
+- [x] ModalShell 通用弹窗组件（✕/ESC/遮罩统一关闭）
+- [x] CommandPalette 迁移到 ModalShell
+- [x] ContextUsageModal 迁移到 ModalShell
+- [x] 重命名/关于/导出预览弹窗
+
+**测试**:
+- [x] pinyin.test.ts（5 tests）
+- [x] CommandPalette.test.ts（10 tests）
+- [x] 全部 149 tests 通过
+
+### Phase 8：i18n + 设置 + 权限模式 ✅ 已完成（2026-06-18）
+
+**i18n 全面覆盖**:
+- [x] 全部 20 个 Vue 组件模板使用全局 `$t()`（移除 8 个多余的 `useI18n`）
+- [x] ContextUsageModal 硬编码 → `$t()` 重写
+- [x] ErrorBoundary 按钮 `>` 缺失修复
+- [x] 新增 locale keys：`session.noSessions/noMatching`、`modal.close`、`mode.bypass/dontAsk`、`settings.themeDark/Light/System`
+
+**Settings 面板全面升级**:
+- [x] 死代码清理（approvedList、maxTurns、handleRemoveApproved）
+- [x] 全部下拉选项 i18n 化（权限模式/思考深度/主题与工具栏共享 `mode.*` keys）
+- [x] 权限模式补齐 plan（6 选项，与工具栏/命令面板一致）
+- [x] 自定义下拉（图标 + 中文 + 斜体 CLI key + 描述）
+- [x] 左右两栏布局（API 配置 | cc-gui 设置）+ About footer
+- [x] Locale 同步 bug 修复（App.vue watch settings.locale → i18n.locale）
+
+**权限模式系统修复**:
+- [x] 工具栏补充 bypass/dontAsk 模式识别（getter + setter）
+- [x] AppShell 重复 toggle-sidebar/toggle-files case 删除
+- [x] Rust `sync_permission_settings` 现在接受 `permission_mode` + `plan_mode` 参数，正确写入 settings.json 的 `defaultMode`（bypassPermissions / dontAsk / plan 不再丢失）
+
+**测试**:
+- [x] SettingsPanel.test.ts（11 tests — activeMode computed / dropdown / layout / footer）
+- [x] 修复 3 个测试文件的 i18n mock（InputBar、MessageBubble、SessionSidebar）
+- [x] 全部 160 tests 通过
+
+### Phase 9：待规划
+
+- [ ] macOS / Linux 打包
+- [ ] 自动更新 / 代码签名
+- [ ] 一键安装 Claude Code CLI
+- [ ] MCP 实时状态监控
+- [ ] 会话导入导出增强
 
 #### 实施顺序
 

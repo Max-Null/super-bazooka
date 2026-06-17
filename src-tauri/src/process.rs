@@ -198,7 +198,14 @@ pub struct ProcessExitedEvent {
 /// Keep settings.json in sync with the current permission mode.
 /// "auto" is NOT a CLI flag — it's `permissions.defaultMode` in settings.json.
 /// Other modes use CLI `--permission-mode` flag directly.
-fn sync_permission_settings(auto_mode: bool) -> Result<(), String> {
+/// Sync `permissions.defaultMode` in settings.json to match the current permission mode.
+///
+/// When `auto_mode` is true, write "auto" (classifier-based, not a CLI flag).
+/// When `plan_mode` is true, write "plan".
+/// Otherwise, write the explicit `permission_mode` string directly,
+/// so bypassPermissions / dontAsk / acceptEdits are preserved
+/// for future CLI runs outside the GUI.
+fn sync_permission_settings(auto_mode: bool, plan_mode: bool, permission_mode: &str) -> Result<(), String> {
     let settings_path = dirs::home_dir()
         .ok_or("No home dir")?
         .join(".claude")
@@ -210,7 +217,13 @@ fn sync_permission_settings(auto_mode: bool) -> Result<(), String> {
     let mut settings: serde_json::Value = serde_json::from_str(&content)
         .map_err(|e| format!("Invalid settings.json: {}", e))?;
 
-    let target = if auto_mode { "auto" } else { "default" };
+    let target = if auto_mode {
+        "auto"
+    } else if plan_mode {
+        "plan"
+    } else {
+        permission_mode
+    };
     let current = settings["permissions"]["defaultMode"]
         .as_str()
         .unwrap_or("default");
@@ -235,8 +248,8 @@ pub async fn spawn_claude_session(
     let claude_path =
         find_claude().unwrap_or_else(|| "claude".to_string());
 
-    // Sync settings.json: auto mode writes "auto", other modes revert to "default"
-    sync_permission_settings(params.auto_mode)?;
+    // Sync settings.json so future CLI runs (outside GUI) use the same mode
+    sync_permission_settings(params.auto_mode, params.plan_mode, &params.permission_mode)?;
 
     // Build command args (per docs: stream-json + verbose + include-partial-messages
     // for real-time token streaming)
@@ -409,13 +422,15 @@ pub async fn spawn_claude_session(
             let _ = app_reader.emit("stream-debug", &line);
 
             if let Some(parsed) = StreamLine::parse(&line) {
-                // Capture session_id from system/init
+                // Capture session_id + MCP servers from system/init
                 if let Some(claude_sid) = parsed.capture_session_id() {
+                    let mcp_servers = parsed.capture_mcp_servers();
                     let _ = app_reader.emit(
                         "session-created",
                         &serde_json::json!({
                             "ourId": sid_reader,
                             "claudeSessionId": claude_sid,
+                            "mcpServers": mcp_servers,
                         }),
                     );
                 }

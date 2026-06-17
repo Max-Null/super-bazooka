@@ -91,7 +91,7 @@ async function autoResize() {
         @input="autoResize"
         @focus="focused = true"
         @blur="focused = false"
-        placeholder="Send a message…"
+        :placeholder="$t('chat.placeholder')"
         rows="1"
         class="chat-textarea flex-1 resize-none bg-transparent text-sm leading-relaxed py-3 pl-4 pr-2 disabled:opacity-30"
         :style="{
@@ -110,7 +110,7 @@ async function autoResize() {
         @click="emit('stop')"
         class="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg transition-all duration-150"
         style="background: var(--coral); color: white; border: none"
-        title="Stop"
+        :title="$t('chat.stop')"
       >
         <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
       </button>

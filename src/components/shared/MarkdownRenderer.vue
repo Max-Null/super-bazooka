@@ -175,8 +175,8 @@ watch(() => props.content, async () => {
 .markdown-body :deep(ol) { list-style-type: decimal; }
 .markdown-body :deep(blockquote) { margin: 0.5em 0; padding: 0.3em 1em; border-left: 2px solid var(--border-bright); color: var(--text-secondary); font-style: italic; }
 .markdown-body :deep(code) { font-family: var(--font-mono); font-size: 0.85em; background: var(--bg-hover); padding: 0.12em 0.35em; border-radius: 3px; }
-.markdown-body :deep(pre) { margin: 0.5em 0; }
-.markdown-body :deep(pre code) { background: transparent; padding: 0; }
+.markdown-body :deep(pre) { margin: 0.5em 0; overflow-x: auto; }
+.markdown-body :deep(pre code) { background: transparent; padding: 0; white-space: pre-wrap; word-break: break-word; }
 .markdown-body :deep(hr) { margin: 0.75em 0; border: none; border-top: 1px solid var(--border-dim); }
 .markdown-body :deep(table) { width: 100%; border-collapse: collapse; margin: 0.5em 0; font-size: 0.9em; }
 .markdown-body :deep(th) { background: var(--bg-hover); text-align: left; padding: 0.4em 0.8em; border: 1px solid var(--border-dim); font-weight: 600; color: var(--text-bright); }

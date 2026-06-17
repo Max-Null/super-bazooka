@@ -49,7 +49,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
           <button
             @click="emit('close')"
             class="w-6 h-6 flex items-center justify-center rounded transition-colors hover:bg-[var(--bg-hover)] shrink-0 ml-2 modal-shell-close"
-            title="关闭"
+            :title="$t('modal.close')"
           >&times;</button>
         </div>
 

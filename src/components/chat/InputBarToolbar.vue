@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { useSettingsStore } from "@/stores/settings";
@@ -19,6 +19,8 @@ const modeOptions = [
   { value: "editAuto", label: () => t("mode.editAuto") },
   { value: "plan", label: () => t("mode.plan") },
   { value: "auto", label: () => t("mode.auto") },
+	  { value: "bypass", label: () => t("mode.bypass") },
+	  { value: "dontAsk", label: () => t("mode.dontAsk") },
 ];
 
 // Effort levels with progressive colors (low → calm, ultracode → intense)
@@ -81,13 +83,15 @@ const activeMode = computed({
   get: () => {
     if (settings.planMode) return "plan";
     if (settings.autoMode) return "auto";
-    if (settings.permissionMode === "acceptEdits") return "editAuto";
+    if (settings.permissionMode === "bypassPermissions") return "bypass";
+	    if (settings.permissionMode === "dontAsk") return "dontAsk";
+	    if (settings.permissionMode === "acceptEdits") return "editAuto";
     return "askBefore";
   },
   set: (v: string) => {
     settings.planMode = v === "plan";
     settings.autoMode = v === "auto";
-    settings.permissionMode = v === "editAuto" ? "acceptEdits" : "default";
+    settings.permissionMode = v === "editAuto" ? "acceptEdits" : v === "bypass" ? "bypassPermissions" : v === "dontAsk" ? "dontAsk" : "default";
   },
 });
 
@@ -108,20 +112,20 @@ const currentEffortLabel = computed(() => {
     <button
       @click="emit('attachFile')"
       class="toolbar-btn flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] shrink-0"
-      title="Attach file"
+      :title="$t('toolbar.attachTitle')"
     >
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-      <span class="hidden sm:inline font-medium">{{ t('toolbar.attach') }}</span>
+      <span class="hidden sm:inline font-medium">{{ $t('toolbar.attach') }}</span>
     </button>
 
     <!-- ☰ Command Menu -->
     <button
       @click="emit('openCommandMenu')"
       class="toolbar-btn flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] shrink-0"
-      title="Commands (Ctrl+K)"
+      :title="$t('toolbar.commandsTitle')"
     >
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
-      <span class="hidden sm:inline font-medium">{{ t('toolbar.commands') }}</span>
+      <span class="hidden sm:inline font-medium">{{ $t('toolbar.commands') }}</span>
     </button>
 
     <!-- Spacer -->

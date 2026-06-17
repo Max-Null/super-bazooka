@@ -1,3 +1,4 @@
+import { ref } from "vue";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useChatStore, type ToolUse } from "@/stores/chat";
 import { useSessionStore } from "@/stores/session";
@@ -30,7 +31,11 @@ function notifyComplete(durationMs?: number, inputTokens?: number, outputTokens?
 interface SessionCreatedPayload {
   ourId: string;
   claudeSessionId: string;
+  mcpServers?: string[];
 }
+
+/** 模块级 MCP 服务器连接状态，供 ManagePanel 等组件读取 */
+export const connectedMcpServers = ref<string[]>([]);
 
 export function useStreamProcessor() {
   const chat = useChatStore();
@@ -143,9 +148,10 @@ export function useStreamProcessor() {
 
     // Session created: store on both frontend (Pinia) and backend (Rust)
     unlistenSession = await listen<SessionCreatedPayload>("session-created", (event) => {
-      const { ourId, claudeSessionId } = event.payload;
+      const { ourId, claudeSessionId, mcpServers } = event.payload;
       session.setClaudeSessionId(ourId, claudeSessionId);
       storeClaudeSession(ourId, claudeSessionId); // → Rust SessionManager
+      if (mcpServers) connectedMcpServers.value = [...mcpServers];
       debugLog.add(`🔗 session: ${ourId} → claude:${claudeSessionId}`);
     });
 

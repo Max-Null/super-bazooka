@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import type { Message } from "@/stores/chat";
 import { ref, computed, onUnmounted, nextTick } from "vue";
-import { useI18n } from "vue-i18n";
+
 import { isImageFile, useFilePreview } from "@/composables/useFilePreview";
 import { formatNum } from "@/lib/utils";
 import MarkdownRenderer from "../shared/MarkdownRenderer.vue";
 
 const { getThumbnail, thumbnails } = useFilePreview();
 
-const { t } = useI18n();
+
 const props = defineProps<{ message: Message }>();
 const emit = defineEmits<{
   edit: [id: string, content: string];
@@ -172,7 +172,7 @@ function formatJSON(obj: unknown): string {
           @click="copyContent"
           class="w-4 h-4 flex items-center justify-center rounded transition-colors hover:bg-[var(--bg-hover)]"
           :style="{ color: copied ? 'var(--accent)' : 'var(--text-muted)' }"
-          :title="copied ? 'Copied' : 'Copy'"
+          :title="copied ? $t('chat.copied') : $t('chat.copy')"
         >
           <svg v-if="!copied" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
           <svg v-else width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
@@ -183,7 +183,7 @@ function formatJSON(obj: unknown): string {
           @click="startEdit"
           class="w-4 h-4 flex items-center justify-center rounded transition-colors hover:bg-[var(--bg-hover)]"
           style="color: var(--text-muted)"
-          title="Edit"
+          :title="$t('chat.edit')"
         >
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
         </button>
@@ -193,7 +193,7 @@ function formatJSON(obj: unknown): string {
           @click="emit('resend', message.id, message.content)"
           class="w-4 h-4 flex items-center justify-center rounded transition-colors hover:bg-[var(--bg-hover)]"
           style="color: var(--text-muted)"
-          title="Resend"
+          :title="$t('chat.resend')"
         >
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
         </button>
@@ -237,7 +237,7 @@ function formatJSON(obj: unknown): string {
             @click="cancelEdit"
             class="px-2.5 py-1 rounded-md text-xs transition-colors hover:bg-[var(--bg-hover)]"
             style="color: var(--text-muted)"
-          >Cancel</button>
+          >{{ $t('chat.cancel') }}</button>
           <button
             @click="saveAndResend"
             :disabled="!editText.trim()"
@@ -248,7 +248,7 @@ function formatJSON(obj: unknown): string {
             }"
           >
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-            Save &amp; Resend
+            {{ $t('chat.saveResend') }}
           </button>
         </div>
       </div>
@@ -316,7 +316,7 @@ function formatJSON(obj: unknown): string {
         <summary class="text-xs cursor-pointer select-none px-2.5 py-1.5 rounded-md transition-colors hover:bg-[var(--bg-elevated)]" style="color:var(--amber-dim)">
           <span class="inline-flex items-center gap-1.5">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-            {{ message.isStreaming ? t('chat.thinking') : t('chat.thinkingDone') }}
+            {{ message.isStreaming ? $t('chat.thinking') : $t('chat.thinkingDone') }}
             <span v-if="elapsedSeconds" class="text-[10px] tabular-nums" style="font-variant-numeric: tabular-nums">· {{ elapsedLabel }}</span>
             <span v-if="!message.isStreaming && tokenLabel" class="text-[10px] tabular-nums opacity-70">· {{ tokenLabel }}</span>
             <span v-if="!message.isStreaming && message.costUSD !== undefined" class="text-[10px] tabular-nums opacity-70">· ${{ message.costUSD.toFixed(3) }}</span>

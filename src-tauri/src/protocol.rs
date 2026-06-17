@@ -103,6 +103,31 @@ impl StreamLine {
         }
     }
 
+    /// If this is a system/init event, extract connected MCP server names from tools
+    pub fn capture_mcp_servers(&self) -> Vec<String> {
+        if self.inner["type"].as_str() != Some("system")
+            || self.inner["subtype"].as_str() != Some("init")
+        {
+            return vec![];
+        }
+        let tools = match self.inner["tools"].as_array() {
+            Some(t) => t,
+            None => return vec![],
+        };
+        let mut servers = std::collections::BTreeSet::new();
+        for tool in tools {
+            if let Some(name) = tool["name"].as_str() {
+                // tool name format: mcp__<server>__<tool>
+                if let Some(rest) = name.strip_prefix("mcp__") {
+                    if let Some(end) = rest.find("__") {
+                        servers.insert(rest[..end].to_string());
+                    }
+                }
+            }
+        }
+        servers.into_iter().collect()
+    }
+
     pub fn to_frontend_event(&self) -> StreamFrontendEvent {
         let event_type = self.inner["type"].as_str().unwrap_or("unknown");
 

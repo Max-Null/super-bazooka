@@ -336,6 +336,19 @@ async fn get_auto_mode_status() -> Result<bool, String> {
 }
 
 #[tauri::command]
+async fn write_file(path: String, content: String) -> Result<(), String> {
+    std::fs::write(&path, &content)
+        .map_err(|e| format!("写入文件失败 '{}': {}", path, e))
+}
+
+/// 返回 ~/.claude 目录路径
+#[tauri::command]
+async fn get_claude_dir() -> Result<String, String> {
+    let home = dirs::home_dir().ok_or("无法获取用户目录")?;
+    Ok(home.join(".claude").to_string_lossy().to_string())
+}
+
+#[tauri::command]
 async fn reveal_in_explorer(path: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
@@ -407,6 +420,8 @@ pub fn run() {
             reveal_in_explorer,
             get_auto_mode_status,
             read_file_base64,
+            write_file,
+            get_claude_dir,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

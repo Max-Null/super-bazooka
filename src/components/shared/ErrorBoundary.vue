@@ -29,7 +29,7 @@ function retry() {
         @click="retry"
         class="px-4 py-1.5 rounded-md text-xs font-medium transition-colors"
         style="background:var(--accent-dim); color:white"
-      >Retry</button>
+        >{{ $t('error.retry') }}</button>
     </div>
   </div>
   <slot v-else-if="ready" />

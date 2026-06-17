@@ -3,8 +3,8 @@ import { ref, nextTick, watch, onMounted } from "vue";
 import { useChatStore } from "@/stores/chat";
 import { useSessionStore } from "@/stores/session";
 import { useDebugLog } from "@/composables/useDebugLog";
-import { open } from "@tauri-apps/plugin-dialog";
-import { sendMessage, sendStdin, getAutoModeStatus, stopSession } from "@/lib/tauri-bridge";
+import { open, save } from "@tauri-apps/plugin-dialog";
+import { sendMessage, sendStdin, getAutoModeStatus, stopSession, listMessages, writeFile } from "@/lib/tauri-bridge";
 import { useFilePreview } from "@/composables/useFilePreview";
 import { useSettingsStore } from "@/stores/settings";
 import ErrorBoundary from "@/components/shared/ErrorBoundary.vue";
@@ -14,7 +14,12 @@ import MessageBubble from "./MessageBubble.vue";
 import ThinkingIndicator from "./ThinkingIndicator.vue";
 import FilePreviewModal from "@/components/shared/FilePreviewModal.vue";
 import ContextUsageModal from "@/components/shared/ContextUsageModal.vue";
+import ManagePanel from "@/components/shared/ManagePanel.vue";
+import ModalShell from "@/components/shared/ModalShell.vue";
+import MarkdownRenderer from "@/components/shared/MarkdownRenderer.vue";
 import { useCommandPaletteBus, useChatCommandBus } from "@/composables/useCommandPalette";
+import { useI18n } from "vue-i18n";
+const { t } = useI18n();
 import { useCommandRegistry } from "@/composables/useCommandRegistry";
 
 const chat = useChatStore();
@@ -24,8 +29,6 @@ const debugLog = useDebugLog();
 const scrollContainer = ref<HTMLElement | null>(null);
 const isNearBottom = ref(true);
 const autoScroll = ref(true);
-const exporting = ref(false);
-const exportedLabel = ref("");
 const commandBus = useCommandPaletteBus();
 import { isImageFile } from "@/composables/useFilePreview";
 const { getThumbnail, thumbnails } = useFilePreview();
@@ -43,6 +46,48 @@ const previewFile = ref<{ name: string; path: string } | null>(null);
 // ── 状态消息（临时横幅，不挤占消息区域）──
 const statusMessage = ref("");
 const showContextModal = ref(false);
+const showRenameModal = ref(false);
+const renameTitle = ref("");
+const showExportPreview = ref(false);
+const showAbout = ref(false);
+const showManage = ref(false);
+const manageTab = ref<string>("plugins");
+const exportContent = ref("");
+const exportFileName = ref("");
+
+function prepareExport() {
+  const sid = session.activeSessionId;
+  if (!sid || chat.messages.length === 0) return;
+  const active = session.sessions.find(s => s.id === sid);
+  const title = active?.title || "Chat Export";
+  exportFileName.value = `${title.replace(/[^a-zA-Z0-9一-鿿_-]/g, "_")}.md`;
+  exportContent.value = chat.exportMarkdown(title);
+  showExportPreview.value = true;
+}
+
+async function doExport() {
+  try {
+    const filePath = await save({
+      defaultPath: exportFileName.value,
+      filters: [{ name: "Markdown", extensions: ["md"] }],
+    });
+    if (!filePath) return;
+    await writeFile(filePath, exportContent.value);
+    showExportPreview.value = false;
+    showStatus(t('status.exportDone'));
+  } catch (e) {
+    showStatus(t('status.exportFail', { error: String(e) }));
+  }
+}
+
+function confirmRename() {
+  const title = renameTitle.value.trim();
+  if (title && session.activeSessionId) {
+    session.renameSession(session.activeSessionId, title);
+    showStatus(t('status.renamed', { title }));
+  }
+  showRenameModal.value = false;
+}
 let statusTimer: ReturnType<typeof setTimeout> | null = null;
 function showStatus(msg: string) {
   statusMessage.value = msg;
@@ -68,47 +113,73 @@ const { chatCommand } = useChatCommandBus();
 const { register } = useCommandRegistry();
 
 // 向命令面板注册聊天相关命令
-register({ id: "clear-conversation", group: "session", labelKey: "command.clearConversation", descKey: "command.clearConversationDesc", cliKey: "/clear", icon: "🧹" });
+register({ id: "continue-session", group: "session", labelKey: "command.continueSession", cliKey: "--continue", icon: "📋" });
+register({ id: "rename-session", group: "session", labelKey: "command.renameSession", keys: "F2", icon: "✏️" });
+register({ id: "delete-session", group: "session", labelKey: "command.deleteSession", keys: "Del", icon: "🗑️" });
 register({ id: "export-session", group: "session", labelKey: "command.exportSession", descKey: "command.exportSessionDesc", icon: "📤" });
-register({ id: "compact", group: "context", labelKey: "command.compactContext", descKey: "command.compactContextDesc", cliKey: "/compact", icon: "🗜️" });
-register({ id: "show-usage", group: "context", labelKey: "command.viewUsage", descKey: "command.viewUsageDesc", cliKey: "/context", icon: "📊" });
-register({ id: "show-cost", group: "context", labelKey: "command.viewCost", cliKey: "/cost", icon: "💰" });
 register({ id: "attach-file", group: "tools", labelKey: "command.attachFile", descKey: "command.attachFileDesc", icon: "📎" });
-register({ id: "focus-input", group: "view", labelKey: "command.focusInput", keys: "Ctrl+L", icon: "⌨️" });
 watch(() => chatCommand.value.ts, (ts) => {
   if (!ts) return;
   const action = chatCommand.value.action;
   switch (action) {
-    case "clear-conversation":
-      chat.clearMessages();
-      showStatus("已清空对话");
-      break;
-    case "export-session":
-      handleExport();
-      break;
-    case "compact":
-      showStatus("/compact — 压缩上下文请求");
-      break;
-    case "show-usage":
-      showContextModal.value = true;
-      break;
-    case "show-cost": {
-      let totalIn = 0, totalOut = 0, totalCost = 0;
-      for (const m of chat.messages) {
-        totalIn += m.inputTokens || 0;
-        totalOut += m.outputTokens || 0;
-        totalCost += m.costUSD || 0;
+    case "continue-session": {
+      const others = session.sessions.filter(s => s.id !== session.activeSessionId);
+      if (others.length > 0) {
+        const target = others[0];
+        session.setActiveSession(target.id);
+        listMessages(target.id).then(msgs => {
+          chat.loadMessages(msgs.map(m => ({ id: m.id, role: m.role, content: m.content, created_at: m.created_at })));
+          showStatus(t('session.switchSuccess', { title: target.title }));
+        }).catch(() => showStatus(t('session.loadFailed')));
       }
-      showStatus(`↑${totalIn.toLocaleString()} ↓${totalOut.toLocaleString()}  消息:${chat.messages.length}  $${totalCost.toFixed(3)}`);
       break;
     }
-    case "focus-input":
-      // 聚焦输入框（通过 DOM 查找）
-      const input = document.querySelector<HTMLInputElement>('.chat-input-area input, .chat-input-area textarea');
-      input?.focus();
+    case "rename-session": {
+      const active = session.sessions.find(s => s.id === session.activeSessionId);
+      if (active) {
+        renameTitle.value = active.title;
+        showRenameModal.value = true;
+      }
       break;
+    }
+    case "delete-session": {
+      const active = session.sessions.find(s => s.id === session.activeSessionId);
+      if (active && confirm(t('session.confirmDelete', { title: active.title }))) {
+        session.deleteSession(session.activeSessionId);
+        chat.clearMessages();
+        showStatus(t('status.sessionDeleted'));
+      }
+      break;
+    }
+    case "slash-clear": handleSend("/clear"); break;
+    case "export-session":
+      if (!session.activeSessionId || chat.messages.length === 0) {
+        showStatus(t('status.exportEmpty'));
+      } else {
+        prepareExport();
+      }
+      break;
+    case "slash-compact":   handleSend("/compact"); break;
+    case "slash-context":   showContextModal.value = true; break;
+    case "slash-cost":      handleSend("/cost"); break;
+    case "slash-review":    handleSend("/review"); break;
+    case "slash-simplify":  handleSend("/simplify"); break;
+    case "slash-security":  handleSend("/security-review"); break;
+    case "slash-doctor":    handleSend("/doctor"); break;
+    case "slash-init":      handleSend("/init"); break;
+    case "manage-plugins":    manageTab.value = "plugins"; showManage.value = true; break;
+    case "manage-memory":     manageTab.value = "memory"; showManage.value = true; break;
+    case "manage-mcp":        manageTab.value = "mcp"; showManage.value = true; break;
+    case "manage-skills":     manageTab.value = "skills"; showManage.value = true; break;
+    case "manage-agents":     manageTab.value = "agents"; showManage.value = true; break;
+    case "manage-hooks":      manageTab.value = "hooks"; showManage.value = true; break;
+    case "manage-permissions": manageTab.value = "permissions"; showManage.value = true; break;
+    case "manage-styles":     manageTab.value = "styles"; showManage.value = true; break;
     case "attach-file":
       handleAttachFile();
+      break;
+    case "about":
+      showAbout.value = true;
       break;
   }
 });
@@ -229,29 +300,6 @@ async function handleStop() {
 }
 
 // ── Session Export ──
-async function handleExport() {
-  const sid = session.activeSessionId;
-  if (!sid || chat.messages.length === 0) return;
-  exporting.value = true;
-  try {
-    const active = session.sessions.find(s => s.id === sid);
-    const title = active?.title || "Chat Export";
-    const md = chat.exportMarkdown(title);
-    const blob = new Blob([md], { type: "text/markdown" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${title.replace(/[^a-zA-Z0-9一-鿿_-]/g, "_")}.md`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    exportedLabel.value = "Exported!";
-    setTimeout(() => exportedLabel.value = "", 2000);
-  } finally {
-    exporting.value = false;
-  }
-}
 
 // ── Attach file ──
 async function handleAttachFile() {
@@ -339,15 +387,13 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAut
         <!-- Export bar (when messages exist) -->
         <div v-if="chat.messages.length > 0" class="flex items-center justify-end">
           <button
-            @click="handleExport"
-            :disabled="exporting"
+            @click="prepareExport"
             class="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] transition-colors hover:bg-[var(--bg-hover)]"
-            :style="{ color: exportedLabel ? 'var(--accent)' : 'var(--text-muted)' }"
-            title="Export session as Markdown"
+            style="color: var(--text-muted)"
+            :title="$t('chat.exportTitle')"
           >
-            <svg v-if="!exporting" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            <span v-if="exportedLabel">{{ exportedLabel }}</span>
-            <span v-else>Export</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span>{{ $t('chat.export') }}</span>
           </button>
         </div>
         <TransitionGroup name="msg">
@@ -390,27 +436,23 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAut
       <span class="text-xs flex-1" style="color:var(--amber)">
         Allow <code class="px-1 py-px rounded text-[11px]" style="background:rgba(245,166,35,0.1)">{{ chat.pendingControlRequest.tool_name }}</code>?
       </span>
-      <button @click="handleAllow" class="px-3 py-1 rounded-md text-xs font-medium transition-colors" style="background:var(--accent-dim); color:white">Allow</button>
-      <button @click="handleDeny" class="px-3 py-1 rounded-md text-xs font-medium transition-colors" style="border:1px solid var(--coral); color:var(--coral)">Deny</button>
+      <button @click="handleAllow" class="px-3 py-1 rounded-md text-xs font-medium transition-colors" style="background:var(--accent-dim); color:white">{{ $t('chat.allow') }}</button>
+      <button @click="handleDeny" class="px-3 py-1 rounded-md text-xs font-medium transition-colors" style="border:1px solid var(--coral); color:var(--coral)">{{ $t('chat.deny') }}</button>
     </div>
 
-    <!-- 滚动到底按钮 — 工具栏上方居中，不遮挡文件面板 -->
+    <!-- 滚动到底按钮 — 绝对定位在工具栏上方居中，不占文档流高度 -->
     <Transition name="scroll-btn">
-      <div
+      <button
         v-if="!isNearBottom && chat.messages.length > 0"
-        class="shrink-0 flex justify-center pb-1"
+        @click="scrollToBottomAndResume"
+        class="absolute bottom-[140px] left-1/2 -translate-x-1/2 z-10 flex items-center justify-center w-7 h-7 rounded-full transition-all duration-150 hover:scale-110"
+        style="background: var(--bg-elevated); color: var(--text-secondary); border: 1px solid var(--border-bright); box-shadow: 0 1px 6px rgba(0,0,0,0.15)"
+        :title="$t('chat.scrollToBottom')"
       >
-        <button
-          @click="scrollToBottomAndResume"
-          class="flex items-center justify-center w-7 h-7 rounded-full transition-all duration-150 hover:scale-110"
-          style="background: var(--bg-elevated); color: var(--text-secondary); border: 1px solid var(--border-bright); box-shadow: 0 1px 6px rgba(0,0,0,0.15)"
-          title="滚动到底部"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
-        </button>
-      </div>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
     </Transition>
 
     <!-- 状态消息：绝对定位在输入框上方，不挤占消息区域 -->
@@ -456,7 +498,7 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAut
           @click.stop="removeAttachedFile(i)"
           class="w-4 h-4 flex items-center justify-center rounded transition-colors hover:bg-[var(--bg-hover)] shrink-0 opacity-50 group-hover:opacity-100"
           style="color: var(--text-muted)"
-          title="Remove"
+          :title="$t('chat.remove')"
         >&times;</button>
       </div>
     </div>
@@ -464,6 +506,61 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAut
     <!-- File preview modal -->
     <FilePreviewModal :file="previewFile" @close="previewFile = null" />
     <ContextUsageModal :open="showContextModal" @close="showContextModal = false" />
+    <ManagePanel :open="showManage" :initialTab="manageTab" @close="showManage = false" @send-slash="(t) => handleSend(t)" />
+
+    <!-- 关于弹窗 -->
+    <ModalShell :open="showAbout" size="sm" @close="showAbout = false">
+      <template #header>
+        <span class="text-sm font-semibold" :style="{ color: 'var(--text-bright)' }">关于 cc-gui</span>
+      </template>
+      <div class="text-center py-4 space-y-3">
+        <div class="text-lg font-bold" :style="{ color: 'var(--text-bright)' }">cc-gui</div>
+        <div class="text-xs" :style="{ color: 'var(--text-secondary)' }">Claude Code Desktop GUI</div>
+        <div class="text-[11px] font-mono" :style="{ color: 'var(--text-muted)' }">v0.1.0</div>
+        <div class="text-[11px]" :style="{ color: 'var(--text-muted)' }">
+          Tauri 2 + Vue 3 + TypeScript<br/>
+          Rust 后端 · SQLite 持久化<br/>
+          DeepSeek API 兼容
+        </div>
+        <div class="text-[10px] pt-2" :style="{ color: 'var(--text-muted)' }">
+          © 2026 cc-gui contributors · MIT
+        </div>
+      </div>
+    </ModalShell>
+
+    <!-- 导出预览弹窗 -->
+    <ModalShell :open="showExportPreview" size="lg" @close="showExportPreview = false">
+      <template #header>
+        <span class="text-sm font-semibold" :style="{ color: 'var(--text-bright)' }">导出预览 — {{ exportFileName }}</span>
+      </template>
+      <div class="overflow-y-auto p-1 min-w-0" style="max-height: 60vh">
+        <div class="overflow-x-auto">
+          <MarkdownRenderer :content="exportContent" />
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 mt-3">
+        <button @click="showExportPreview = false" class="px-3 py-1.5 rounded-md text-xs transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-muted)' }">取消</button>
+        <button @click="doExport" class="px-4 py-1.5 rounded-md text-xs font-medium transition-colors" :style="{ background: 'var(--accent)', color: 'var(--bg-root)' }">选择目录并导出</button>
+      </div>
+    </ModalShell>
+    <!-- 重命名弹窗 -->
+    <ModalShell :open="showRenameModal" size="sm" @close="showRenameModal = false">
+      <template #header>
+        <span class="text-sm font-semibold" :style="{ color: 'var(--text-bright)' }">重命名会话</span>
+      </template>
+      <input
+        v-model="renameTitle"
+        @keydown.enter="confirmRename"
+        @keydown.escape="showRenameModal = false"
+        class="w-full bg-transparent text-sm px-3 py-2 rounded-md border outline-none"
+        :style="{ color: 'var(--text-bright)', borderColor: 'var(--border-default)', background: 'var(--bg-elevated)' }"
+        autofocus
+      />
+      <div class="flex justify-end gap-2 mt-3">
+        <button @click="showRenameModal = false" class="px-3 py-1.5 rounded-md text-xs transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-muted)' }">取消</button>
+        <button @click="confirmRename" class="px-3 py-1.5 rounded-md text-xs font-medium transition-colors" :style="{ background: 'var(--accent)', color: 'var(--bg-root)' }">确认</button>
+      </div>
+    </ModalShell>
 
     <!-- Input -->
     <InputBar :disabled="chat.isProcessing" :auto-mode="autoModeActive" @send="handleSend" @stop="handleStop" @files="(fs) => { for (const f of fs) { if (!attachedFiles.some(af => af.path === f.path)) attachedFiles.push(f); } }" />

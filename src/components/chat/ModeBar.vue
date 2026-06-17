@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { useI18n } from "vue-i18n";
+
 import { useSettingsStore } from "@/stores/settings";
 
-const { t } = useI18n();
+
 const settings = useSettingsStore();
 
 const activeMode = computed({
@@ -36,7 +36,7 @@ const activeMode = computed({
         }"
       >
         <input v-model="activeMode" :value="mode" type="radio" class="sr-only" />
-        {{ t(`mode.${mode}`) }}
+        {{ $t(`mode.${mode}`) }}
       </label>
 
       <span style="color: var(--border-default)">·</span>
@@ -47,12 +47,12 @@ const activeMode = computed({
         class="bg-transparent cursor-pointer outline-none ml-auto text-xs"
         style="color: inherit"
       >
-        <option value="low" style="background:var(--bg-surface)">{{ t('mode.effort.low') }}</option>
-        <option value="medium" style="background:var(--bg-surface)">{{ t('mode.effort.medium') }}</option>
-        <option value="high" style="background:var(--bg-surface)">{{ t('mode.effort.high') }}</option>
-        <option value="xhigh" style="background:var(--bg-surface)">{{ t('mode.effort.xhigh') }}</option>
-        <option value="max" style="background:var(--bg-surface)">{{ t('mode.effort.max') }}</option>
-        <option value="ultracode" style="background:var(--bg-surface)">{{ t('mode.effort.ultracode') }}</option>
+        <option value="low" style="background:var(--bg-surface)">{{ $t('mode.effort.low') }}</option>
+        <option value="medium" style="background:var(--bg-surface)">{{ $t('mode.effort.medium') }}</option>
+        <option value="high" style="background:var(--bg-surface)">{{ $t('mode.effort.high') }}</option>
+        <option value="xhigh" style="background:var(--bg-surface)">{{ $t('mode.effort.xhigh') }}</option>
+        <option value="max" style="background:var(--bg-surface)">{{ $t('mode.effort.max') }}</option>
+        <option value="ultracode" style="background:var(--bg-surface)">{{ $t('mode.effort.ultracode') }}</option>
       </select>
     </div>
   </div>

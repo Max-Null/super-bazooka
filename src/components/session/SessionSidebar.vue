@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
+
 import { useSessionStore } from "@/stores/session";
 import { useChatStore } from "@/stores/chat";
 import { useDebugLog } from "@/composables/useDebugLog";
@@ -9,6 +10,7 @@ import { listMessages } from "@/lib/tauri-bridge";
 import { formatTokenCount } from "@/lib/utils";
 
 const router = useRouter();
+
 const sessionStore = useSessionStore();
 const chatStore = useChatStore();
 const debugLog = useDebugLog();
@@ -62,12 +64,12 @@ async function handleDelete(id: string) {
   <div class="flex flex-col h-full">
     <!-- Header -->
     <div class="flex items-center justify-between px-3 py-3">
-      <span class="text-[11px] font-semibold uppercase tracking-widest" style="color:var(--text-muted)">Sessions</span>
+      <span class="text-[11px] font-semibold uppercase tracking-widest" style="color:var(--text-muted)">{{ $t('session.title') }}</span>
       <button
         @click="handleNew"
         class="w-6 h-6 flex items-center justify-center rounded-md transition-colors hover:bg-[var(--bg-hover)]"
         style="color:var(--text-secondary)"
-        title="New session"
+        :title="$t('session.new')"
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
           <path d="M12 5v14M5 12h14" />
@@ -81,7 +83,7 @@ async function handleDelete(id: string) {
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
         <input
           v-model="searchQuery"
-          placeholder="Search sessions…"
+          :placeholder="$t('session.search')"
           class="flex-1 bg-transparent outline-none text-xs"
           :style="{ color: 'var(--text-primary)', caretColor: 'var(--accent)' }"
         />
@@ -90,7 +92,7 @@ async function handleDelete(id: string) {
           @click="searchQuery = ''"
           class="w-4 h-4 flex items-center justify-center rounded transition-colors hover:bg-[var(--bg-hover)]"
           style="color: var(--text-muted)"
-          title="Clear"
+          :title="$t('session.clear')"
         >✕</button>
       </div>
     </div>
@@ -136,20 +138,20 @@ async function handleDelete(id: string) {
 
         <!-- Hover actions -->
         <div class="hidden group-hover:flex items-center gap-0.5 shrink-0 ml-auto">
-          <button @click.stop="startRename(s.id, s.title)" class="w-5 h-5 flex items-center justify-center rounded transition-colors hover:bg-[var(--bg-active)]" style="color:var(--text-muted)" title="Rename">
+          <button @click.stop="startRename(s.id, s.title)" class="w-5 h-5 flex items-center justify-center rounded transition-colors hover:bg-[var(--bg-active)]" style="color:var(--text-muted)" :title="$t('session.rename')">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
           </button>
-          <button @click.stop="handleDelete(s.id)" class="w-5 h-5 flex items-center justify-center rounded transition-colors hover:bg-[var(--bg-active)]" style="color:var(--text-muted)" title="Delete">
+          <button @click.stop="handleDelete(s.id)" class="w-5 h-5 flex items-center justify-center rounded transition-colors hover:bg-[var(--bg-active)]" style="color:var(--text-muted)" :title="$t('session.delete')">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
           </button>
         </div>
       </button>
 
       <div v-if="sessionStore.sessions.length === 0" class="px-3 py-12 text-center text-xs" style="color:var(--text-muted)">
-        No sessions yet
+        {{ $t('session.noSessions') }}
       </div>
       <div v-else-if="filteredSessions.length === 0" class="px-3 py-12 text-center text-xs" style="color:var(--text-muted)">
-        No matching sessions
+        {{ $t('session.noMatching') }}
       </div>
     </div>
   </div>

@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
-import { useI18n } from "vue-i18n";
+
 import { readFileContent, readFileBase64 } from "@/lib/tauri-bridge";
 import { highlightCode } from "@/composables/useHighlight";
 import { isImageFile, mimeType } from "@/composables/useFilePreview";
 import MarkdownRenderer from "./MarkdownRenderer.vue";
 
-const { t } = useI18n();
+
 
 const props = defineProps<{ file: { name: string; path: string } | null }>();
 const emit = defineEmits<{ close: [] }>();
@@ -161,7 +161,7 @@ function onKeydown(e: KeyboardEvent) {
 
           <!-- Loading -->
           <div v-else-if="loading" class="flex items-center justify-center p-12" style="color: var(--text-muted)">
-            <span class="text-xs">{{ t('preview.loading') }}</span>
+            <span class="text-xs">{{ $t('preview.loading') }}</span>
           </div>
 
           <!-- Error -->
@@ -172,8 +172,8 @@ function onKeydown(e: KeyboardEvent) {
           <!-- Unsupported -->
           <div v-else-if="previewType === 'unsupported'" class="flex flex-col items-center justify-center p-12 gap-3">
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color: var(--text-muted); opacity: 0.4"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
-            <p class="text-sm" style="color: var(--text-muted)">{{ t('preview.unsupported') }}</p>
-            <p class="text-xs" style="color: var(--text-muted); opacity: 0.6">{{ t('preview.unsupportedHint') }}</p>
+            <p class="text-sm" style="color: var(--text-muted)">{{ $t('preview.unsupported') }}</p>
+            <p class="text-xs" style="color: var(--text-muted); opacity: 0.6">{{ $t('preview.unsupportedHint') }}</p>
           </div>
 
           <!-- Markdown -->

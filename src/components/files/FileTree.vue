@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from "vue";
-import { useI18n } from "vue-i18n";
+
 import { listDir, revealInExplorer as reveal, type FileEntry } from "@/lib/tauri-bridge";
 
-const { t } = useI18n();
+
 const props = defineProps<{
   entries: FileEntry[];
   selected: string | null;
@@ -184,15 +184,15 @@ function isLoading(path: string): boolean {
         <button
           @click="revealInExplorer(ctxMenu.entry)"
           class="w-full text-left px-3 py-1.5 hover:bg-[var(--bg-hover)] transition-colors flex items-center gap-2"
-        >📂 {{ t('file.reveal') }}</button>
+        >📂 {{ $t('file.reveal') }}</button>
         <button
           @click="copyToClipboard(ctxMenu.entry.path)"
           class="w-full text-left px-3 py-1.5 hover:bg-[var(--bg-hover)] transition-colors flex items-center gap-2"
-        >📋 {{ t('file.copyPath') }}</button>
+        >📋 {{ $t('file.copyPath') }}</button>
         <button
           @click="copyToClipboard(ctxMenu.entry.name)"
           class="w-full text-left px-3 py-1.5 hover:bg-[var(--bg-hover)] transition-colors flex items-center gap-2"
-        >📝 {{ t('file.copyName') }}</button>
+        >📝 {{ $t('file.copyName') }}</button>
       </div>
     </Teleport>
   </div>

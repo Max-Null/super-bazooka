@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, onMounted, onUnmounted } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import SessionSidebar from "@/components/session/SessionSidebar.vue";
@@ -14,8 +14,10 @@ const route = useRoute();
 const settings = useSettingsStore();
 const { handleNew } = useNewSession();
 const drawerOpen = ref(false);
-const cwd = ref("");
+const zenMode = ref(false);
 const fileNavCounter = ref(0);
+const filePanelForceClose = ref(0);
+const cwd = ref("");
 
 const commandPalette = ref<InstanceType<typeof CommandPalette> | null>(null);
 
@@ -23,17 +25,10 @@ function handleCommand(action: string) {
   switch (action) {
     // ── 💬 会话 ──
     case "new-session": handleNew(); break;
-    case "continue-session": /* 由 ChatPanel 处理 --continue */ break;
-    case "resume-session": /* 由 SessionSidebar 处理 */ break;
-    case "rename-session": /* 由 SessionSidebar 处理 */ break;
-    case "delete-session": /* 由 SessionSidebar 处理 */ break;
-    case "clear-conversation":
+    case "continue-session":
+    case "rename-session":
+    case "delete-session":
     case "export-session":
-    case "switch-session":
-    case "focus-input":
-    case "compact":
-    case "show-usage":
-    case "show-cost":
     case "attach-file":
       emitChatCommand(action);
       break;
@@ -41,14 +36,12 @@ function handleCommand(action: string) {
     // ── 🖥 视图 ──
     case "toggle-sidebar": drawerOpen.value = !drawerOpen.value; break;
     case "toggle-files": fileNavCounter.value++; break;
-    case "focus-input": /* 由 InputBar 处理 */ break;
-    case "toggle-fullscreen":
-      if (!document.fullscreenElement) document.documentElement.requestFullscreen();
-      else document.exitFullscreen();
-      break;
     case "zen-mode":
-      drawerOpen.value = false;
-      fileNavCounter.value++;
+      zenMode.value = !zenMode.value;
+      if (zenMode.value) {
+        drawerOpen.value = false;
+        filePanelForceClose.value++;
+      }
       break;
 
     // ── 🛡 权限与模式 ──
@@ -89,34 +82,34 @@ function handleCommand(action: string) {
     case "effort-max": settings.effort = "max"; break;
     case "effort-ultracode": settings.effort = "ultracode"; break;
 
-    // ── 📊 上下文 ──
-    case "compact": /* 由 ChatPanel 处理 */ break;
-    case "show-usage": /* 由 ChatPanel 处理 */ break;
-    case "show-cost": /* 由 ChatPanel 处理 */ break;
-    case "context-stats": /* 由 ChatPanel 处理 */ break;
-
     // ── 🔌 工具 ──
-    case "attach-file": /* 由 ChatPanel 处理 */ break;
-    case "code-review": /* 未来集成 code-review skill */ break;
-    case "code-simplify": /* 未来集成 code-simplifier skill */ break;
-    case "security-audit": /* 未来集成 security-guidance skill */ break;
-    case "modernize-assess": /* 未来集成 code-modernization skill */ break;
-    case "open-terminal": /* 未来集成 Tauri shell open */ break;
-    case "open-explorer": /* 由 FilePanel 处理 */ break;
-    case "dev-tools": /* 开发模式 */ break;
-    case "run-doctor": /* 未来集成 /doctor */ break;
-    case "init-claude-md": /* 未来集成 /init */ break;
-    case "keybindings-ref": /* 显示快捷键弹窗 */ break;
+    case "open-explorer": openFilePanelTo(cwd.value || "."); break;
+    case "slash-compact":
+    case "slash-context":
+    case "slash-cost":
+    case "slash-clear":
+    case "slash-review":
+    case "slash-simplify":
+    case "slash-security":
+    case "slash-doctor":
+    case "slash-init":
+    case "manage-plugins":
+    case "manage-mcp":
+    case "manage-skills":
+    case "manage-agents":
+    case "manage-hooks":
+    case "manage-memory":
+    case "manage-permissions":
+    case "manage-styles":
+      emitChatCommand(action);
+      break;
 
     // ── ⚙ 设置 ──
     case "settings": router.push("/settings"); break;
     case "theme-dark": settings.theme = "dark"; break;
     case "theme-light": settings.theme = "light"; break;
     case "theme-system": settings.theme = "system"; break;
-    case "manage-approvals": router.push("/settings"); break;
-    case "test-connection": router.push("/settings"); break;
-    case "check-update": /* 未来集成 */ break;
-    case "about": /* 显示关于弹窗 */ break;
+    case "about": /* ChatPanel 弹窗处理 */ emitChatCommand(action); break;
 
     // ── 兼容旧 action id ──
     case "plan-mode": settings.planMode = true; settings.autoMode = false; break;
@@ -146,14 +139,24 @@ function onGlobalKeydown(e: KeyboardEvent) {
 onMounted(async () => {
   try { cwd.value = await getWorkspaceRoot(); } catch {}
   document.addEventListener("keydown", onGlobalKeydown);
+  document.addEventListener("fullscreenchange", onFullscreenChange);
 });
 
 onUnmounted(() => {
   document.removeEventListener("keydown", onGlobalKeydown);
+  document.removeEventListener("fullscreenchange", onFullscreenChange);
 });
 
 function isActive(path: string): boolean {
   return route.path === path;
+}
+
+const isFullscreen = ref(false);
+function onFullscreenChange() { isFullscreen.value = !!document.fullscreenElement; }
+
+function toggleFullscreen() {
+  if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+  else document.exitFullscreen();
 }
 
 function openFilePanelTo(path: string) {
@@ -176,7 +179,7 @@ function openFilePanelTo(path: string) {
           class="w-7 h-7 flex items-center justify-center rounded-md transition-colors shrink-0 translate-y-0.5"
           :style="{ background: drawerOpen ? 'var(--bg-active)' : 'transparent', color: 'var(--text-secondary)' }"
           :class="drawerOpen ? '' : 'hover:bg-[var(--bg-hover)]'"
-          title="Toggle sidebar"
+          :title="$t('header.toggleSidebar')"
         >
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
             <path d="M3 12h18M3 6h18M3 18h18" />
@@ -184,6 +187,16 @@ function openFilePanelTo(path: string) {
         </button>
 
         <span class="text-sm font-semibold tracking-tight leading-none" style="color:var(--text-bright)">cc-gui</span>
+
+        <!-- 禅模式 -->
+        <button
+          @click="handleCommand('zen-mode')"
+          class="w-6 h-6 flex items-center justify-center rounded-md transition-colors shrink-0"
+          :style="{ background: zenMode ? 'var(--accent-glow)' : 'transparent', color: zenMode ? 'var(--accent)' : 'var(--text-muted)' }"
+          :class="zenMode ? '' : 'hover:bg-[var(--bg-hover)]'"
+          :title="zenMode ? $t('header.exitZenMode') : $t('header.zenMode')"
+        >🧘</button>
+
         <span class="text-[10px] font-medium px-1.5 py-px rounded leading-none" style="background:var(--accent-glow); color:var(--accent-dim)">DEV</span>
 
         <!-- CWD — clickable, opens file panel to workspace root -->
@@ -203,7 +216,7 @@ function openFilePanelTo(path: string) {
           @click="handleCommand('new-session')"
           class="w-7 h-7 flex items-center justify-center rounded-md transition-colors hover:bg-[var(--bg-hover)]"
           style="color:var(--text-secondary)"
-          title="新会话"
+          :title="$t('header.newSession')"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
             <line x1="12" y1="5" x2="12" y2="19" />
@@ -216,7 +229,7 @@ function openFilePanelTo(path: string) {
           @click="settings.theme = settings.theme === 'dark' ? 'light' : 'dark'"
           class="w-7 h-7 flex items-center justify-center rounded-md transition-colors hover:bg-[var(--bg-hover)]"
           style="color:var(--text-secondary)"
-          :title="settings.theme === 'dark' ? 'Light mode' : 'Dark mode'"
+          :title="settings.theme === 'dark' ? $t('header.lightMode') : $t('header.darkMode')"
         >
           <!-- Sun icon (light mode indicator) -->
           <svg v-if="settings.theme === 'dark'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -236,12 +249,29 @@ function openFilePanelTo(path: string) {
           </svg>
         </button>
 
+        <!-- 全屏 -->
+        <button
+          @click="toggleFullscreen"
+          class="w-7 h-7 flex items-center justify-center rounded-md transition-colors hover:bg-[var(--bg-hover)]"
+          style="color:var(--text-secondary)"
+          :title="isFullscreen ? $t('header.exitFullscreen') : $t('header.fullscreen')"
+        >
+          <!-- 进入全屏：展开图标 -->
+          <svg v-if="!isFullscreen" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" />
+          </svg>
+          <!-- 退出全屏：收缩图标 -->
+          <svg v-else width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="4 8 4 3 9 3" /><polyline points="20 16 20 21 15 21" /><line x1="4" y1="3" x2="10" y2="9" /><line x1="20" y1="21" x2="14" y2="15" />
+          </svg>
+        </button>
+
         <!-- Refresh -->
         <button
           @click="router.go(0)"
           class="w-7 h-7 flex items-center justify-center rounded-md transition-colors hover:bg-[var(--bg-hover)]"
           style="color:var(--text-secondary)"
-          title="Refresh"
+          :title="$t('header.refresh')"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
@@ -260,7 +290,7 @@ function openFilePanelTo(path: string) {
             color: isActive('/settings') ? 'var(--accent)' : 'var(--text-secondary)'
           }"
           :class="isActive('/settings') ? '' : 'hover:bg-[var(--bg-hover)]'"
-          title="Settings"
+          :title="$t('header.settings')"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
@@ -292,7 +322,7 @@ function openFilePanelTo(path: string) {
       </main>
 
       <!-- File panel (right side) -->
-      <FilePanel :navCounter="fileNavCounter" :navPath="cwd" />
+      <FilePanel :navCounter="fileNavCounter" :navPath="cwd" :forceClose="filePanelForceClose" />
     </div>
 
     <CommandPalette @command="handleCommand" />

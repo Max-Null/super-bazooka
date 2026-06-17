@@ -1,10 +1,28 @@
 import { describe, it, expect } from "vitest";
 import { mount } from "@vue/test-utils";
+import { createI18n } from "vue-i18n";
 import InputBar from "./InputBar.vue";
+
+const i18n = createI18n({
+  legacy: false,
+  locale: "en",
+  messages: {
+    en: {
+      chat: { placeholder: "Type a message, Enter to send...", stop: "Stop" },
+    },
+  },
+});
+
+function mountInputBar(props: Record<string, unknown> = {}) {
+  return mount(InputBar, {
+    props: { disabled: false, ...props },
+    global: { plugins: [i18n] },
+  });
+}
 
 describe("InputBar", () => {
   it("emits send with trimmed text on button click", async () => {
-    const wrapper = mount(InputBar, { props: { disabled: false } });
+    const wrapper = mountInputBar();
 
     const textarea = wrapper.find("textarea");
     await textarea.setValue("  Hello World  ");
@@ -17,7 +35,7 @@ describe("InputBar", () => {
   });
 
   it("emits send on Enter key", async () => {
-    const wrapper = mount(InputBar, { props: { disabled: false } });
+    const wrapper = mountInputBar();
 
     const textarea = wrapper.find("textarea");
     await textarea.setValue("Test message");
@@ -28,7 +46,7 @@ describe("InputBar", () => {
   });
 
   it("allows newline on Shift+Enter", async () => {
-    const wrapper = mount(InputBar, { props: { disabled: false } });
+    const wrapper = mountInputBar();
 
     const textarea = wrapper.find("textarea");
     await textarea.trigger("keydown", { key: "Enter", shiftKey: true });
@@ -38,21 +56,21 @@ describe("InputBar", () => {
   });
 
   it("shows stop button when disabled (processing)", () => {
-    const wrapper = mount(InputBar, { props: { disabled: true } });
+    const wrapper = mountInputBar({ disabled: true });
     const buttons = wrapper.findAll("button");
     const stopBtn = buttons.find(b => b.attributes("title") === "Stop");
     expect(stopBtn).toBeTruthy();
   });
 
   it("emits stop on stop button click", async () => {
-    const wrapper = mount(InputBar, { props: { disabled: true } });
+    const wrapper = mountInputBar({ disabled: true });
     const stopBtn = wrapper.find("button[title='Stop']");
     await stopBtn.trigger("click");
     expect(wrapper.emitted("stop")).toBeTruthy();
   });
 
   it("does not emit when disabled", async () => {
-    const wrapper = mount(InputBar, { props: { disabled: true } });
+    const wrapper = mountInputBar({ disabled: true });
 
     const textarea = wrapper.find("textarea");
     await textarea.setValue("Should not send");
@@ -62,7 +80,7 @@ describe("InputBar", () => {
   });
 
   it("does not emit empty message", async () => {
-    const wrapper = mount(InputBar, { props: { disabled: false } });
+    const wrapper = mountInputBar();
 
     await wrapper.find("button").trigger("click");
     expect(wrapper.emitted("send")).toBeFalsy();
@@ -73,7 +91,7 @@ describe("InputBar", () => {
   });
 
   it("disables send button when input is empty", () => {
-    const wrapper = mount(InputBar, { props: { disabled: false } });
+    const wrapper = mountInputBar();
     const sendBtn = wrapper.find("button[title='']");  // send has no title attr
     // The button rendered is send button (not stop), and it should be disabled
     const buttons = wrapper.findAll("button");
@@ -84,14 +102,14 @@ describe("InputBar", () => {
   // ── Drag & drop ──
 
   it("shows drag-over border on dragover", async () => {
-    const wrapper = mount(InputBar, { props: { disabled: false } });
+    const wrapper = mountInputBar();
     const container = wrapper.find(".flex.items-center.max-w-3xl");
     await container.trigger("dragover", { dataTransfer: { dropEffect: "" } });
     expect(container.attributes("style")).toContain("dashed");
   });
 
   it("hides drag border on dragleave", async () => {
-    const wrapper = mount(InputBar, { props: { disabled: false } });
+    const wrapper = mountInputBar();
     const container = wrapper.find(".flex.items-center.max-w-3xl");
     await container.trigger("dragover", { dataTransfer: { dropEffect: "" } });
     await container.trigger("dragleave");
@@ -99,7 +117,7 @@ describe("InputBar", () => {
   });
 
   it("emits files event on drop", async () => {
-    const wrapper = mount(InputBar, { props: { disabled: false } });
+    const wrapper = mountInputBar();
     const container = wrapper.find(".flex.items-center.max-w-3xl");
 
     const files = [{ name: "test.ts", path: "/home/user/test.ts" }];

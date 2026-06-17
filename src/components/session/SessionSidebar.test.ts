@@ -1,8 +1,28 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import { setActivePinia, createPinia } from "pinia";
+import { createI18n } from "vue-i18n";
 import { useSessionStore } from "@/stores/session";
 import SessionSidebar from "./SessionSidebar.vue";
+
+const i18n = createI18n({
+  legacy: false,
+  locale: "en",
+  messages: {
+    en: {
+      session: {
+        title: "Sessions",
+        new: "New session",
+        search: "Search sessions…",
+        rename: "Rename",
+        delete: "Delete",
+        clear: "Clear",
+        noSessions: "No sessions yet",
+        noMatching: "No matching sessions",
+      },
+    },
+  },
+});
 
 // Stub router
 const routerPush = vi.fn();
@@ -18,7 +38,7 @@ function mountSidebar() {
       provide: {
         router: mockRouter,
       },
-      plugins: [createPinia()],
+      plugins: [createPinia(), i18n],
     },
   });
 }
