@@ -200,6 +200,63 @@ export async function getClaudeDir(): Promise<string> {
   return invoke("get_claude_dir");
 }
 
+/** 从 ~/.claude/settings.json 读取配置 */
+export async function getClaudeSettings(): Promise<{
+  api_key: string; base_url: string; model: string; effort: string; permission_mode: string;
+}> {
+  return invoke("get_claude_settings");
+}
+
+/** 将配置写入 ~/.claude/settings.json */
+export async function setClaudeSettings(
+  apiKey: string, baseUrl: string, model: string, effort: string, permissionMode: string,
+): Promise<void> {
+  return invoke("set_claude_settings", { apiKey, baseUrl, model, effort, permissionMode });
+}
+
+// ── 项目描述（翻译 + 缓存）──
+
+export interface DescriptionItem {
+  item_type: string;
+  name: string;
+  desc_en?: string | null;
+  desc_zh?: string | null;
+}
+
+/**
+ * 确保每个 item 都有中英双语描述。DB 有缓存直接返回，
+ * 缺中文的自动调用 DeepSeek API 翻译后存入 DB。
+ */
+/** 清空所有翻译缓存 */
+export async function clearItemDescriptions(): Promise<void> {
+  return invoke("clear_item_descriptions");
+}
+
+/** 只清空 MCP 描述缓存 */
+export async function clearMcpDescriptions(): Promise<void> {
+  return invoke("clear_mcp_descriptions");
+}
+
+/**
+ * 用 DeepSeek API 为 MCP 服务器名称批量生成中文描述，缓存到 DB。
+ * 返回 name→desc_zh 的映射列表。
+ */
+export async function generateMcpDescriptions(
+  names: string[],
+  apiKey: string,
+  baseUrl: string,
+): Promise<DescriptionItem[]> {
+  return invoke("generate_mcp_descriptions", { names, apiKey, baseUrl });
+}
+
+export async function ensureItemDescriptions(
+  items: DescriptionItem[],
+  apiKey: string,
+  baseUrl: string,
+): Promise<DescriptionItem[]> {
+  return invoke("ensure_item_descriptions", { items, apiKey, baseUrl });
+}
+
 export async function revealInExplorer(path: string): Promise<void> {
   return invoke("reveal_in_explorer", { path });
 }

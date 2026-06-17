@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { readFileContent, writeFile, getClaudeDir, listDir } from "@/lib/tauri-bridge";
+import { readFileContent, writeFile, getClaudeDir, getWorkspaceRoot, listDir, ensureItemDescriptions, clearItemDescriptions, clearMcpDescriptions, generateMcpDescriptions, type DescriptionItem } from "@/lib/tauri-bridge";
 import { connectedMcpServers } from "@/composables/useStreamProcessor";
+import { useSettingsStore } from "@/stores/settings";
 import ModalShell from "./ModalShell.vue";
 
 const props = defineProps<{ open: boolean; initialTab?: string }>();
 const emit = defineEmits<{ close: []; sendSlash: [text: string] }>();
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
+const settingsStore = useSettingsStore();
 
 type Tab = "plugins" | "mcp" | "skills" | "agents" | "hooks" | "memory" | "permissions" | "styles";
 const tabs: { id: Tab }[] = [
@@ -65,19 +67,18 @@ async function saveEdit() {
 }
 
 // ── 各 Tab 数据 ──
-interface Item { name: string; detail?: string; path?: string; enabled?: boolean; _key?: string }
+interface Item { name: string; detail?: string; desc?: string | null; path?: string; enabled?: boolean; disabled?: boolean; _key?: string }
 type FlatItem = Item | { type: "group"; label: string };
 const items = ref<Item[]>([]);
-const treeItems = ref<FlatItem[]>([]); // Memory 专用的树形结构
-const collapsedGroups = ref<Set<string>>(new Set()); // 折叠的分组
-const settingsRaw = ref(""); // 缓存的 settings.json 原始内容
+const treeItems = ref<FlatItem[]>([]);
+const collapsedGroups = ref<Set<string>>(new Set());
+const settingsRaw = ref("");
 
 function toggleGroup(label: string) {
   if (collapsedGroups.value.has(label)) collapsedGroups.value.delete(label);
   else collapsedGroups.value.add(label);
 }
 
-// 计算每个 treeItem 是否显示（受父分组折叠状态影响）
 function isItemVisible(index: number): boolean {
   for (let j = index - 1; j >= 0; j--) {
     const prev = treeItems.value[j];
@@ -87,7 +88,6 @@ function isItemVisible(index: number): boolean {
   }
   return true;
 }
-// 确保响应式触发
 function itemVisibleKey(index: number): string {
   const g = findGroup(index);
   return g ? `${g}_${collapsedGroups.value.has(g)}` : "root";
@@ -110,7 +110,6 @@ async function loadJSON(key: string, transform: (data: any) => Item[]) {
   loading.value = false;
 }
 
-// 切换 settings.json 中 enabledPlugins 的某个插件
 async function togglePlugin(name: string) {
   try {
     const data = JSON.parse(settingsRaw.value);
@@ -125,7 +124,6 @@ async function togglePlugin(name: string) {
   } catch {}
 }
 
-// 删除插件：从 enabledPlugins 中移除
 async function removePlugin(name: string) {
   try {
     const data = JSON.parse(settingsRaw.value);
@@ -139,7 +137,6 @@ async function removePlugin(name: string) {
   } catch {}
 }
 
-// 新增插件：注入 /plugin install 到聊天输入框，用户补全插件名后发送
 function addPlugin() {
   emit("sendSlash", "/plugin install ");
   emit("close");
@@ -162,7 +159,6 @@ async function loadMemory() {
   loading.value = true; error.value = "";
   const result: FlatItem[] = [];
 
-  // ── 1. 全局级：~/.claude/CLAUDE.md, ~/.claude/MEMORY.md ──
   const globalFiles = [
     { path: `${claudeDir.value}/CLAUDE.md`, label: "CLAUDE.md (全局)" },
     { path: `${claudeDir.value}/MEMORY.md`, label: "MEMORY.md (全局索引)" },
@@ -170,7 +166,7 @@ async function loadMemory() {
   const globalItems: Item[] = [];
   for (const gf of globalFiles) {
     try {
-      await readFileContent(gf.path); // 验证可读
+      await readFileContent(gf.path);
       globalItems.push({ name: gf.label, path: gf.path });
     } catch {}
   }
@@ -179,7 +175,6 @@ async function loadMemory() {
     for (const it of globalItems) result.push(it);
   }
 
-  // ── 2. 项目级：~/.claude/projects/<slug>/memory/*.md ──
   try {
     const projectsDir = `${claudeDir.value}/projects`;
     const projectDirs = await listDir(projectsDir);
@@ -203,13 +198,10 @@ async function loadMemory() {
     }
   } catch {}
 
-  // ── 3. 本地级：工作区根目录的 CLAUDE.md ──
   try {
-    // 遍历项目目录，找到对应的工作区路径
     const pd = await listDir(`${claudeDir.value}/projects`);
     for (const d of pd) {
       if (!d.is_dir || !d.name.includes("cc-gui") || d.name.includes("src-tauri")) continue;
-      // 反向推导工作区路径并尝试读取 CLAUDE.md
       const candidates = [
         `H:/MaxNull/WorkStation/cc-gui/CLAUDE.md`,
       ];
@@ -229,50 +221,391 @@ async function loadMemory() {
   loading.value = false;
 }
 
+// ═══════════════════ MCP 管理 ═══════════════════
+
+// MCP 连接类型 → 中文标签映射
+function getMcpTypeLabel(rawType: string | undefined): string {
+  switch (rawType) {
+    case "stdio": return t('manage.mcpTypeStdio');
+    case "sse": return t('manage.mcpTypeSse');
+    case "http": return t('manage.mcpTypeHttp');
+    case "websocket": return t('manage.mcpTypeWs');
+    default: return t('manage.mcpTypeStdio'); // 默认 stdio
+  }
+}
+
+// 尝试从 SKILL.md / plugin.json 等文件中解析 description 字段
+function parseDescription(raw: string): string | null {
+  // YAML frontmatter: ---\ndescription: "..."
+  const m = raw.match(/^---\s*\n(.*?)\n---/s);
+  if (m) {
+    const fm = m[1];
+    const dm = fm.match(/^description:\s*(.+)$/m);
+    if (dm) {
+      // 去掉首尾引号
+      let desc = dm[1].trim();
+      if ((desc.startsWith('"') && desc.endsWith('"')) || (desc.startsWith("'") && desc.endsWith("'"))) {
+        desc = desc.slice(1, -1);
+      }
+      // 完整返回，不做截断；显示时用 CSS line-clamp
+      return desc;
+    }
+  }
+  // JSON: { "description": "..." }
+  try {
+    const json = JSON.parse(raw);
+    if (json.description && typeof json.description === "string") {
+      return json.description;
+    }
+  } catch {}
+  return null;
+}
+
+// 从 MCP 配置中提取 description 字段（如果有的话）。没有则返回 null，由 AI 生成补全。
+function extractMcpDesc(cfg: any): string | null {
+  if (cfg.description && typeof cfg.description === "string") return cfg.description;
+  return null;
+}
+
+function extractMcpServers(data: any): Record<string, any> {
+  if (data.mcpServers && typeof data.mcpServers === "object") return data.mcpServers;
+  const servers: Record<string, any> = {};
+  for (const [k, v] of Object.entries(data)) {
+    if (typeof v === "object" && v !== null && ("type" in v || "command" in v)) {
+      servers[k] = v;
+    }
+  }
+  return servers;
+}
+
+async function scanMcpFile(mcpPath: string, result: Item[], configured: Set<string>, sourceLabel: string) {
+  try {
+    const raw = await readFileContent(mcpPath);
+    const data = JSON.parse(raw);
+    const servers = extractMcpServers(data);
+
+    for (const [name, cfg] of Object.entries(servers)) {
+      if (configured.has(name)) continue;
+      configured.add(name);
+      const rawType = (cfg as any).type as string | undefined;
+      const typeLabel = getMcpTypeLabel(rawType);
+      result.push({
+        name,
+        detail: `${sourceLabel} · ${typeLabel}`,
+        desc: extractMcpDesc(cfg),
+        enabled: true,
+      });
+    }
+  } catch {}
+}
+
 async function loadMCP() {
   loading.value = true; error.value = "";
   const result: Item[] = [];
-  // 收集所有静态配置的 MCP 服务器
   const configured = new Set<string>();
-  const candidates = [`${claudeDir.value}/settings.json`];
-  for (const path of candidates) {
-    try {
-      const raw = await readFileContent(path);
-      const data = JSON.parse(raw);
-      const servers = data.mcpServers || {};
-      for (const [name, cfg] of Object.entries(servers)) {
-        configured.add(name);
-        result.push({ name, detail: (cfg as any).type || t('manage.mcpDetail'), enabled: true });
-      }
-    } catch {}
+
+  // 1) 静态 MCP 配置源
+  // ~/.claude.json = Claude Code 官方用户级 MCP 配置文件
+  // ~/.claude/settings.json 的 mcpServers 字段会被 CLI 静默忽略！
+  const homeDir = claudeDir.value.replace(/[\/\\]\.claude$/, '');
+  const configPaths: string[] = [
+    `${homeDir}/.claude.json`,           // 用户级 MCP 配置（← 主要的）
+    `${claudeDir.value}/.mcp.json`,      // 兼容旧版
+  ];
+  try {
+    const workspaceRoot = await getWorkspaceRoot();
+    if (workspaceRoot) configPaths.push(`${workspaceRoot}/.mcp.json`);
+  } catch {}
+
+  for (const path of configPaths) {
+    await scanMcpFile(path, result, configured, t('manage.mcpSourceUser'));
   }
-  // 标记运行时连接状态
+
+  // 2) 插件 .mcp.json 文件（只扫描已启用的插件）
+  let enabledPlugins: Record<string, boolean> = {};
+  try {
+    const raw = await readFileContent(`${claudeDir.value}/settings.json`);
+    const data = JSON.parse(raw);
+    enabledPlugins = data.enabledPlugins || {};
+  } catch {}
+
+  try {
+    const mpDir = `${claudeDir.value}/plugins/marketplaces`;
+    const mps = await listDir(mpDir);
+    for (const mp of mps) {
+      if (!mp.is_dir) continue;
+      for (const sub of ["external_plugins", "plugins"]) {
+        try {
+          const plugins = await listDir(`${mp.path}/${sub}`);
+          for (const plug of plugins) {
+            if (!plug.is_dir) continue;
+            // 只扫描已启用的插件
+            const key = `${plug.name}@${mp.name}`;
+            if (!enabledPlugins[key]) continue;
+            await scanMcpFile(
+              `${plug.path}/.mcp.json`, result, configured,
+              `${t('manage.mcpSourcePlugin')} · ${plug.name}`,
+            );
+          }
+        } catch {}
+      }
+    }
+  } catch {}
+
+  // 3) 读取禁用列表
+  const disabledSet = new Set<string>();
+  try {
+    const claudeRaw = await readFileContent(`${homeDir}/.claude.json`);
+    const claudeData = JSON.parse(claudeRaw);
+    let workspaceRoot = "";
+    try { workspaceRoot = await getWorkspaceRoot(); } catch {}
+    const proj = workspaceRoot ? claudeData?.projects?.[workspaceRoot] : null;
+    if (proj?.disabledMcpServers) {
+      for (const s of proj.disabledMcpServers) disabledSet.add(s);
+    }
+  } catch {}
+
+  // 4) 运行时连接状态 + 禁用标记
   const connected = new Set(connectedMcpServers.value);
   for (const it of result) {
-    it.enabled = connected.has(it.name); // enabled → 🟢 已连接
+    it.enabled = connected.has(it.name);
+    it.disabled = disabledSet.has(it.name);
   }
-  // 添加仅在运行时存在但未在静态配置中的 MCP 服务器
   for (const srv of connected) {
     if (!configured.has(srv)) {
-      result.push({ name: srv, detail: t('manage.mcpDiscovered'), enabled: true });
+      result.push({ name: srv, detail: t('manage.mcpSourceRuntime'), enabled: true, disabled: disabledSet.has(srv) });
     }
   }
+
   items.value = result;
   loading.value = false;
+}
+
+async function toggleMcp(name: string) {
+  const homeDir = claudeDir.value.replace(/[\/\\]\.claude$/, '');
+  const path = `${homeDir}/.claude.json`;
+  let workspaceRoot = "";
+  try { workspaceRoot = await getWorkspaceRoot(); } catch {}
+  if (!workspaceRoot) return;
+
+  try {
+    const raw = await readFileContent(path);
+    const data = JSON.parse(raw);
+    if (!data.projects) data.projects = {};
+    if (!data.projects[workspaceRoot]) data.projects[workspaceRoot] = {};
+    if (!data.projects[workspaceRoot].disabledMcpServers) data.projects[workspaceRoot].disabledMcpServers = [];
+
+    const list: string[] = data.projects[workspaceRoot].disabledMcpServers;
+    const idx = list.indexOf(name);
+    if (idx >= 0) {
+      list.splice(idx, 1); // 启用
+    } else {
+      list.push(name); // 禁用
+    }
+    await writeFile(path, JSON.stringify(data, null, 2));
+
+    // 更新 UI
+    const it = items.value.find(i => i.name === name);
+    if (it) it.disabled = idx < 0; // 原来是启用的→现在禁用
+  } catch (e) {
+    error.value = String(e);
+  }
+}
+
+// ═══════════════════ Skills 管理（含描述） ═══════════════════
+
+async function loadSkills() {
+  loading.value = true; error.value = "";
+  try {
+    const path = `${claudeDir.value}/skills`;
+    const dirs = await listDir(path);
+    const result: Item[] = [];
+    for (const d of dirs) {
+      if (!d.is_dir) continue;
+      let desc: string | null = null;
+      try {
+        const skillMd = await readFileContent(`${d.path}/SKILL.md`);
+        desc = parseDescription(skillMd);
+      } catch {}
+      result.push({ name: d.name, path: d.path, desc });
+    }
+    items.value = result;
+  } catch { items.value = []; }
+  loading.value = false;
+}
+
+// ═══════════════════ Plugins 管理（含描述） ═══════════════════
+
+async function loadPlugins() {
+  loading.value = true; error.value = "";
+  try {
+    const raw = await readFileContent(`${claudeDir.value}/settings.json`);
+    settingsRaw.value = raw;
+    const data = JSON.parse(raw);
+    const plugins = data.enabledPlugins || {};
+    const result: Item[] = [];
+
+    for (const [key, enabled] of Object.entries(plugins)) {
+      // 尝试从多个可能的路径读取 plugin.json 获取描述
+      let desc: string | null = null;
+      // key 格式: "name@marketplace" → 查找对应目录
+      const atIdx = key.lastIndexOf("@");
+      const plugName = atIdx > 0 ? key.slice(0, atIdx) : key;
+      const marketplace = atIdx > 0 ? key.slice(atIdx + 1) : "claude-plugins-official";
+
+      // 防路径穿越：只允许字母、数字、连字符、下划线、点号
+      const safeNameRE = /^[a-zA-Z0-9._-]+$/;
+      if (!safeNameRE.test(plugName) || !safeNameRE.test(marketplace)) {
+        result.push({ name: key, enabled: !!enabled, _key: key });
+        continue;
+      }
+
+      const candidateDirs = [
+        `${claudeDir.value}/plugins/marketplaces/${marketplace}/external_plugins/${plugName}`,
+        `${claudeDir.value}/plugins/marketplaces/${marketplace}/plugins/${plugName}`,
+      ];
+      for (const dir of candidateDirs) {
+        try {
+          const pjRaw = await readFileContent(`${dir}/.claude-plugin/plugin.json`);
+          desc = parseDescription(pjRaw);
+          if (desc) break;
+        } catch {}
+      }
+
+      result.push({
+        name: key,
+        desc,
+        enabled: !!enabled,
+        _key: key,
+      });
+    }
+    items.value = result;
+  } catch { items.value = []; }
+  loading.value = false;
+}
+
+// ═══════════════════ Agents 管理（含描述） ═══════════════════
+
+async function loadAgents() {
+  loading.value = true; error.value = "";
+  try {
+    const path = `${claudeDir.value}/agents`;
+    const files = await listDir(path);
+    const result: Item[] = [];
+    for (const f of files) {
+      if (!f.name.endsWith(".md")) continue;
+      let desc: string | null = null;
+      try {
+        const content = await readFileContent(f.path);
+        desc = parseDescription(content);
+      } catch {}
+      result.push({ name: f.name, path: f.path, desc });
+    }
+    items.value = result;
+  } catch { items.value = []; }
+  loading.value = false;
+}
+
+// ── 描述翻译（调 Rust → DB 缓存 + DeepSeek API）──
+const translateError = ref("");
+
+async function enrichDescriptions() {
+  translateError.value = "";
+  const needTranslate: DescriptionItem[] = [];
+  for (const it of items.value) {
+    if (it.desc) {
+      needTranslate.push({
+        item_type: activeTab.value,
+        name: it.name,
+        desc_en: it.desc,
+      });
+    }
+  }
+  if (needTranslate.length === 0) return;
+
+  try {
+    const enriched = await ensureItemDescriptions(
+      needTranslate,
+      settingsStore.apiKey,
+      settingsStore.baseUrl,
+    );
+    const map = new Map(enriched.map(e => [e.name, e]));
+    for (const it of items.value) {
+      const e = map.get(it.name);
+      if (e) {
+        it.desc = locale.value === "zh"
+          ? (e.desc_zh || e.desc_en)
+          : (e.desc_en || e.desc_zh);
+      }
+    }
+  } catch (err) {
+    translateError.value = String(err);
+  }
+}
+
+// ── MCP 描述生成（AI 联网查询）──
+async function enrichMcpDescriptions() {
+  const needQuery: string[] = [];
+  for (const it of items.value) {
+    if (!it.desc) needQuery.push(it.name);
+  }
+  if (needQuery.length === 0) return;
+
+  // 先设占位符，避免空白闪烁
+  for (const it of items.value) {
+    if (!it.desc) it.desc = "…";
+  }
+
+  translateError.value = "";
+  try {
+    const generated = await generateMcpDescriptions(
+      needQuery,
+      settingsStore.apiKey,
+      settingsStore.baseUrl,
+    );
+    const map = new Map(generated.map(e => [e.name, e.desc_zh]));
+    for (const it of items.value) {
+      const zh = map.get(it.name);
+      if (zh) {
+        it.desc = zh;
+      } else if (it.desc === "…") {
+        it.desc = null;
+      }
+    }
+  } catch (err) {
+    translateError.value = String(err);
+    for (const it of items.value) {
+      if (it.desc === "…") it.desc = null;
+    }
+  }
+}
+
+// 清空 MCP 描述缓存并重新生成
+async function retranslateMCP() {
+  translateError.value = "";
+  try { await clearMcpDescriptions(); } catch {}
+  for (const it of items.value) it.desc = null;
+  await enrichMcpDescriptions();
+}
+
+// 清空缓存并重新翻译
+async function retranslateAll() {
+  translateError.value = "";
+  try {
+    await clearItemDescriptions();
+  } catch {}
+  await enrichDescriptions();
 }
 
 // ── Tab 切换 ──
 function switchTab(t: Tab) {
   activeTab.value = t;
-  items.value = []; // 切换时清空旧数据
+  items.value = [];
   switch (t) {
-    case "plugins":
-      loadJSON("enabledPlugins", data =>
-        Object.entries(data.enabledPlugins || {}).map(([k, v]) => ({ name: k, enabled: !!v, _key: k }))
-      ); break;
-    case "mcp": loadMCP(); break;
-    case "skills": loadDir("skills", f => f.is_dir, f => ({ name: f.name, path: f.path })); break;
-    case "agents": loadDir("agents", f => f.name.endsWith(".md"), f => ({ name: f.name, path: f.path })); break;
+    case "plugins": loadPlugins().then(enrichDescriptions); break;
+    case "mcp": loadMCP().then(enrichDescriptions).then(enrichMcpDescriptions); break;
+    case "skills": loadSkills().then(enrichDescriptions); break;
+    case "agents": loadAgents().then(enrichDescriptions); break;
     case "hooks":
       loadJSON("hooks", data =>
         Object.entries(data.hooks || {}).map(([event, cfg]: [string, any]) => ({
@@ -286,7 +619,6 @@ function switchTab(t: Tab) {
         const p = data.permissions || {};
         const result: Item[] = [];
         if (p.defaultMode) result.push({ name: `defaultMode: ${p.defaultMode}`, enabled: true });
-        // 额外检查 .mcp.json 里的权限
         return result;
       }); break;
     case "styles":
@@ -301,8 +633,15 @@ function switchTab(t: Tab) {
 <template>
   <ModalShell :open="open" size="lg" @close="emit('close')">
     <template #header>
-      <span class="text-sm font-semibold" :style="{ color: 'var(--text-bright)' }">{{ $t('manage.title') }}</span>
-      <span class="text-[11px] font-mono ml-2" :style="{ color: 'var(--text-muted)' }">{{ claudeDir || $t('manage.loading') }}</span>
+      <div class="flex flex-col flex-1">
+        <div class="flex items-center gap-2">
+          <span class="text-sm font-semibold" :style="{ color: 'var(--text-bright)' }">{{ $t('manage.title') }}</span>
+          <span class="text-[11px] font-mono" :style="{ color: 'var(--text-muted)' }">{{ claudeDir || $t('manage.loading') }}</span>
+        </div>
+        <div class="flex flex-wrap gap-0.5 mt-1.5">
+          <button v-for="tab in tabs" :key="tab.id" @click="switchTab(tab.id)" class="px-2.5 py-1 rounded text-xs transition-colors" :style="{ background: activeTab === tab.id ? 'var(--accent-glow)' : 'transparent', color: activeTab === tab.id ? 'var(--accent)' : 'var(--text-muted)' }">{{ $t('manage.' + tab.id) }}</button>
+        </div>
+      </div>
     </template>
 
     <!-- 编辑器模式 -->
@@ -318,18 +657,12 @@ function switchTab(t: Tab) {
 
     <!-- 主视图 -->
     <template v-else>
-      <!-- Tab -->
-      <div class="flex flex-wrap gap-0.5 mb-3 -mt-1">
-        <button v-for="tab in tabs" :key="tab.id" @click="switchTab(tab.id)" class="px-2.5 py-1 rounded text-xs transition-colors" :style="{ background: activeTab === tab.id ? 'var(--accent-glow)' : 'transparent', color: activeTab === tab.id ? 'var(--accent)' : 'var(--text-muted)' }">{{ $t('manage.' + tab.id) }}</button>
-      </div>
-
       <div v-if="loading" class="text-xs py-4 text-center" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.loading') }}</div>
       <div v-else-if="error" class="text-xs py-4 text-center" :style="{ color: 'var(--coral)' }">{{ error }}</div>
 
-      <!-- Memory 树形列表 — 可折叠分组 + 缩进文件 -->
+      <!-- Memory 树形列表 -->
       <div v-else-if="activeTab === 'memory'" class="space-y-0">
         <template v-for="(it, i) in treeItems" :key="i">
-          <!-- 分组标题：可点击折叠 -->
           <div v-if="'type' in it && it.type === 'group'"
             @click="toggleGroup((it as any).label)"
             class="px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider select-none flex items-center gap-1.5 cursor-pointer hover:text-[var(--text-secondary)] transition-colors"
@@ -338,7 +671,6 @@ function switchTab(t: Tab) {
             <span class="text-[9px] w-3 text-center">{{ collapsedGroups.has((it as any).label) ? '▸' : '▾' }}</span>
             {{ (it as any).label }}
           </div>
-          <!-- 分组内文件 — 缩进，折叠时隐藏 -->
           <div v-else
             v-show="isItemVisible(i)"
             :key="itemVisibleKey(i)"
@@ -354,38 +686,63 @@ function switchTab(t: Tab) {
         <div v-if="treeItems.length === 0" class="text-xs py-4 text-center" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.noMemory') }}</div>
       </div>
 
-      <!-- 其他 Tab 平铺列表 -->
+      <!-- 其他 Tab：带描述的平铺列表 -->
       <div v-else class="space-y-0.5">
         <div v-for="it in items" :key="it.name"
-          class="flex items-center gap-2 px-3 py-1.5 rounded text-xs group"
+          class="px-3 py-2 rounded text-xs group"
           :style="{ color: it.enabled === false ? 'var(--text-muted)' : 'var(--text-secondary)' }"
         >
-          <span class="w-1.5 h-1.5 rounded-full shrink-0" :style="{ background: it.enabled === false ? 'var(--border-bright)' : it.enabled ? 'var(--accent)' : 'var(--border-default)' }"></span>
-          <span class="font-mono flex-1 truncate">{{ it.name }}</span>
-          <span v-if="it.detail" class="text-[10px] shrink-0" :style="{ color: 'var(--text-muted)' }">{{ it.detail }}</span>
-          <!-- Plugins 专用：启停开关 + 删除 -->
-          <template v-if="activeTab === 'plugins' && it._key">
-            <button @click="togglePlugin(it._key)"
-              class="text-[10px] px-2 py-0.5 rounded transition-colors shrink-0"
+          <div class="flex items-center gap-2">
+            <span class="w-1.5 h-1.5 rounded-full shrink-0"
               :style="{
-                background: it.enabled ? 'var(--accent-glow)' : 'var(--bg-hover)',
-                color: it.enabled ? 'var(--accent)' : 'var(--text-muted)',
+                background: activeTab === 'mcp'
+                  ? (it.disabled ? 'var(--coral)' : it.enabled ? 'var(--accent)' : 'var(--border-default)')
+                  : (it.enabled === false ? 'var(--border-bright)' : it.enabled ? 'var(--accent)' : 'var(--border-default)')
               }"
-            >{{ it.enabled ? $t('manage.disable') : $t('manage.enable') }}</button>
-            <button @click="removePlugin(it._key!)"
-              class="text-[10px] px-1.5 py-0.5 rounded hover:bg-[var(--bg-hover)] transition-colors shrink-0 opacity-0 group-hover:opacity-100"
-              :style="{ color: 'var(--coral)' }"
-              :title="$t('manage.deletePlugin')"
-            >✕</button>
-          </template>
-          <button v-if="it.path && activeTab !== 'skills' && activeTab !== 'plugins'" @click="openEditor(it.path)" class="text-[10px] px-1.5 py-0.5 rounded hover:bg-[var(--bg-hover)] opacity-0 group-hover:opacity-100 transition-opacity shrink-0" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.edit') }}</button>
-          <button v-if="it.path && activeTab === 'skills'" @click="openEditor(it.path + '/SKILL.md')" class="text-[10px] px-1.5 py-0.5 rounded hover:bg-[var(--bg-hover)] opacity-0 group-hover:opacity-100 transition-opacity shrink-0" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.view') }}</button>
+            ></span>
+            <span class="font-mono flex-1 truncate">{{ it.name }}</span>
+            <span v-if="it.detail" class="text-[10px] shrink-0" :style="{ color: 'var(--text-muted)' }">{{ it.detail }}</span>
+            <!-- MCP 状态标签 + 开关 -->
+            <template v-if="activeTab === 'mcp'">
+              <span class="text-[10px] shrink-0" :style="{ color: it.disabled ? 'var(--coral)' : it.enabled ? 'var(--accent)' : 'var(--text-muted)' }">
+                {{ it.disabled ? $t('manage.mcpDisabled') : it.enabled ? $t('manage.mcpConnected') : $t('manage.mcpOffline') }}
+              </span>
+              <button @click="toggleMcp(it.name)"
+                class="text-[10px] px-2 py-0.5 rounded transition-colors shrink-0"
+                :style="{ background: it.disabled ? 'var(--accent-glow)' : 'var(--coral-glow)', color: it.disabled ? 'var(--accent)' : 'var(--coral)' }"
+              >{{ it.disabled ? $t('manage.mcpToggleEnable') : $t('manage.mcpToggleDisable') }}</button>
+            </template>
+            <template v-if="activeTab === 'plugins' && it._key">
+              <button @click="togglePlugin(it._key)"
+                class="text-[10px] px-2 py-0.5 rounded transition-colors shrink-0"
+                :style="{ background: it.enabled ? 'var(--accent-glow)' : 'var(--bg-hover)', color: it.enabled ? 'var(--accent)' : 'var(--text-muted)' }"
+              >{{ it.enabled ? $t('manage.disable') : $t('manage.enable') }}</button>
+              <button @click="removePlugin(it._key!)"
+                class="text-[10px] px-1.5 py-0.5 rounded hover:bg-[var(--bg-hover)] transition-colors shrink-0 opacity-0 group-hover:opacity-100"
+                :style="{ color: 'var(--coral)' }" :title="$t('manage.deletePlugin')"
+              >✕</button>
+            </template>
+            <button v-if="it.path && activeTab !== 'skills' && activeTab !== 'plugins' && activeTab !== 'mcp'" @click="openEditor(it.path)" class="text-[10px] px-1.5 py-0.5 rounded hover:bg-[var(--bg-hover)] opacity-0 group-hover:opacity-100 transition-opacity shrink-0" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.edit') }}</button>
+            <button v-if="it.path && (activeTab === 'skills' || activeTab === 'agents')" @click="openEditor(it.path + (activeTab === 'skills' ? '/SKILL.md' : ''))" class="text-[10px] px-1.5 py-0.5 rounded hover:bg-[var(--bg-hover)] opacity-0 group-hover:opacity-100 transition-opacity shrink-0" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.view') }}</button>
+          </div>
+          <div v-if="it.desc" class="text-[10px] mt-1 leading-relaxed pl-5 line-clamp-2" :style="{ color: 'var(--text-muted)' }" :title="it.desc">{{ it.desc }}</div>
         </div>
         <div v-if="items.length === 0 && activeTab !== 'plugins'" class="text-xs py-4 text-center" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.noData') }}</div>
-        <!-- Plugins 底部：添加按钮 -->
-        <div v-if="activeTab === 'plugins'" class="pt-2">
-          <button @click="addPlugin" class="w-full text-xs px-3 py-1.5 rounded border border-dashed transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-muted)', borderColor: 'var(--border-dim)' }">{{ $t('manage.addPlugin') }}</button>
-        </div>
+      </div>
+    </template>
+
+    <template #footer>
+      <div v-if="translateError" class="text-[10px] mb-1.5" :style="{ color: 'var(--coral)' }">{{ $t('manage.translateError') }}: {{ translateError }}</div>
+      <div v-if="activeTab === 'plugins'" class="text-[10px] leading-relaxed" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.pluginsDesc') }}</div>
+      <div v-if="activeTab === 'mcp'" class="text-[10px] leading-relaxed" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.mcpDesc') }}</div>
+      <div v-if="activeTab === 'mcp'" class="pt-2">
+        <button @click="retranslateMCP" class="w-full text-xs px-3 py-1.5 rounded border border-dashed transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-muted)', borderColor: 'var(--border-dim)' }">{{ $t('manage.retranslate') }}</button>
+      </div>
+      <div v-if="activeTab === 'skills'" class="text-[10px] leading-relaxed" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.skillsDesc') }}</div>
+      <div v-if="activeTab === 'agents'" class="text-[10px] leading-relaxed" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.agentsDesc') }}</div>
+      <div v-if="activeTab === 'styles'" class="text-[10px] leading-relaxed" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.stylesDesc') }}</div>
+      <div v-if="activeTab === 'plugins'" class="pt-2">
+        <button @click="addPlugin" class="w-full text-xs px-3 py-1.5 rounded border border-dashed transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-muted)', borderColor: 'var(--border-dim)' }">{{ $t('manage.addPlugin') }}</button>
       </div>
     </template>
   </ModalShell>

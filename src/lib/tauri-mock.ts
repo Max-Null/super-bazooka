@@ -72,6 +72,26 @@ export async function listen<T>(
   };
 }
 
+// Default mocks for Tauri commands that have no registered handler
+if (typeof window !== "undefined") {
+  mockInvokeHandlers.set("get_claude_settings", () => ({
+    api_key: "",
+    base_url: "https://api.deepseek.com",
+    model: "deepseek-v4-pro[1M]",
+    effort: "high",
+    permission_mode: "default",
+  }));
+  mockInvokeHandlers.set("set_claude_settings", () => undefined);
+  mockInvokeHandlers.set("clear_item_descriptions", () => undefined);
+  mockInvokeHandlers.set("ensure_item_descriptions", (args: any) => {
+    // Return items unchanged (no translation in mock)
+    return (args.items || []).map((it: any) => ({
+      ...it,
+      desc_zh: null,
+    }));
+  });
+}
+
 // Window.__TAURI__ mock (for any Tauri internals)
 if (typeof window !== "undefined") {
   (window as unknown as Record<string, unknown>).__TAURI__ = {
