@@ -18,6 +18,7 @@ use tokio::process::{ChildStdin, Command};
 use tokio::sync::{oneshot, Mutex, Notify};
 
 use crate::protocol::StreamLine;
+use crate::session::SessionManager;
 
 // ── Data Structures ──
 
@@ -248,6 +249,7 @@ pub async fn spawn_claude_session(
     params: SpawnParams,
     app_handle: tauri::AppHandle,
     stdin_manager: Arc<Mutex<StdinManager>>,
+    session_manager: Arc<Mutex<SessionManager>>,
 ) -> Result<Arc<Mutex<ManagedProcess>>, String> {
     let claude_path =
         find_claude().unwrap_or_else(|| "claude".to_string());
@@ -386,18 +388,30 @@ pub async fn spawn_claude_session(
     let exit_notify_waiter = exit_notify.clone();
     let sid_waiter = session_id.clone();
     let app_waiter = app_handle.clone();
+    let session_mgr = session_manager.clone();
 
     tokio::spawn(async move {
         let mut child = child; // take ownership
 
         tokio::select! {
             status = child.wait() => {
+                let exit_code = status.as_ref().ok().and_then(|s| s.code());
+                let success = status.map(|s| s.success()).unwrap_or(false);
                 let ev = ProcessExitedEvent {
                     session_id: sid_waiter.clone(),
-                    exit_code: status.as_ref().ok().and_then(|s| s.code()),
-                    success: status.map(|s| s.success()).unwrap_or(false),
+                    exit_code,
+                    success,
                 };
                 let _ = app_waiter.emit("process-exited", &ev);
+
+                let new_status = if success { "completed" } else { "error" };
+                let mgr = session_mgr.lock().await;
+                if let Err(e) = mgr.set_session_status(&sid_waiter, new_status) {
+                    eprintln!(
+                        "[cc-gui] Failed to update session status for {} -> {}: {}",
+                        sid_waiter, new_status, e
+                    );
+                }
             }
             _ = kill_rx => {
                 // Graceful kill attempt
@@ -439,7 +453,7 @@ pub async fn spawn_claude_session(
                     );
                 }
 
-                let frontend_event = parsed.to_frontend_event();
+                let frontend_event = parsed.to_frontend_event(&sid_reader);
                 let _ = app_reader.emit("stream-event", &frontend_event);
             } else {
                 let _ = app_reader.emit(

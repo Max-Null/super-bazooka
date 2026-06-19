@@ -4,7 +4,16 @@ import { useChatStore } from "@/stores/chat";
 import { useSessionStore } from "@/stores/session";
 import { useDebugLog } from "@/composables/useDebugLog";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { sendMessage, sendStdin, getAutoModeStatus, stopSession, listMessages, writeFile } from "@/lib/tauri-bridge";
+import {
+  sendMessage,
+  sendStdin,
+  getAutoModeStatus,
+  stopSession,
+  listMessages,
+  writeFile,
+  updateMessageContent,
+  deleteMessagesAfter,
+} from "@/lib/tauri-bridge";
 import { useFilePreview } from "@/composables/useFilePreview";
 import { useSettingsStore } from "@/stores/settings";
 import ErrorBoundary from "@/components/shared/ErrorBoundary.vue";
@@ -279,11 +288,33 @@ async function handleDeny() {
 
 // ── Edit + Resend: truncate subsequent messages, update content, resend ──
 async function handleEditSave(id: string, newContent: string) {
-  // Update the message content
+  const originalMsg = chat.messages.find(m => m.id === id);
+  const sid = session.activeSessionId;
+  if (!sid) return;
+
   chat.updateMessage(id, newContent);
-  // Remove all messages after the edited one (they were responses to the old text)
+
+  const persistContent = originalMsg?.attachments?.length
+    ? JSON.stringify({ text: newContent, attachments: originalMsg.attachments })
+    : newContent;
+
+  try {
+    await updateMessageContent(id, sid, persistContent);
+    await deleteMessagesAfter(id, sid);
+  } catch (e) {
+    console.error("Failed to persist edit:", e);
+  }
+
   chat.truncateAfterMessage(id);
-  // Resend the edited message
+
+  // 恢复原始附件到文件列表，使 CLI 重新获得 --add-dir 权限
+  if (originalMsg?.attachments?.length) {
+    attachedFiles.value = originalMsg.attachments.map(a => ({
+      name: a.name,
+      path: a.path,
+    }));
+  }
+
   await handleSend(newContent);
 }
 

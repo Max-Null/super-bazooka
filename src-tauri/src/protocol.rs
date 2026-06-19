@@ -140,7 +140,7 @@ impl StreamLine {
         servers.into_iter().collect()
     }
 
-    pub fn to_frontend_event(&self) -> StreamFrontendEvent {
+    pub fn to_frontend_event(&self, session_id: &str) -> StreamFrontendEvent {
         let event_type = self.inner["type"].as_str().unwrap_or("unknown");
 
         match event_type {
@@ -155,6 +155,7 @@ impl StreamLine {
                                 let text = delta["text"].as_str().unwrap_or("");
                                 StreamFrontendEvent {
                                     event_type: "assistant".to_string(),
+                                    session_id: session_id.to_string(),
                                     text: text.to_string(),
                                     thinking: String::new(),
                                     tool_use: None,
@@ -168,6 +169,7 @@ impl StreamLine {
                                 let _json = delta["partial_json"].as_str().unwrap_or("");
                                 StreamFrontendEvent {
                                     event_type: "tool_input_delta".to_string(),
+                                    session_id: session_id.to_string(),
                                     text: String::new(),
                                     thinking: String::new(),
                                     tool_use: None,
@@ -177,7 +179,7 @@ impl StreamLine {
                                     duration_ms: None, input_tokens: None, output_tokens: None, cost_usd: None,
                                 }
                             }
-                            _ => StreamFrontendEvent::empty(event_type),
+                            _ => StreamFrontendEvent::empty(event_type, session_id),
                         }
                     }
                     Some("content_block_start") => {
@@ -192,15 +194,16 @@ impl StreamLine {
                                     "name": block["name"],
                                 })]),
                                 control_request: None,
+                                session_id: session_id.to_string(),
                                 is_final: false,
                                 error: None,
                                 duration_ms: None, input_tokens: None, output_tokens: None, cost_usd: None,
                             }
                         } else {
-                            StreamFrontendEvent::empty(event_type)
+                            StreamFrontendEvent::empty(event_type, session_id)
                         }
                     }
-                    _ => StreamFrontendEvent::empty(event_type),
+                    _ => StreamFrontendEvent::empty(event_type, session_id),
                 }
             }
             "assistant" => {
@@ -246,6 +249,7 @@ impl StreamLine {
 
                 StreamFrontendEvent {
                     event_type: "assistant".to_string(),
+                    session_id: session_id.to_string(),
                     text: texts.join(""),
                     thinking: thinkings.join(""),
                     tool_use: if tool_uses.is_empty() {
@@ -268,6 +272,7 @@ impl StreamLine {
                 let usage = &self.inner["usage"];
                 StreamFrontendEvent {
                     event_type: "result".to_string(),
+                    session_id: session_id.to_string(),
                     text: String::new(),
                     thinking: String::new(),
                     tool_use: None,
@@ -293,6 +298,7 @@ impl StreamLine {
 
                 StreamFrontendEvent {
                     event_type: "control_request".to_string(),
+                    session_id: session_id.to_string(),
                     text: String::new(),
                     thinking: String::new(),
                     tool_use: None,
@@ -307,6 +313,7 @@ impl StreamLine {
             }
             _ => StreamFrontendEvent {
                 event_type: event_type.to_string(),
+                session_id: session_id.to_string(),
                 text: String::new(),
                 thinking: String::new(),
                 tool_use: None,
@@ -331,9 +338,10 @@ pub struct ControlRequest {
 }
 
 impl StreamFrontendEvent {
-    fn empty(event_type: &str) -> Self {
+    fn empty(event_type: &str, session_id: &str) -> Self {
         StreamFrontendEvent {
             event_type: event_type.to_string(),
+            session_id: session_id.to_string(),
             text: String::new(),
             thinking: String::new(),
             tool_use: None,
@@ -351,6 +359,7 @@ impl StreamFrontendEvent {
 pub struct StreamFrontendEvent {
     #[serde(rename = "type")]
     pub event_type: String,
+    pub session_id: String,
     pub text: String,
     pub thinking: String,
     pub tool_use: Option<Vec<Value>>,

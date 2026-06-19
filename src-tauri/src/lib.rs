@@ -66,6 +66,8 @@ async fn send_message(
     file_paths: Option<Vec<String>>,
     app_handle: tauri::AppHandle,
 ) -> Result<String, String> {
+    let file_paths = file_paths.unwrap_or_default();
+
     // Look up claude session UUID for resume + CWD + model
     let (resume_id, cwd, session_model) = {
         let session = state.session_manager.lock().await;
@@ -87,8 +89,32 @@ async fn send_message(
     {
         let session = state.session_manager.lock().await;
         let msg_id = format!("{}-u", chrono_now());
-        let _ = session.save_message(&msg_id, &session_id, "user", &message, "{}");
-        let _ = session.auto_title_from_first_message(&session_id, &message);
+        let content = if file_paths.is_empty() {
+            message.clone()
+        } else {
+            let attachments: Vec<serde_json::Value> = file_paths
+                .iter()
+                .map(|p| {
+                    let name = std::path::Path::new(p)
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_else(|| p.clone());
+                    serde_json::json!({ "name": name, "path": p })
+                })
+                .collect();
+            serde_json::json!({
+                "text": message,
+                "attachments": attachments,
+            })
+            .to_string()
+        };
+        let title_text = serde_json::from_str::<serde_json::Value>(&content)
+            .ok()
+            .and_then(|v| v["text"].as_str().map(|s| s.to_string()))
+            .unwrap_or_else(|| message.clone());
+
+        let _ = session.save_message(&msg_id, &session_id, "user", &content, "{}");
+        let _ = session.auto_title_from_first_message(&session_id, &title_text);
     }
 
     // Spawn claude using the three-thread model
@@ -105,11 +131,12 @@ async fn send_message(
         ultracode,
         cwd,
         model: spawn_model,
-        file_paths: file_paths.unwrap_or_default(),
+        file_paths,
     };
 
     let stdin_mgr = state.stdin_manager.clone();
-    let managed = spawn_claude_session(params, app_handle, stdin_mgr)
+    let session_mgr = state.session_manager.clone();
+    let managed = spawn_claude_session(params, app_handle, stdin_mgr, session_mgr)
         .await
         .map_err(|e| format!("Failed: {}", e))?;
 
@@ -256,6 +283,27 @@ async fn save_message(
 ) -> Result<(), String> {
     let session = state.session_manager.lock().await;
     session.save_message(&id, &session_id, &role, &content, &token_usage.unwrap_or_default())
+}
+
+#[tauri::command]
+async fn update_message_content(
+    state: State<'_, AppState>,
+    message_id: String,
+    session_id: String,
+    content: String,
+) -> Result<(), String> {
+    let session = state.session_manager.lock().await;
+    session.update_message_content(&message_id, &session_id, &content)
+}
+
+#[tauri::command]
+async fn delete_messages_after(
+    state: State<'_, AppState>,
+    message_id: String,
+    session_id: String,
+) -> Result<u32, String> {
+    let session = state.session_manager.lock().await;
+    session.delete_messages_after(&message_id, &session_id)
 }
 
 #[tauri::command]
@@ -825,6 +873,8 @@ pub fn run() {
             remove_approved_scenario,
             list_approved_scenarios,
             save_message,
+            update_message_content,
+            delete_messages_after,
             list_messages,
             list_dir,
             read_file_content,

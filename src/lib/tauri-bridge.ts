@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 export interface StreamEvent {
   type: string;
+  session_id?: string;
   text: string;
   thinking: string;
   tool_use?: Array<{
@@ -169,6 +170,21 @@ export async function saveMessage(
   tokenUsage?: string,
 ): Promise<void> {
   return invoke("save_message", { id, sessionId, role, content, tokenUsage: tokenUsage || "{}" });
+}
+
+export async function updateMessageContent(
+  messageId: string,
+  sessionId: string,
+  content: string,
+): Promise<void> {
+  return invoke("update_message_content", { messageId, sessionId, content });
+}
+
+export async function deleteMessagesAfter(
+  messageId: string,
+  sessionId: string,
+): Promise<number> {
+  return invoke("delete_messages_after", { messageId, sessionId });
 }
 
 // ── File operations ──

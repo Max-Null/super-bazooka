@@ -230,7 +230,7 @@ export const useChatStore = defineStore("chat", () => {
             inputTokens = parsed.inputTokens;
             outputTokens = parsed.outputTokens;
             costUSD = parsed.costUSD;
-          } else if (rec.role === "user") {
+          } else if (rec.role === "user" && Array.isArray(parsed.attachments)) {
             textContent = parsed.text || "";
             attachments = parsed.attachments;
           }

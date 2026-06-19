@@ -146,6 +146,33 @@ describe("chat store", () => {
     expect(chat.messages[0].content).toBe("Hello");
   });
 
+  it("loadMessages parses user attachment JSON only when attachments exist", () => {
+    const chat = useChatStore();
+    chat.loadMessages([
+      {
+        id: "u1",
+        role: "user",
+        content: JSON.stringify({
+          text: "Hello",
+          attachments: [{ name: "foo.txt", path: "C:/tmp/foo.txt" }],
+        }),
+        created_at: "2026-01-01T00:00:00",
+      },
+    ]);
+    expect(chat.messages[0].content).toBe("Hello");
+    expect(chat.messages[0].attachments).toEqual([{ name: "foo.txt", path: "C:/tmp/foo.txt" }]);
+  });
+
+  it("loadMessages keeps raw user JSON text when it is not attachment metadata", () => {
+    const chat = useChatStore();
+    const raw = "{\"text\":\"hello\"}";
+    chat.loadMessages([
+      { id: "u1", role: "user", content: raw, created_at: "2026-01-01T00:00:00" },
+    ]);
+    expect(chat.messages[0].content).toBe(raw);
+    expect(chat.messages[0].attachments).toBeUndefined();
+  });
+
   it("loadMessages parses assistant JSON content", () => {
     const chat = useChatStore();
     chat.loadMessages([

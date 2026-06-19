@@ -95,6 +95,7 @@ export function useStreamProcessor() {
         case "done": {
           const msg = chat.currentAssistantMsg;
           if (msg) {
+            const targetSessionId = data.session_id || session.activeSessionId;
             // Save full message as JSON blob: content + thinking + toolUses + stats
             const fullContent = JSON.stringify({
               text: msg.content,
@@ -105,7 +106,7 @@ export function useStreamProcessor() {
               outputTokens: data.output_tokens,
               costUSD: data.cost_usd,
             });
-            saveMessage(msg.id, session.activeSessionId, "assistant", fullContent, "{}").catch(() => {});
+            saveMessage(msg.id, targetSessionId, "assistant", fullContent, "{}").catch(() => {});
           }
           chat.finishAssistantMessage(
             data.duration_ms,

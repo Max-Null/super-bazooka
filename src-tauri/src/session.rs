@@ -204,8 +204,12 @@ impl SessionManager {
 
     /// Auto-title: take first user message (first 50 chars) if title is still default.
     pub fn auto_title_from_first_message(&self, id: &str, message: &str) -> Result<(), String> {
-        let title: String = message.chars().take(50).collect();
-        let title = if message.chars().count() > 50 {
+        let text = serde_json::from_str::<serde_json::Value>(message)
+            .ok()
+            .and_then(|v| v["text"].as_str().map(|s| s.to_string()))
+            .unwrap_or_else(|| message.to_string());
+        let title: String = text.chars().take(50).collect();
+        let title = if text.chars().count() > 50 {
             format!("{}…", title)
         } else {
             title
@@ -217,6 +221,53 @@ impl SessionManager {
         )
         .map_err(|e| format!("DB auto title: {}", e))?;
         Ok(())
+    }
+
+    pub fn update_message_content(
+        &self,
+        id: &str,
+        session_id: &str,
+        content: &str,
+    ) -> Result<(), String> {
+        let conn = self.db.conn.lock().map_err(|e| format!("DB lock: {}", e))?;
+        conn.execute(
+            "UPDATE messages SET content = ?1 WHERE id = ?2 AND session_id = ?3",
+            params![content, id, session_id],
+        )
+        .map_err(|e| format!("DB update message: {}", e))?;
+        conn.execute(
+            "UPDATE sessions SET updated_at = datetime('now') WHERE id = ?1",
+            params![session_id],
+        )
+        .map_err(|e| format!("DB touch session after update: {}", e))?;
+        Ok(())
+    }
+
+    pub fn delete_messages_after(&self, id: &str, session_id: &str) -> Result<u32, String> {
+        let conn = self.db.conn.lock().map_err(|e| format!("DB lock: {}", e))?;
+        let target_rowid: i64 = conn
+            .query_row(
+                "SELECT rowid FROM messages WHERE id = ?1 AND session_id = ?2",
+                params![id, session_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| format!("Message not found: {} ({})", id, e))?;
+
+        let count = conn
+            .execute(
+                "DELETE FROM messages WHERE session_id = ?1 AND rowid > ?2",
+                params![session_id, target_rowid],
+            )
+            .map_err(|e| format!("DB delete messages after: {}", e))?;
+        conn.execute(
+            "UPDATE sessions
+             SET updated_at = datetime('now'),
+                 message_count = (SELECT COUNT(*) FROM messages WHERE session_id = ?1)
+             WHERE id = ?1",
+            params![session_id],
+        )
+        .map_err(|e| format!("DB touch session after delete: {}", e))?;
+        Ok(count as u32)
     }
 
     /// Update session status (idle / running / completed / error).
