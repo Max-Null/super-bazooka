@@ -34,7 +34,9 @@ cc-gui/
 │   │   └── db.rs              # SQLite 初始化与迁移
 │   └── tests/                 # Rust 集成测试
 ├── e2e/                       # Playwright E2E 测试 (12个用例)
-├── docs/                      # 分析文档
+├── docs/                      # 项目文档（文件名用中文）
+│   ├── 知识/                  # 自举指南、架构穿透等参考文档
+│   └── 计划/                  # 实施计划
 └── scripts/                   # 构建/测试辅助脚本
 ```
 
@@ -157,7 +159,7 @@ npm run test:quick        # 快速测试（vitest + rust，跳过 e2e）
 
 ## 🔵 UI 风格一致性：写 UI 前先看同类界面
 
-> 类比"禁止手搓轮子"的 UI 版本。
+> 类比"禁止手搓轮子"的 UI 版本。一致性是一种审美——优秀的 UI 不是每个组件独自漂亮，而是整体像一个团队做的。
 
 ### 写任何 UI 前，必须执行以下检查：
 
@@ -221,6 +223,7 @@ npm run test:quick        # 快速测试（vitest + rust，跳过 e2e）
 - **禁止 unsafe**: 除非有明确的 Windows 平台兼容需求
 
 ### 4. 项目特定约定
+- **文档文件名用中文**：`docs/` 下新增的文件一律用中文命名（如 `架构穿透文档.md`），不用英文
 - **会话管理**: 前端 ourId (UUID v4) ↔ 后端 claude_session_id (CLI 返回)，映射关系存储在 `sessions.cli_session_id`
 - **NDJSON 协议**: 遵守 Claude Code CLI 的 stream-json 输出格式，始终使用 `--include-partial-messages` 获取增量 token
 - **权限模式映射**: `auto` → 写 settings.json `permissions.defaultMode`；其他 → CLI `--permission-mode` 标志
@@ -253,3 +256,9 @@ npm run test:quick        # 快速测试（vitest + rust，跳过 e2e）
 16. **OpenAI 兼容端点 URL 规范化**: 所有调 `/v1/chat/completions`（翻译、描述生成、连接测试）的地方必须先 `trim_end_matches("/anthropic").trim_end_matches("/v1")` 再拼接 URL。因为用户可能配置 `ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic`（Anthropic 格式），直接拼 `/v1/chat/completions` 会 404。Rust 端统一用 `fn openai_base(base_url)` 处理。
 17. **翻译和描述生成模型**: 翻译、MCP 描述生成等轻量 API 调用使用 `CLAUDE_CODE_SUBAGENT_MODEL` 环境变量（fallback `deepseek-chat`），不要硬编码模型名。Rust 端统一用 `fn subagent_model()` 读取。
 18. **ModalShell 三段式布局**: header（`#header` 插槽 + 关闭按钮）/ body（default slot，`overflow-y-auto`）/ footer（`#footer` 插槽，`v-if="$slots.footer"`）。子组件用插槽填充各段，不要自己在 default slot 里造 flex 三段式。
+19. **Skills/Agents 管理多源扫描**: `loadSkills()` 和 `loadAgents()` 同时扫描自定义目录（`~/.claude/skills/` / `agents/`）和已启用插件的缓存目录（`~/.claude/plugins/cache/<mkt>/<plug>/<ver>/`），按来源分组显示。Skills 点击直接执行（`/skill-name`）而非打开编辑。
+20. **Agent 使用状态追踪**: chat store 维护 `usedAgents: Set<string>`，`addToolUse()` 检测 Agent/Task 工具调用并提取 `subagent_type`。ManagePanel 的 Agent Tab 根据 Set 标记绿点（用过）或灰点（未用），用过的排前面。`clearMessages()` 时重置。
+21. **Hook 管理 schema 适配**: ManagePanel 的 Hooks Tab 适配 CC 新版 Hook schema（`事件 → [matcher → {hooks: [{type, command}]}]`），不再假设扁平结构。
+22. **SessionStart Hook 行为规则注入**: 全局 CLAUDE.md 的行为规则移至 `~/.claude/hooks/behavioral-rules.md`，由 PowerShell 脚本在 SessionStart 时注入。Hook 注入无 "may not be relevant" 免责，CLAUDE.md 保留骨架版用于 `/compact` 后存活。
+23. **Ponytail 精简模式 GUI**: 工具栏新增 Ponytail 下拉（同权限/深度样式），选中直接发送 `/ponytail <mode>`。Setting 面板同思考深度样式下拉设默认值。状态持久化到 localStorage。
+24. **字号设置**: 支持小/中/大（14/18/22px），通过 `data-font-size` 属性 + `html { font-size }` CSS 实现全局 rem 缩放。ModalShell 宽度用 rem 适配。ManagePanel 内 `text-[*px]` 全部转为 `text-[*rem]` 以跟随字号。
