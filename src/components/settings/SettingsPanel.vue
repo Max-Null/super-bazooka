@@ -1,7 +1,7 @@
 ﻿<script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
-import { useSettingsStore } from "@/stores/settings";
+import { useSettingsStore, type PonytailMode } from "@/stores/settings";
 import { connectLLM, readFileContent, writeFile, getClaudeDir } from "@/lib/tauri-bridge";
 import ErrorBoundary from "@/components/shared/ErrorBoundary.vue";
 import ModalShell from "@/components/shared/ModalShell.vue";
@@ -32,7 +32,7 @@ const activeMode = computed({
 });
 
 // ── 自定义下拉 ──
-type DropdownKind = "lang" | "theme" | "perm" | "effort" | "model";
+type DropdownKind = "lang" | "theme" | "font" | "ponytail" | "perm" | "effort" | "model";
 const openDropdown = ref<DropdownKind | null>(null);
 function toggleDropdown(k: DropdownKind) {
   openDropdown.value = openDropdown.value === k ? null : k;
@@ -81,6 +81,20 @@ const themeOptions: SimpleOption<"dark" | "light" | "system">[] = [
 ];
 const currentLang = computed(() => langOptions.find(o => o.value === settings.locale)!);
 const currentTheme = computed(() => themeOptions.find(o => o.value === settings.theme)!);
+const fontSizeOptions: SimpleOption<"small" | "medium" | "large">[] = [
+  { value: "small", labelKey: "settings.fontSizeSmall" },
+  { value: "medium", labelKey: "settings.fontSizeMedium" },
+  { value: "large", labelKey: "settings.fontSizeLarge" },
+];
+const currentFontSize = computed(() => fontSizeOptions.find(o => o.value === settings.fontSize)!);
+interface PonytailOption { value: PonytailMode; icon: string; cliKey: string; labelKey: string; color: string }
+const ponytailOptions: PonytailOption[] = [
+  { value: "off",   icon: "⬜", cliKey: "off",   color: "#6b7280", labelKey: "settings.ponytailOff" },
+  { value: "lite",  icon: "🌱", cliKey: "lite",  color: "#22c55e", labelKey: "settings.ponytailLite" },
+  { value: "full",  icon: "🎯", cliKey: "full",  color: "#f59e0b", labelKey: "settings.ponytailFull" },
+  { value: "ultra", icon: "🔥", cliKey: "ultra", color: "#ef4444", labelKey: "settings.ponytailUltra" },
+];
+const currentPonytail = computed(() => ponytailOptions.find(o => o.value === settings.ponytailMode)!);
 
 // ── 连接测试 ──
 const testResult = ref<string | null>(null);
@@ -313,6 +327,83 @@ async function saveSettingsJson() {
                     class="w-full text-left px-3 py-2 text-sm transition-colors hover:bg-[var(--bg-hover)]"
                     :style="{ background: settings.theme === o.value ? 'var(--accent-glow)' : 'transparent', color: settings.theme === o.value ? 'var(--accent)' : 'var(--text-primary)' }"
                   >{{ $t(o.labelKey) }}</button>
+                </div>
+              </Transition>
+            </div>
+          </div>
+
+          <!-- 字号 -->
+          <div>
+            <label class="block text-xs font-medium mb-1.5" style="color:var(--text-muted)">{{ $t('settings.fontSize') }}</label>
+            <div
+              class="settings-dropdown relative cursor-pointer rounded-lg px-3.5 py-2 text-sm flex items-center gap-1.5 select-none transition-colors"
+              :style="{
+                background: 'var(--bg-elevated)',
+                border: openDropdown === 'font' ? '1px solid var(--accent)' : '1px solid var(--border-default)'
+              }"
+              @click.stop="toggleDropdown('font')"
+            >
+              <span class="font-medium truncate flex-1">{{ $t(currentFontSize.labelKey) }}</span>
+              <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
+                :style="{ opacity: 0.4, transition: 'transform 150ms', transform: openDropdown === 'font' ? 'rotate(180deg)' : '' }">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+              <Transition name="drop-settings">
+                <div
+                  v-if="openDropdown === 'font'"
+                  class="absolute top-full left-0 right-0 mt-1 rounded-lg py-1 z-20 shadow-lg border"
+                  :style="{ background: 'var(--bg-elevated)', borderColor: 'var(--border-default)' }"
+                >
+                  <div
+                    v-for="o in fontSizeOptions"
+                    :key="o.value"
+                    class="px-3.5 py-2 text-sm cursor-pointer transition-colors hover:bg-[var(--bg-hover)]"
+                    @click="settings.fontSize = o.value; closeDropdowns()"
+                    :style="{ background: settings.fontSize === o.value ? 'var(--accent-glow)' : 'transparent', color: settings.fontSize === o.value ? 'var(--accent)' : 'var(--text-primary)' }"
+                  >{{ $t(o.labelKey) }}</div>
+                </div>
+              </Transition>
+            </div>
+          </div>
+
+          <!-- Ponytail 模式 -->
+          <div>
+            <label class="block text-xs font-medium mb-1.5" style="color:var(--text-muted)">{{ $t('settings.ponytailMode') }}</label>
+            <div
+              class="settings-dropdown relative cursor-pointer rounded-lg px-3.5 py-2 text-sm flex items-center gap-1.5 select-none transition-colors"
+              :style="{
+                background: 'var(--bg-elevated)',
+                border: openDropdown === 'ponytail' ? '1px solid var(--accent)' : '1px solid var(--border-default)',
+                color: currentPonytail.color
+              }"
+              @click.stop="toggleDropdown('ponytail')"
+            >
+              <span class="text-[13px]">{{ currentPonytail.icon }}</span>
+              <span class="font-medium truncate flex-1">{{ $t(currentPonytail.labelKey) }}</span>
+              <span class="italic text-[0.6rem] opacity-50 hidden sm:inline" style="color:var(--text-muted)">{{ currentPonytail.cliKey }}</span>
+              <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
+                :style="{ opacity: 0.4, transition: 'transform 150ms', transform: openDropdown === 'ponytail' ? 'rotate(180deg)' : '' }">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+              <Transition name="drop-settings">
+                <div
+                  v-if="openDropdown === 'ponytail'"
+                  class="absolute right-0 top-full mt-1 py-1 rounded-lg z-30 w-[300px] shrink-0 max-w-[420px]"
+                  style="background: var(--bg-elevated); border: 1px solid var(--border-default); box-shadow: 0 8px 24px rgba(0,0,0,0.35)"
+                >
+                  <button
+                    v-for="o in ponytailOptions"
+                    :key="o.value"
+                    @click="settings.ponytailMode = o.value; closeDropdowns()"
+                    class="w-full text-left px-3 py-2 transition-colors hover:bg-[var(--bg-hover)]"
+                    :style="{ background: settings.ponytailMode === o.value ? o.color + '18' : 'transparent' }"
+                  >
+                    <div class="flex items-center gap-1.5">
+                      <span class="text-[13px]">{{ o.icon }}</span>
+                      <span class="text-xs font-medium" :style="{ color: settings.ponytailMode === o.value ? o.color : 'var(--text-primary)' }">{{ $t(o.labelKey) }}</span>
+                      <span class="italic text-[0.6rem] ml-auto" style="color:var(--text-muted)">{{ o.cliKey }}</span>
+                    </div>
+                  </button>
                 </div>
               </Transition>
             </div>

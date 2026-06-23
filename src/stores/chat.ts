@@ -94,6 +94,15 @@ export const useChatStore = defineStore("chat", () => {
     if (currentAssistantMsg.value) {
       currentAssistantMsg.value.toolUses.push(tool);
     }
+    // 追踪 agent 使用：tool name 可能是 Agent 或 Task
+    if ((tool.name === "Agent" || tool.name === "Task") && tool.input) {
+      const agentType = (tool.input as any).subagent_type || (tool.input as any).agent_type;
+      if (agentType && typeof agentType === "string") {
+        const next = new Set(usedAgents.value);
+        next.add(agentType);
+        usedAgents.value = next;
+      }
+    }
   }
 
   function finishAssistantMessage(durationMs?: number, inputTokens?: number, outputTokens?: number, costUSD?: number) {
@@ -119,11 +128,15 @@ export const useChatStore = defineStore("chat", () => {
     pendingControlRequest.value = null;
   }
 
+  /** 当前会话中使用过的 agent 类型（如 "pr-review-toolkit:code-simplifier"） */
+  const usedAgents = ref<Set<string>>(new Set());
+
   function clearMessages() {
     messages.value = [];
     currentAssistantMsg.value = null;
     isProcessing.value = false;
     pendingControlRequest.value = null;
+    usedAgents.value = new Set();
   }
 
   /** Update a specific message's content (for edit) */
@@ -269,6 +282,7 @@ export const useChatStore = defineStore("chat", () => {
     addControlRequest,
     resolveControlRequest,
     finishAssistantMessage,
+    usedAgents,
     clearMessages,
     loadMessages,
     updateMessage,

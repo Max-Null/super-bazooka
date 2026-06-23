@@ -503,6 +503,7 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAut
     <InputBarToolbar
       @attach-file="handleAttachFile"
       @open-command-menu="commandBus.open()"
+      @send-slash="(t: string) => handleSend(t)"
     />
 
     <!-- Attached files chips -->

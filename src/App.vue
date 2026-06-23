@@ -14,8 +14,9 @@ const themeAttr = computed(() => settings.theme);
 
 onMounted(() => {
   startListening();
-  // Apply theme & locale from stored preference
+  // Apply theme, font size & locale from stored preference
   document.documentElement.setAttribute("data-theme", settings.theme);
+  document.documentElement.setAttribute("data-font-size", settings.fontSize);
   locale.value = settings.locale;
 });
 
@@ -23,9 +24,12 @@ onUnmounted(() => {
   stopListening();
 });
 
-// Watch theme changes and apply to root
+// Watch theme & font changes and apply to root
 watch(() => settings.theme, (t) => {
   document.documentElement.setAttribute("data-theme", t);
+});
+watch(() => settings.fontSize, (s) => {
+  document.documentElement.setAttribute("data-font-size", s);
 });
 
 // Watch locale changes and sync to i18n

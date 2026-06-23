@@ -4,6 +4,11 @@
 
 /* ── cc-gui Design System: Precision Terminal ── */
 
+html { font-size: 18px; }
+html[data-font-size="small"]  { font-size: 14px; }
+html[data-font-size="medium"] { font-size: 18px; }
+html[data-font-size="large"]  { font-size: 22px; }
+
 :root {
   --bg-root: #09090b;
   --bg-surface: #111113;

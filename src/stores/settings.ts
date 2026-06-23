@@ -11,6 +11,7 @@ const STORAGE_KEY = "cc-gui-ui-settings";
 export type PermissionMode = "default" | "acceptEdits" | "bypassPermissions" | "dontAsk" | "auto";
 
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max" | "ultracode";
+export type PonytailMode = "off" | "lite" | "full" | "ultra";
 
 /** 仅存 localStorage 的 UI 偏好 */
 interface UiSettings {
@@ -18,8 +19,10 @@ interface UiSettings {
   autoMode: boolean;
   permissionMode: PermissionMode;
   effort: Effort;
+  ponytailMode: PonytailMode;
   theme: "dark" | "light" | "system";
   locale: "zh" | "en";
+  fontSize: "small" | "medium" | "large";
 }
 
 function getUiDefaults(): UiSettings {
@@ -28,8 +31,10 @@ function getUiDefaults(): UiSettings {
     autoMode: true,
     permissionMode: "bypassPermissions",
     effort: "high",
+    ponytailMode: "full",
     theme: "dark",
     locale: "zh",
+    fontSize: "medium",
   };
 }
 
@@ -53,8 +58,10 @@ export const useSettingsStore = defineStore("settings", () => {
   const autoMode = ref(ui.autoMode);
   const permissionMode = ref<PermissionMode>(ui.permissionMode);
   const effort = ref<Effort>(ui.effort);
+  const ponytailMode = ref<PonytailMode>(ui.ponytailMode);
   const theme = ref<"dark" | "light" | "system">(ui.theme);
   const locale = ref<"zh" | "en">(ui.locale);
+  const fontSize = ref<"small" | "medium" | "large">(ui.fontSize);
 
   // 启动时从 ~/.claude/settings.json 加载配置
   getClaudeSettings().then(s => {
@@ -97,17 +104,19 @@ export const useSettingsStore = defineStore("settings", () => {
   );
 
   // UI 偏好变更 → 写 localStorage
-  watch([planMode, autoMode, permissionMode, effort, theme, locale], () => {
+  watch([planMode, autoMode, permissionMode, effort, ponytailMode, theme, locale, fontSize], () => {
     const s: UiSettings = {
       planMode: planMode.value,
       autoMode: autoMode.value,
       permissionMode: permissionMode.value,
       effort: effort.value,
+      ponytailMode: ponytailMode.value,
       theme: theme.value,
       locale: locale.value,
+      fontSize: fontSize.value,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
   }, { deep: true });
 
-  return { apiKey, baseUrl, model, planMode, autoMode, permissionMode, effort, theme, locale };
+  return { apiKey, baseUrl, model, planMode, autoMode, permissionMode, effort, ponytailMode, theme, locale, fontSize };
 });

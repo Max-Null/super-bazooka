@@ -35,10 +35,10 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
         :class="[
           maxHClass,
           {
-            'w-[400px]': size === 'sm',
-            'w-[480px]': !size || size === 'md',
-            'w-[580px]': size === 'lg',
-            'w-[520px]': size === 'xl',
+            'w-[28rem]': size === 'sm',
+            'w-[34rem]': !size || size === 'md',
+            'w-[36rem]': size === 'lg',
+            'w-[38rem]': size === 'xl',
           },
         ]"
       >

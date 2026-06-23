@@ -10,6 +10,7 @@ const { t } = useI18n();
 const emit = defineEmits<{
   attachFile: [];
   openCommandMenu: [];
+  sendSlash: [text: string];
 }>();
 
 const settings = useSettingsStore();
@@ -37,10 +38,25 @@ const currentEffortColor = computed(() => {
   return effortOptions.find(o => o.value === settings.effort)?.color || "var(--amber)";
 });
 
-// ── Custom dropdowns ──
-const openMenu = ref<"mode" | "effort" | null>(null);
+// ── Ponytail mode ──
+const ponytailOptions: Array<{ value: "off" | "lite" | "full" | "ultra"; icon: string; label: string; color: string }> = [
+  { value: "off",   icon: "⬜", label: "关闭", color: "#6b7280" },
+  { value: "lite",  icon: "🌱", label: "轻量", color: "#22c55e" },
+  { value: "full",  icon: "🎯", label: "标准", color: "#f59e0b" },
+  { value: "ultra", icon: "🔥", label: "极致", color: "#ef4444" },
+];
+const currentPonytail = computed(() => ponytailOptions.find(o => o.value === settings.ponytailMode)!);
 
-function toggleMenu(menu: "mode" | "effort") {
+function selectPonytail(value: "off" | "lite" | "full" | "ultra") {
+  settings.ponytailMode = value;
+  openMenu.value = null;
+  emit("sendSlash", `/ponytail ${value}`);
+}
+
+// ── Custom dropdowns ──
+const openMenu = ref<"mode" | "effort" | "ponytail" | null>(null);
+
+function toggleMenu(menu: "mode" | "effort" | "ponytail") {
   openMenu.value = openMenu.value === menu ? null : menu;
 }
 
@@ -191,6 +207,35 @@ const currentEffortLabel = computed(() => {
               background: settings.effort === e.value ? e.color + '18' : 'transparent'
             }"
           >{{ e.label() }}</button>
+        </div>
+      </Transition>
+    </div>
+
+    <!-- Ponytail dropdown -->
+    <div
+      class="toolbar-dropdown toolbar-pill flex items-center gap-1.5 text-[0.65rem] shrink-0 rounded-lg relative cursor-pointer"
+      @click.stop="toggleMenu('ponytail')"
+      :title="$t('toolbar.ponytailTitle')"
+    >
+      <span class="font-medium" :style="{ color: currentPonytail.color }">{{ currentPonytail.label }}</span>
+      <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" :style="{ color: currentPonytail.color, opacity: 0.5, transition: 'transform 150ms', transform: openMenu === 'ponytail' ? 'rotate(180deg)' : '' }"><polyline points="6 9 12 15 18 9"/></svg>
+
+      <Transition name="drop">
+        <div
+          v-if="openMenu === 'ponytail'"
+          class="dropdown-menu absolute bottom-full right-0 mb-1 py-1 rounded-lg z-30 min-w-[110px]"
+          style="background: var(--bg-elevated); border: 1px solid var(--border-default); box-shadow: 0 8px 24px rgba(0,0,0,0.4)"
+        >
+          <button
+            v-for="p in ponytailOptions"
+            :key="p.value"
+            @click="selectPonytail(p.value)"
+            class="w-full text-left px-3 py-1.5 text-[0.65rem] transition-colors hover:bg-[var(--bg-hover)] flex items-center gap-2"
+            :style="{
+              color: settings.ponytailMode === p.value ? p.color : 'var(--text-secondary)',
+              background: settings.ponytailMode === p.value ? p.color + '18' : 'transparent'
+            }"
+          >{{ p.label }}</button>
         </div>
       </Transition>
     </div>

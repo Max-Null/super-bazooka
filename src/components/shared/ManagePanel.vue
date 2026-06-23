@@ -4,6 +4,7 @@ import { useI18n } from "vue-i18n";
 import { readFileContent, writeFile, getClaudeDir, getWorkspaceRoot, listDir, ensureItemDescriptions, clearItemDescriptions, clearMcpDescriptions, generateMcpDescriptions, type DescriptionItem } from "@/lib/tauri-bridge";
 import { connectedMcpServers } from "@/composables/useStreamProcessor";
 import { useSettingsStore } from "@/stores/settings";
+import { useChatStore } from "@/stores/chat";
 import ModalShell from "./ModalShell.vue";
 
 const props = defineProps<{ open: boolean; initialTab?: string }>();
@@ -11,6 +12,7 @@ const emit = defineEmits<{ close: []; sendSlash: [text: string] }>();
 
 const { t, locale } = useI18n();
 const settingsStore = useSettingsStore();
+const chatStore = useChatStore();
 
 type Tab = "plugins" | "mcp" | "skills" | "agents" | "hooks" | "memory" | "permissions" | "styles";
 const tabs: { id: Tab }[] = [
@@ -240,14 +242,31 @@ function parseDescription(raw: string): string | null {
   const m = raw.match(/^---\s*\n(.*?)\n---/s);
   if (m) {
     const fm = m[1];
+    // 尝试完整匹配 description 字段（支持多行 YAML > / | 语法）
     const dm = fm.match(/^description:\s*(.+)$/m);
     if (dm) {
-      // 去掉首尾引号
       let desc = dm[1].trim();
-      if ((desc.startsWith('"') && desc.endsWith('"')) || (desc.startsWith("'") && desc.endsWith("'"))) {
-        desc = desc.slice(1, -1);
+      // YAML 多行折叠语法：description: > 后面跟缩进的行
+      if (desc === ">" || desc === "|") {
+        // 找到 description 行的位置，收集后续缩进行
+        const descIdx = fm.indexOf(dm[0]);
+        const after = fm.slice(descIdx + dm[0].length);
+        const lines = after.split("\n");
+        const body: string[] = [];
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith("#")) continue;
+          // 如果是下一个 YAML key（不含空格、不含 #），停止
+          if (/^[a-zA-Z_]+\s*:/.test(line) && !line.startsWith(" ") && !line.startsWith("\t")) break;
+          body.push(trimmed);
+        }
+        desc = body.join(" ");
+      } else {
+        // 去掉首尾引号
+        if ((desc.startsWith('"') && desc.endsWith('"')) || (desc.startsWith("'") && desc.endsWith("'"))) {
+          desc = desc.slice(1, -1);
+        }
       }
-      // 完整返回，不做截断；显示时用 CSS line-clamp
       return desc;
     }
   }
@@ -417,20 +436,72 @@ async function toggleMcp(name: string) {
 async function loadSkills() {
   loading.value = true; error.value = "";
   try {
-    const path = `${claudeDir.value}/skills`;
-    const dirs = await listDir(path);
-    const result: Item[] = [];
-    for (const d of dirs) {
-      if (!d.is_dir) continue;
-      let desc: string | null = null;
-      try {
-        const skillMd = await readFileContent(`${d.path}/SKILL.md`);
-        desc = parseDescription(skillMd);
-      } catch {}
-      result.push({ name: d.name, path: d.path, desc });
+    const groups: { label: string; items: Item[] }[] = [];
+
+    // 1. 自定义 skills：~/.claude/skills/
+    const customPath = `${claudeDir.value}/skills`;
+    try {
+      const customDirs = await listDir(customPath);
+      const customItems: Item[] = [];
+      for (const d of customDirs) {
+        if (!d.is_dir) continue;
+        let desc: string | null = null;
+        try {
+          const skillMd = await readFileContent(`${d.path}/SKILL.md`);
+          desc = parseDescription(skillMd);
+        } catch {}
+        customItems.push({ name: d.name, path: d.path, desc, enabled: true });
+      }
+      if (customItems.length > 0) groups.push({ label: "自定义", items: customItems });
+    } catch {}
+
+    // 2. 插件提供的 skills：plugins/cache/<marketplace>/<plugin>/<version>/skills/*/
+    try {
+      const raw = await readFileContent(`${claudeDir.value}/settings.json`);
+      const data = JSON.parse(raw);
+      const plugins: Record<string, boolean> = data.enabledPlugins || {};
+      const safeNameRE = /^[a-zA-Z0-9._-]+$/;
+
+      for (const [key, enabled] of Object.entries(plugins)) {
+        if (!enabled) continue;
+        const atIdx = key.lastIndexOf("@");
+        const plugName = atIdx > 0 ? key.slice(0, atIdx) : key;
+        const marketplace = atIdx > 0 ? key.slice(atIdx + 1) : "claude-plugins-official";
+        if (!safeNameRE.test(plugName) || !safeNameRE.test(marketplace)) continue;
+
+        const cacheDir = `${claudeDir.value}/plugins/cache/${marketplace}/${plugName}`;
+        try {
+          const versions = await listDir(cacheDir);
+          for (const v of versions) {
+            if (!v.is_dir) continue;
+            const skillsDir = `${v.path}/skills`;
+            try {
+              const skillDirs = await listDir(skillsDir);
+              const pluginItems: Item[] = [];
+              for (const sd of skillDirs) {
+                if (!sd.is_dir) continue;
+                let desc: string | null = null;
+                try {
+                  const skillMd = await readFileContent(`${sd.path}/SKILL.md`);
+                  desc = parseDescription(skillMd);
+                } catch {}
+                pluginItems.push({ name: sd.name, path: sd.path, desc, enabled: true });
+              }
+              if (pluginItems.length > 0) groups.push({ label: plugName, items: pluginItems });
+            } catch {}
+          }
+        } catch {}
+      }
+    } catch {}
+
+    // 构建 treeItems（分组）
+    const flat: FlatItem[] = [];
+    for (const g of groups) {
+      flat.push({ type: "group", label: g.label });
+      for (const it of g.items) flat.push(it);
     }
-    items.value = result;
-  } catch { items.value = []; }
+    treeItems.value = flat;
+  } catch { treeItems.value = []; }
   loading.value = false;
 }
 
@@ -489,18 +560,76 @@ async function loadPlugins() {
 async function loadAgents() {
   loading.value = true; error.value = "";
   try {
-    const path = `${claudeDir.value}/agents`;
-    const files = await listDir(path);
     const result: Item[] = [];
-    for (const f of files) {
-      if (!f.name.endsWith(".md")) continue;
-      let desc: string | null = null;
-      try {
-        const content = await readFileContent(f.path);
-        desc = parseDescription(content);
-      } catch {}
-      result.push({ name: f.name, path: f.path, desc });
+
+    // 1. 自定义 agent：~/.claude/agents/
+    try {
+      const customPath = `${claudeDir.value}/agents`;
+      const customFiles = await listDir(customPath);
+      for (const f of customFiles) {
+        if (!f.name.endsWith(".md")) continue;
+        let desc: string | null = null;
+        try {
+          const content = await readFileContent(f.path);
+          desc = parseDescription(content);
+        } catch {}
+        result.push({ name: f.name.replace(/\.md$/, ""), path: f.path, desc, enabled: true });
+      }
+    } catch {}
+
+    // 2. 插件提供的 agent：~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/agents/*.md
+    try {
+      const raw = await readFileContent(`${claudeDir.value}/settings.json`);
+      const data = JSON.parse(raw);
+      const plugins: Record<string, boolean> = data.enabledPlugins || {};
+      const safeNameRE = /^[a-zA-Z0-9._-]+$/;
+
+      for (const [key, enabled] of Object.entries(plugins)) {
+        if (!enabled) continue;
+        const atIdx = key.lastIndexOf("@");
+        const plugName = atIdx > 0 ? key.slice(0, atIdx) : key;
+        const marketplace = atIdx > 0 ? key.slice(atIdx + 1) : "claude-plugins-official";
+        if (!safeNameRE.test(plugName) || !safeNameRE.test(marketplace)) continue;
+
+        const cacheDir = `${claudeDir.value}/plugins/cache/${marketplace}/${plugName}`;
+        try {
+          const versions = await listDir(cacheDir);
+          for (const v of versions) {
+            if (!v.is_dir) continue;
+            const agentsDir = `${v.path}/agents`;
+            try {
+              const agentFiles = await listDir(agentsDir);
+              for (const af of agentFiles) {
+                if (!af.name.endsWith(".md")) continue;
+                const agentName = af.name.replace(/\.md$/, "");
+                if (result.some(r => r.name === agentName)) continue; // 去重
+                let desc: string | null = null;
+                try {
+                  const content = await readFileContent(af.path);
+                  desc = parseDescription(content);
+                } catch {}
+                result.push({
+                  name: agentName,
+                  path: af.path,
+                  desc,
+                  detail: plugName,
+                  enabled: true,
+                });
+              }
+            } catch {}
+          }
+        } catch {}
+      }
+    } catch {}
+
+    // 根据当前会话的 agent 使用记录排序：用过的绿点排前面，没用过的灰点排后面
+    const used = chatStore.usedAgents;
+    for (const it of result) {
+      it.enabled = used.has(it.name) ? true : undefined; // 用过=绿，未用=灰
     }
+    // 始终排序：用过的在前，否则保持原始顺序
+    result.sort((a, b) => (used.has(b.name) ? 1 : 0) - (used.has(a.name) ? 1 : 0));
+
     items.value = result;
   } catch { items.value = []; }
   loading.value = false;
@@ -511,8 +640,11 @@ const translateError = ref("");
 
 async function enrichDescriptions() {
   translateError.value = "";
+  const flatItems: Item[] = activeTab.value === "skills"
+    ? (treeItems.value.filter(it => !("type" in it)) as Item[])
+    : items.value;
   const needTranslate: DescriptionItem[] = [];
-  for (const it of items.value) {
+  for (const it of flatItems) {
     if (it.desc) {
       needTranslate.push({
         item_type: activeTab.value,
@@ -530,7 +662,7 @@ async function enrichDescriptions() {
       settingsStore.baseUrl,
     );
     const map = new Map(enriched.map(e => [e.name, e]));
-    for (const it of items.value) {
+    for (const it of flatItems) {
       const e = map.get(it.name);
       if (e) {
         it.desc = locale.value === "zh"
@@ -580,6 +712,14 @@ async function enrichMcpDescriptions() {
   }
 }
 
+// 清空 Skills 描述并重新翻译
+async function retranslateSkills() {
+  for (const it of treeItems.value) {
+    if (!("type" in it)) (it as Item).desc = null;
+  }
+  await enrichDescriptions();
+}
+
 // 清空 MCP 描述缓存并重新生成
 async function retranslateMCP() {
   translateError.value = "";
@@ -607,12 +747,30 @@ function switchTab(t: Tab) {
     case "skills": loadSkills().then(enrichDescriptions); break;
     case "agents": loadAgents().then(enrichDescriptions); break;
     case "hooks":
-      loadJSON("hooks", data =>
-        Object.entries(data.hooks || {}).map(([event, cfg]: [string, any]) => ({
-          name: `${event} → ${cfg.matcher || cfg.command || "(rule)"}`,
-          enabled: !cfg.disabled,
-        }))
-      ); break;
+      loadJSON("hooks", data => {
+        const result: Item[] = [];
+        for (const [event, matchers] of Object.entries(data.hooks || {})) {
+          if (!Array.isArray(matchers)) continue;
+          for (const m of matchers) {
+            const hooks = m.hooks || [];
+            for (const h of hooks) {
+              let detail = h.type || "";
+              if (h.type === "command") {
+                // 截断过长的命令，显示前 60 字符
+                const cmd = (h.command || "").replace(/^powershell.*-File\s+/, "");
+                detail = `command: ${cmd.length > 60 ? cmd.slice(0, 60) + "..." : cmd}`;
+              }
+              result.push({
+                name: event,
+                detail,
+                path: h.command || undefined,
+                enabled: true,
+              });
+            }
+          }
+        }
+        return result;
+      }); break;
     case "memory": loadMemory(); break;
     case "permissions":
       loadJSON("permissions", data => {
@@ -624,7 +782,7 @@ function switchTab(t: Tab) {
     case "styles":
       loadJSON("outputStyles", data => {
         const os = data.outputStyles || data.outputStyle || {};
-        return Object.entries(os).map(([k, v]) => ({ name: `${k}: ${typeof v === 'string' ? v.slice(0, 80) : JSON.stringify(v).slice(0, 80)}` }));
+        return Object.entries(os).map(([k, v]) => ({ name: `${k}: ${typeof v === 'string' ? v.slice(0, 80) : JSON.stringify(v).slice(0, 80)}`, enabled: true }));
       }); break;
   }
 }
@@ -636,7 +794,7 @@ function switchTab(t: Tab) {
       <div class="flex flex-col flex-1">
         <div class="flex items-center gap-2">
           <span class="text-sm font-semibold" :style="{ color: 'var(--text-bright)' }">{{ $t('manage.title') }}</span>
-          <span class="text-[11px] font-mono" :style="{ color: 'var(--text-muted)' }">{{ claudeDir || $t('manage.loading') }}</span>
+          <span class="text-[0.75rem] font-mono" :style="{ color: 'var(--text-muted)' }">{{ claudeDir || $t('manage.loading') }}</span>
         </div>
         <div class="flex flex-wrap gap-0.5 mt-1.5">
           <button v-for="tab in tabs" :key="tab.id" @click="switchTab(tab.id)" class="px-2.5 py-1 rounded text-xs transition-colors" :style="{ background: activeTab === tab.id ? 'var(--accent-glow)' : 'transparent', color: activeTab === tab.id ? 'var(--accent)' : 'var(--text-muted)' }">{{ $t('manage.' + tab.id) }}</button>
@@ -646,11 +804,10 @@ function switchTab(t: Tab) {
 
     <!-- 编辑器模式 -->
     <template v-if="editingFile">
-      <div class="flex items-center gap-2 mb-2">
-        <button @click="editingFile = null" class="text-xs px-2 py-0.5 rounded hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.back') }}</button>
-        <span class="text-[11px] font-mono truncate" :style="{ color: 'var(--text-secondary)' }">{{ editingFile.path }}</span>
-        <div class="flex-1"></div>
-        <button @click="saveEdit" class="px-2.5 py-1 rounded text-xs font-medium" :style="{ background: saved ? 'var(--accent-dim)' : 'var(--accent)', color: 'var(--bg-root)' }">{{ saved ? $t('manage.saved') : $t('manage.save') }}</button>
+      <div class="flex items-center gap-2 mb-2 min-w-0">
+        <button @click="editingFile = null" class="text-xs px-2 py-0.5 rounded hover:bg-[var(--bg-hover)] shrink-0" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.back') }}</button>
+        <span class="text-[0.75rem] font-mono truncate min-w-0" :style="{ color: 'var(--text-secondary)' }" :title="editingFile.path">{{ editingFile.path }}</span>
+        <button @click="saveEdit" class="px-2.5 py-1 rounded text-xs font-medium shrink-0" :style="{ background: saved ? 'var(--accent-dim)' : 'var(--accent)', color: 'var(--bg-root)' }">{{ saved ? $t('manage.saved') : $t('manage.save') }}</button>
       </div>
       <textarea v-model="editContent" class="w-full rounded-md p-3 text-xs font-mono leading-relaxed resize-none outline-none" :style="{ background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-dim)', minHeight: '340px' }" rows="18"></textarea>
     </template>
@@ -660,15 +817,15 @@ function switchTab(t: Tab) {
       <div v-if="loading" class="text-xs py-4 text-center" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.loading') }}</div>
       <div v-else-if="error" class="text-xs py-4 text-center" :style="{ color: 'var(--coral)' }">{{ error }}</div>
 
-      <!-- Memory 树形列表 -->
-      <div v-else-if="activeTab === 'memory'" class="space-y-0">
+      <!-- Memory / Skills 树形列表 -->
+      <div v-else-if="activeTab === 'memory' || activeTab === 'skills'" class="space-y-0">
         <template v-for="(it, i) in treeItems" :key="i">
           <div v-if="'type' in it && it.type === 'group'"
             @click="toggleGroup((it as any).label)"
-            class="px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider select-none flex items-center gap-1.5 cursor-pointer hover:text-[var(--text-secondary)] transition-colors"
+            class="px-3 pt-3 pb-1 text-[0.7rem] font-semibold uppercase tracking-wider select-none flex items-center gap-1.5 cursor-pointer hover:text-[var(--text-secondary)] transition-colors"
             :style="{ color: 'var(--text-muted)' }"
           >
-            <span class="text-[9px] w-3 text-center">{{ collapsedGroups.has((it as any).label) ? '▸' : '▾' }}</span>
+            <span class="text-[0.75rem] w-3 text-center">{{ collapsedGroups.has((it as any).label) ? '▸' : '▾' }}</span>
             {{ (it as any).label }}
           </div>
           <div v-else
@@ -676,14 +833,16 @@ function switchTab(t: Tab) {
             :key="itemVisibleKey(i)"
             class="flex items-center gap-2 pl-8 pr-3 py-1.5 rounded text-xs group hover:bg-[var(--bg-hover)] cursor-pointer transition-colors"
             :style="{ color: 'var(--text-secondary)' }"
-            @click="openEditor((it as Item).path!)"
+            @click="activeTab === 'skills' ? (emit('sendSlash', '/' + (it as Item).name), emit('close')) : openEditor((it as Item).path!)"
           >
-            <span class="text-[11px]">🧠</span>
+            <span class="text-[0.75rem]">{{ activeTab === 'skills' ? '📋' : '🧠' }}</span>
             <span class="font-mono flex-1 truncate">{{ (it as Item).name }}</span>
-            <button class="text-[10px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity shrink-0" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.edit') }}</button>
+            <button v-if="activeTab === 'skills'" @click.stop="openEditor((it as Item).path + '/SKILL.md')" class="text-[0.7rem] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity shrink-0 hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.view') }}</button>
+            <button v-else class="text-[0.7rem] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity shrink-0" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.edit') }}</button>
           </div>
+          <div v-if="(it as Item).desc" v-show="isItemVisible(i)" class="text-[0.7rem] pl-8 mt-0.5 leading-relaxed line-clamp-2" :style="{ color: 'var(--text-muted)' }" :title="(it as Item).desc!">{{ (it as Item).desc }}</div>
         </template>
-        <div v-if="treeItems.length === 0" class="text-xs py-4 text-center" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.noMemory') }}</div>
+        <div v-if="treeItems.length === 0" class="text-xs py-4 text-center" :style="{ color: 'var(--text-muted)' }">{{ activeTab === 'skills' ? $t('manage.noData') : $t('manage.noMemory') }}</div>
       </div>
 
       <!-- 其他 Tab：带描述的平铺列表 -->
@@ -701,46 +860,49 @@ function switchTab(t: Tab) {
               }"
             ></span>
             <span class="font-mono flex-1 truncate">{{ it.name }}</span>
-            <span v-if="it.detail" class="text-[10px] shrink-0" :style="{ color: 'var(--text-muted)' }">{{ it.detail }}</span>
+            <span v-if="it.detail" class="text-[0.7rem] shrink-0" :style="{ color: 'var(--text-muted)' }">{{ it.detail }}</span>
             <!-- MCP 状态标签 + 开关 -->
             <template v-if="activeTab === 'mcp'">
-              <span class="text-[10px] shrink-0" :style="{ color: it.disabled ? 'var(--coral)' : it.enabled ? 'var(--accent)' : 'var(--text-muted)' }">
+              <span class="text-[0.7rem] shrink-0" :style="{ color: it.disabled ? 'var(--coral)' : it.enabled ? 'var(--accent)' : 'var(--text-muted)' }">
                 {{ it.disabled ? $t('manage.mcpDisabled') : it.enabled ? $t('manage.mcpConnected') : $t('manage.mcpOffline') }}
               </span>
               <button @click="toggleMcp(it.name)"
-                class="text-[10px] px-2 py-0.5 rounded transition-colors shrink-0"
+                class="text-[0.7rem] px-2 py-0.5 rounded transition-colors shrink-0"
                 :style="{ background: it.disabled ? 'var(--accent-glow)' : 'var(--coral-glow)', color: it.disabled ? 'var(--accent)' : 'var(--coral)' }"
               >{{ it.disabled ? $t('manage.mcpToggleEnable') : $t('manage.mcpToggleDisable') }}</button>
             </template>
             <template v-if="activeTab === 'plugins' && it._key">
               <button @click="togglePlugin(it._key)"
-                class="text-[10px] px-2 py-0.5 rounded transition-colors shrink-0"
+                class="text-[0.7rem] px-2 py-0.5 rounded transition-colors shrink-0"
                 :style="{ background: it.enabled ? 'var(--accent-glow)' : 'var(--bg-hover)', color: it.enabled ? 'var(--accent)' : 'var(--text-muted)' }"
               >{{ it.enabled ? $t('manage.disable') : $t('manage.enable') }}</button>
               <button @click="removePlugin(it._key!)"
-                class="text-[10px] px-1.5 py-0.5 rounded hover:bg-[var(--bg-hover)] transition-colors shrink-0 opacity-0 group-hover:opacity-100"
+                class="text-[0.7rem] px-1.5 py-0.5 rounded hover:bg-[var(--bg-hover)] transition-colors shrink-0 opacity-0 group-hover:opacity-100"
                 :style="{ color: 'var(--coral)' }" :title="$t('manage.deletePlugin')"
               >✕</button>
             </template>
-            <button v-if="it.path && activeTab !== 'skills' && activeTab !== 'plugins' && activeTab !== 'mcp'" @click="openEditor(it.path)" class="text-[10px] px-1.5 py-0.5 rounded hover:bg-[var(--bg-hover)] opacity-0 group-hover:opacity-100 transition-opacity shrink-0" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.edit') }}</button>
-            <button v-if="it.path && (activeTab === 'skills' || activeTab === 'agents')" @click="openEditor(it.path + (activeTab === 'skills' ? '/SKILL.md' : ''))" class="text-[10px] px-1.5 py-0.5 rounded hover:bg-[var(--bg-hover)] opacity-0 group-hover:opacity-100 transition-opacity shrink-0" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.view') }}</button>
+            <button v-if="it.path && activeTab !== 'plugins' && activeTab !== 'mcp'" @click="openEditor(it.path)" class="text-[0.7rem] px-1.5 py-0.5 rounded hover:bg-[var(--bg-hover)] opacity-0 group-hover:opacity-100 transition-opacity shrink-0" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.edit') }}</button>
           </div>
-          <div v-if="it.desc" class="text-[10px] mt-1 leading-relaxed pl-5 line-clamp-2" :style="{ color: 'var(--text-muted)' }" :title="it.desc">{{ it.desc }}</div>
+          <div v-if="it.desc" class="text-[0.7rem] mt-1 leading-relaxed pl-5 line-clamp-2" :style="{ color: 'var(--text-muted)' }" :title="it.desc">{{ it.desc }}</div>
         </div>
         <div v-if="items.length === 0 && activeTab !== 'plugins'" class="text-xs py-4 text-center" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.noData') }}</div>
       </div>
     </template>
 
     <template #footer>
-      <div v-if="translateError" class="text-[10px] mb-1.5" :style="{ color: 'var(--coral)' }">{{ $t('manage.translateError') }}: {{ translateError }}</div>
-      <div v-if="activeTab === 'plugins'" class="text-[10px] leading-relaxed" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.pluginsDesc') }}</div>
-      <div v-if="activeTab === 'mcp'" class="text-[10px] leading-relaxed" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.mcpDesc') }}</div>
+      <div v-if="translateError" class="text-[0.7rem] mb-1.5" :style="{ color: 'var(--coral)' }">{{ $t('manage.translateError') }}: {{ translateError }}</div>
+      <div v-if="activeTab === 'plugins'" class="text-[0.7rem] leading-relaxed" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.pluginsDesc') }}</div>
+      <div v-if="activeTab === 'mcp'" class="text-[0.7rem] leading-relaxed" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.mcpDesc') }}</div>
       <div v-if="activeTab === 'mcp'" class="pt-2">
         <button @click="retranslateMCP" class="w-full text-xs px-3 py-1.5 rounded border border-dashed transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-muted)', borderColor: 'var(--border-dim)' }">{{ $t('manage.retranslate') }}</button>
       </div>
-      <div v-if="activeTab === 'skills'" class="text-[10px] leading-relaxed" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.skillsDesc') }}</div>
-      <div v-if="activeTab === 'agents'" class="text-[10px] leading-relaxed" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.agentsDesc') }}</div>
-      <div v-if="activeTab === 'styles'" class="text-[10px] leading-relaxed" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.stylesDesc') }}</div>
+      <div v-if="activeTab === 'skills'" class="text-[0.7rem] leading-relaxed" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.skillsDesc') }}</div>
+      <div v-if="activeTab === 'skills'" class="pt-2">
+        <button @click="retranslateSkills" class="w-full text-xs px-3 py-1.5 rounded border border-dashed transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-muted)', borderColor: 'var(--border-dim)' }">{{ $t('manage.retranslate') }}</button>
+      </div>
+      <div v-if="activeTab === 'hooks'" class="text-[0.7rem] leading-relaxed" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.hooksDesc') }}</div>
+      <div v-if="activeTab === 'agents'" class="text-[0.7rem] leading-relaxed" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.agentsDesc') }}</div>
+      <div v-if="activeTab === 'styles'" class="text-[0.7rem] leading-relaxed" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.stylesDesc') }}</div>
       <div v-if="activeTab === 'plugins'" class="pt-2">
         <button @click="addPlugin" class="w-full text-xs px-3 py-1.5 rounded border border-dashed transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-muted)', borderColor: 'var(--border-dim)' }">{{ $t('manage.addPlugin') }}</button>
       </div>
