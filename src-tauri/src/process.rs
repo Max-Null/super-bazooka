@@ -126,29 +126,62 @@ pub fn find_claude() -> Option<String> {
                 return Some(native.to_string_lossy().to_string());
             }
         }
-        // 2nd: npm global install exe
-        for base_var in &["APPDATA", "USERPROFILE"] {
-            if let Ok(base) = std::env::var(base_var) {
-                let base_path = if base_var == &"USERPROFILE" {
-                    std::path::Path::new(&base).join("AppData").join("Roaming")
-                } else {
-                    std::path::PathBuf::from(&base)
-                };
-                // Try claude.exe first (bypasses cmd wrapper)
-                let exe = base_path
-                    .join("npm")
-                    .join("node_modules")
-                    .join("@anthropic-ai")
-                    .join("claude-code")
-                    .join("bin")
-                    .join("claude.exe");
-                if exe.exists() {
-                    return Some(exe.to_string_lossy().to_string());
+        // 2nd: npm global install (Roaming + Local — both are common prefixes)
+        let npm_bases: Vec<std::path::PathBuf> = {
+            let mut bases = Vec::new();
+            // APPDATA = Roaming
+            if let Ok(v) = std::env::var("APPDATA") {
+                bases.push(std::path::PathBuf::from(&v));
+            } else if let Ok(home) = std::env::var("USERPROFILE") {
+                bases.push(std::path::Path::new(&home).join("AppData").join("Roaming"));
+            }
+            // LOCALAPPDATA = Local (default npm prefix on many Windows installs)
+            if let Ok(v) = std::env::var("LOCALAPPDATA") {
+                bases.push(std::path::PathBuf::from(&v));
+            } else if let Ok(home) = std::env::var("USERPROFILE") {
+                bases.push(std::path::Path::new(&home).join("AppData").join("Local"));
+            }
+            bases
+        };
+        for base_path in &npm_bases {
+            // Try claude.exe first (bypasses cmd wrapper)
+            let exe = base_path
+                .join("npm")
+                .join("node_modules")
+                .join("@anthropic-ai")
+                .join("claude-code")
+                .join("bin")
+                .join("claude.exe");
+            if exe.exists() {
+                return Some(exe.to_string_lossy().to_string());
+            }
+            // Fallback to claude.cmd
+            let cmd = base_path.join("npm").join("claude.cmd");
+            if cmd.exists() {
+                return Some(cmd.to_string_lossy().to_string());
+            }
+        }
+        // 3rd: PATH fallback via where.exe (handles non-standard npm prefix,
+        //        pip install, Chocolatey, manual PATH additions, etc.)
+        if let Ok(output) = std::process::Command::new("where").arg("claude").output() {
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                // Take the first result line, prefer .exe over .cmd
+                let mut best: Option<String> = None;
+                for line in stdout.lines() {
+                    let trimmed = line.trim();
+                    if trimmed.is_empty() {
+                        continue;
+                    }
+                    if trimmed.ends_with(".exe") {
+                        return Some(trimmed.to_string());
+                    }
+                    if best.is_none() {
+                        best = Some(trimmed.to_string());
+                    }
                 }
-                // Fallback to claude.cmd
-                let cmd = base_path.join("npm").join("claude.cmd");
-                if cmd.exists() {
-                    return Some(cmd.to_string_lossy().to_string());
+                if let Some(found) = best {
+                    return Some(found);
                 }
             }
         }
@@ -162,6 +195,15 @@ pub fn find_claude() -> Option<String> {
         ] {
             if std::path::Path::new(candidate).exists() {
                 return Some(candidate.to_string());
+            }
+        }
+        // PATH fallback via which
+        if let Ok(output) = std::process::Command::new("which").arg("claude").output() {
+            if output.status.success() {
+                let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if !path.is_empty() {
+                    return Some(path);
+                }
             }
         }
     }
@@ -181,6 +223,7 @@ pub struct SpawnParams {
     pub cwd: String,
     pub model: String,
     pub file_paths: Vec<String>,
+    pub claude_path: Option<String>,
 }
 
 /// Result of spawning a claude session.
@@ -251,8 +294,9 @@ pub async fn spawn_claude_session(
     stdin_manager: Arc<Mutex<StdinManager>>,
     session_manager: Arc<Mutex<SessionManager>>,
 ) -> Result<Arc<Mutex<ManagedProcess>>, String> {
-    let claude_path =
-        find_claude().unwrap_or_else(|| "claude".to_string());
+    let claude_path = params.claude_path
+        .filter(|p| !p.is_empty())
+        .unwrap_or_else(|| find_claude().unwrap_or_else(|| "claude".to_string()));
 
     // Sync settings.json so future CLI runs (outside GUI) use the same mode
     sync_permission_settings(params.auto_mode, params.plan_mode, &params.permission_mode)?;

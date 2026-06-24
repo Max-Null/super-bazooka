@@ -64,6 +64,7 @@ async fn send_message(
     ultracode: bool,
     model: Option<String>,
     file_paths: Option<Vec<String>>,
+    claude_path: Option<String>,
     app_handle: tauri::AppHandle,
 ) -> Result<String, String> {
     let file_paths = file_paths.unwrap_or_default();
@@ -132,6 +133,7 @@ async fn send_message(
         cwd,
         model: spawn_model,
         file_paths,
+        claude_path,
     };
 
     let stdin_mgr = state.stdin_manager.clone();
@@ -409,6 +411,12 @@ async fn write_file(path: String, content: String) -> Result<(), String> {
 async fn get_claude_dir() -> Result<String, String> {
     let home = dirs::home_dir().ok_or("无法获取用户目录")?;
     Ok(home.join(".claude").to_string_lossy().to_string())
+}
+
+/// 返回 claude CLI 的自动检测路径（不检查文件是否存在，仅返回检测逻辑的结果）
+#[tauri::command]
+fn resolve_claude_path() -> Result<String, String> {
+    Ok(process::find_claude().unwrap_or_else(|| "claude".to_string()))
 }
 
 // ── 项目描述缓存（翻译 + 持久化）──
@@ -884,6 +892,7 @@ pub fn run() {
             read_file_base64,
             write_file,
             get_claude_dir,
+            resolve_claude_path,
             get_claude_settings,
             set_claude_settings,
             ensure_item_descriptions,

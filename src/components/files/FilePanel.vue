@@ -2,6 +2,8 @@
 import { ref, computed, onMounted, watch } from "vue";
 
 import { listDir, readFileContent, getWorkspaceRoot, type FileEntry } from "@/lib/tauri-bridge";
+import { translateError } from "@/lib/utils";
+import { useI18n } from "vue-i18n";
 import ErrorBoundary from "@/components/shared/ErrorBoundary.vue";
 import FileTree from "./FileTree.vue";
 import FilePreview from "./FilePreview.vue";
@@ -9,6 +11,7 @@ import FilePreviewModal from "@/components/shared/FilePreviewModal.vue";
 
 const props = defineProps<{ navCounter?: number; navPath?: string; forceClose?: number }>();
 
+const { t } = useI18n();
 const collapsed = ref(true);
 const panelWidth = ref(280);
 const rootPath = ref("");
@@ -68,7 +71,10 @@ async function openFile(entry: FileEntry) {
   if (entry.is_dir) { navigateTo(entry.path); return; }
   selectedFile.value = entry.name;
   try { previewContent.value = await readFileContent(entry.path); }
-  catch (e) { previewContent.value = `Error: ${e}`; }
+  catch (e) {
+    const { key, params } = translateError(e);
+    previewContent.value = t(key, params as any);
+  }
 }
 
 function openModalPreview() {

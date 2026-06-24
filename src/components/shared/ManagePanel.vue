@@ -2,6 +2,7 @@
 import { ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { readFileContent, writeFile, getClaudeDir, getWorkspaceRoot, listDir, ensureItemDescriptions, clearItemDescriptions, clearMcpDescriptions, generateMcpDescriptions, type DescriptionItem } from "@/lib/tauri-bridge";
+import { translateError as mapError } from "@/lib/utils";
 import { connectedMcpServers } from "@/composables/useStreamProcessor";
 import { useSettingsStore } from "@/stores/settings";
 import { useChatStore } from "@/stores/chat";
@@ -427,7 +428,8 @@ async function toggleMcp(name: string) {
     const it = items.value.find(i => i.name === name);
     if (it) it.disabled = idx < 0; // 原来是启用的→现在禁用
   } catch (e) {
-    error.value = String(e);
+    const { key, params } = mapError(e);
+    error.value = t(key, params as any);
   }
 }
 
@@ -671,7 +673,7 @@ async function enrichDescriptions() {
       }
     }
   } catch (err) {
-    translateError.value = String(err);
+    const { key, params } = mapError(err); translateError.value = t(key, params as any);
   }
 }
 
@@ -705,7 +707,7 @@ async function enrichMcpDescriptions() {
       }
     }
   } catch (err) {
-    translateError.value = String(err);
+    const { key, params } = mapError(err); translateError.value = t(key, params as any);
     for (const it of items.value) {
       if (it.desc === "…") it.desc = null;
     }

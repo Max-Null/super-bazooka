@@ -16,6 +16,7 @@ import {
 } from "@/lib/tauri-bridge";
 import { useFilePreview } from "@/composables/useFilePreview";
 import { useSettingsStore } from "@/stores/settings";
+import { translateError } from "@/lib/utils";
 import ErrorBoundary from "@/components/shared/ErrorBoundary.vue";
 import InputBar from "./InputBar.vue";
 import InputBarToolbar from "./InputBarToolbar.vue";
@@ -265,12 +266,14 @@ async function handleSend(text: string) {
       ultracode: settings.effort === "ultracode",
       model: settings.model,
       filePaths: filePaths.length > 0 ? filePaths : undefined,
+      claudePath: settings.claudePath || undefined,
     });
     session.loadSessions().catch(() => {});
   } catch (err) {
     debugLog.add(`>>> Error: ${err}`);
     debugLog.visible.value = true;
-    chat.appendText(`\n\n> ❌ Error: ${err}`);
+    const { key, params } = translateError(err);
+    chat.appendText(`\n\n> ❌ ${t(key, params as any)}`);
     chat.finishAssistantMessage();
   }
 }

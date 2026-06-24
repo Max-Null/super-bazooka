@@ -47,7 +47,7 @@
     "theme": "Theme",
     "defaultMode": "Permission Mode",
     "defaultEffort": "Effort Level",
-    "apiConfig": "API Configuration",
+    "ccConfig": "CC Configuration",
     "ccGuiSettings": "cc-gui Settings",
     "quickPresets": "Quick Presets",
     "deepseekPreset": "api.deepseek.com",
@@ -59,6 +59,11 @@
     "fontSizeMedium": "Medium",
     "fontSizeLarge": "Large",
     "ponytailMode": "Lean mode",
+    "claudePath": "Claude CLI Path",
+    "claudePathDetected": "✓ Detected: {path}",
+    "claudePathNotFound": "⚠ Claude not found, please specify path manually",
+    "claudePathOverride": "Manual override (optional)",
+    "claudePathOverridePlaceholder": "Leave empty to use auto-detected path",
     "ponytailOff": "Off — Normal",
     "ponytailLite": "Lite — Suggest leaner path",
     "ponytailFull": "Full — Enforce the ladder",
@@ -207,7 +212,14 @@
   },
 
   "error": {
-    "retry": "Retry"
+    "retry": "Retry",
+    "claudeNotFound": "Claude Code CLI not found. Please install: npm install -g @anthropic-ai/claude-code, or specify the claude path in Settings",
+    "spawnFailed": "Failed to spawn Claude: {error}",
+    "fileReadError": "Failed to read file: {error}",
+    "fileWriteError": "Failed to write file: {error}",
+    "httpError": "Network request failed: {error}",
+    "sessionNotFound": "Session not found: {error}",
+    "generic": "Error: {error}"
   },
 
   "modal": {

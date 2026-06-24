@@ -1,6 +1,6 @@
 import { defineStore } from "pinia";
 import { ref, watch } from "vue";
-import { getClaudeSettings, setClaudeSettings } from "@/lib/tauri-bridge";
+import { getClaudeSettings, setClaudeSettings, resolveClaudePath } from "@/lib/tauri-bridge";
 
 const STORAGE_KEY = "cc-gui-ui-settings";
 
@@ -23,6 +23,7 @@ interface UiSettings {
   theme: "dark" | "light" | "system";
   locale: "zh" | "en";
   fontSize: "small" | "medium" | "large";
+  claudePath: string;
 }
 
 function getUiDefaults(): UiSettings {
@@ -35,6 +36,7 @@ function getUiDefaults(): UiSettings {
     theme: "dark",
     locale: "zh",
     fontSize: "medium",
+    claudePath: "",
   };
 }
 
@@ -62,6 +64,11 @@ export const useSettingsStore = defineStore("settings", () => {
   const theme = ref<"dark" | "light" | "system">(ui.theme);
   const locale = ref<"zh" | "en">(ui.locale);
   const fontSize = ref<"small" | "medium" | "large">(ui.fontSize);
+  const claudePath = ref(ui.claudePath);
+  const resolvedClaudePath = ref("");
+
+  // 启动时获取自动检测的 claude 路径
+  resolveClaudePath().then(p => resolvedClaudePath.value = p).catch(() => {});
 
   // 启动时从 ~/.claude/settings.json 加载配置
   getClaudeSettings().then(s => {
@@ -104,7 +111,7 @@ export const useSettingsStore = defineStore("settings", () => {
   );
 
   // UI 偏好变更 → 写 localStorage
-  watch([planMode, autoMode, permissionMode, effort, ponytailMode, theme, locale, fontSize], () => {
+  watch([planMode, autoMode, permissionMode, effort, ponytailMode, theme, locale, fontSize, claudePath], () => {
     const s: UiSettings = {
       planMode: planMode.value,
       autoMode: autoMode.value,
@@ -114,9 +121,10 @@ export const useSettingsStore = defineStore("settings", () => {
       theme: theme.value,
       locale: locale.value,
       fontSize: fontSize.value,
+      claudePath: claudePath.value,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
   }, { deep: true });
 
-  return { apiKey, baseUrl, model, planMode, autoMode, permissionMode, effort, ponytailMode, theme, locale, fontSize };
+  return { apiKey, baseUrl, model, planMode, autoMode, permissionMode, effort, ponytailMode, theme, locale, fontSize, claudePath, resolvedClaudePath };
 });

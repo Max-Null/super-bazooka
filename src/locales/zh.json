@@ -47,7 +47,7 @@
     "theme": "主题",
     "defaultMode": "权限模式",
     "defaultEffort": "思考深度",
-    "apiConfig": "API 配置",
+    "ccConfig": "CC 配置",
     "ccGuiSettings": "cc-gui 设置",
     "quickPresets": "快速预设",
     "deepseekPreset": "api.deepseek.com",
@@ -59,6 +59,11 @@
     "fontSizeMedium": "中",
     "fontSizeLarge": "大",
     "ponytailMode": "精简模式",
+    "claudePath": "Claude CLI 路径",
+    "claudePathDetected": "✓ 已检测: {path}",
+    "claudePathNotFound": "⚠ 未检测到 claude，请手动指定路径",
+    "claudePathOverride": "手动覆盖（可选）",
+    "claudePathOverridePlaceholder": "留空则使用自动检测路径",
     "ponytailOff": "关闭 — 正常模式",
     "ponytailLite": "轻量 — 做完提更简方案",
     "ponytailFull": "标准 — 严格执行阶梯",
@@ -207,7 +212,14 @@
   },
 
   "error": {
-    "retry": "重试"
+    "retry": "重试",
+    "claudeNotFound": "找不到 Claude Code CLI。请先安装：npm install -g @anthropic-ai/claude-code，或在设置中手动指定 claude 路径",
+    "spawnFailed": "启动 Claude 失败: {error}",
+    "fileReadError": "读取文件失败: {error}",
+    "fileWriteError": "写入文件失败: {error}",
+    "httpError": "网络请求失败: {error}",
+    "sessionNotFound": "会话未找到: {error}",
+    "generic": "错误: {error}"
   },
 
   "modal": {

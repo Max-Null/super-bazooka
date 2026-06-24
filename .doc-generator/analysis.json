@@ -1,0 +1,261 @@
+{
+  "project": {
+    "name": "cc-gui",
+    "group": "",
+    "version": "0.1.0",
+    "description": "Claude Code Desktop GUI — Tauri 2 + Vue 3 + TypeScript 桌面应用，为 Claude Code CLI 提供图形化桌面界面，支持 DeepSeek API 代理后端",
+    "type": "npm",
+    "techStack": {
+      "language": "typescript",
+      "framework": "vue3",
+      "version": "3.x",
+      "buildTool": "vite"
+    }
+  },
+  "modules": [
+    {
+      "name": "前端-聊天",
+      "path": "src/components/chat/",
+      "summary": "聊天界面核心——消息气泡、输入栏、工具栏、思考指示器、上下文指示器",
+      "responsibilities": [
+        "ChatPanel：聊天主面板，消息列表渲染与滚动管理",
+        "MessageBubble：单条消息气泡，支持 Markdown 渲染、thinking 折叠、文件附件预览",
+        "InputBar：用户输入框，支持多行输入、文件拖拽、发送/停止",
+        "InputBarToolbar：输入栏工具栏（Ponytail 模式、权限模式、思考深度、MCP 状态）",
+        "ModeBar：权限模式选择器（auto/default/acceptEdits/bypassPermissions/dontAsk/plan）",
+        "ThinkingIndicator：AI 思考中动画指示器",
+        "ContextIndicator：Token 用量环形图，点击弹出 ContextUsageModal"
+      ],
+      "publicApi": [
+        { "type": "component", "name": "ChatPanel", "description": "聊天主面板", "methods": [] },
+        { "type": "component", "name": "MessageBubble", "description": "消息气泡组件", "methods": [] },
+        { "type": "component", "name": "InputBar", "description": "用户输入栏", "methods": [] },
+        { "type": "component", "name": "InputBarToolbar", "description": "输入栏工具栏", "methods": [] },
+        { "type": "component", "name": "ModeBar", "description": "权限模式选择器", "methods": [] },
+        { "type": "component", "name": "ThinkingIndicator", "description": "思考中动画", "methods": [] },
+        { "type": "component", "name": "ContextIndicator", "description": "Token 用量指示器", "methods": [] }
+      ],
+      "configurationProperties": [],
+      "dependencies": { "internal": ["前端-共享", "stores", "composables", "lib"], "external": [] },
+      "patterns": ["component"],
+      "docCoverage": { "hasReadme": false, "hasDoc": false, "readmeQuality": "none" }
+    },
+    {
+      "name": "前端-会话",
+      "path": "src/components/session/",
+      "summary": "会话侧边栏——会话列表、新建、删除、重命名",
+      "responsibilities": [
+        "SessionSidebar：会话列表侧边栏，支持搜索、新建、删除、重命名",
+        "会话 CRUD 通过 session store + tauri-bridge 调用 Rust 后端"
+      ],
+      "publicApi": [
+        { "type": "component", "name": "SessionSidebar", "description": "会话侧边栏组件", "methods": [] }
+      ],
+      "configurationProperties": [],
+      "dependencies": { "internal": ["stores", "lib"], "external": [] },
+      "patterns": ["component"],
+      "docCoverage": { "hasReadme": false, "hasDoc": false, "readmeQuality": "none" }
+    },
+    {
+      "name": "前端-文件",
+      "path": "src/components/files/",
+      "summary": "文件浏览面板——目录树、文件预览、Diff 对比",
+      "responsibilities": [
+        "FilePanel：文件浏览主面板，包含 FileTree",
+        "FileTree：目录树组件，右键菜单（打开/预览/在资源管理器显示）",
+        "FilePreview：文件内容预览（代码/Markdown/图片/二进制检测）",
+        "DiffViewer：行级差异对比视图"
+      ],
+      "publicApi": [
+        { "type": "component", "name": "FilePanel", "description": "文件浏览面板", "methods": [] },
+        { "type": "component", "name": "FileTree", "description": "目录树组件", "methods": [] },
+        { "type": "component", "name": "FilePreview", "description": "文件内容预览", "methods": [] },
+        { "type": "component", "name": "DiffViewer", "description": "差异对比视图", "methods": [] }
+      ],
+      "configurationProperties": [],
+      "dependencies": { "internal": ["前端-共享", "composables", "lib"], "external": [] },
+      "patterns": ["component"],
+      "docCoverage": { "hasReadme": false, "hasDoc": false, "readmeQuality": "none" }
+    },
+    {
+      "name": "前端-设置",
+      "path": "src/components/settings/",
+      "summary": "设置面板——API 配置、连接测试、主题语言切换",
+      "responsibilities": [
+        "SettingsPanel：设置面板，API Key/Base URL/Model 配置，DeepSeek 连接测试，主题/语言切换"
+      ],
+      "publicApi": [
+        { "type": "component", "name": "SettingsPanel", "description": "设置面板组件", "methods": [] }
+      ],
+      "configurationProperties": [],
+      "dependencies": { "internal": ["stores", "lib"], "external": [] },
+      "patterns": ["component"],
+      "docCoverage": { "hasReadme": false, "hasDoc": false, "readmeQuality": "none" }
+    },
+    {
+      "name": "前端-布局",
+      "path": "src/components/layout/",
+      "summary": "应用主布局——全局键盘快捷键、主题属性绑定",
+      "responsibilities": [
+        "AppShell：应用主布局容器，含全局键盘快捷键注册、data-theme/data-font-size 属性绑定"
+      ],
+      "publicApi": [
+        { "type": "component", "name": "AppShell", "description": "应用主布局容器", "methods": [] }
+      ],
+      "configurationProperties": [],
+      "dependencies": { "internal": ["stores", "composables"], "external": [] },
+      "patterns": ["component"],
+      "docCoverage": { "hasReadme": false, "hasDoc": false, "readmeQuality": "none" }
+    },
+    {
+      "name": "前端-共享",
+      "path": "src/components/shared/",
+      "summary": "共享组件——8合1管理面板、Markdown 渲染、Mermaid 图表、命令面板、弹窗外壳、错误边界",
+      "responsibilities": [
+        "ManagePanel：8合1管理面板（plugins/mcp/skills/agents/hooks/memory/permissions/styles），Tab 切换时清空数据重新加载",
+        "MarkdownRenderer：Markdown 渲染组件，支持代码高亮",
+        "MermaidRenderer：Mermaid 图表渲染",
+        "CommandPalette：命令面板（拼音搜索、最近使用、动态注册）",
+        "ModalShell：弹窗外壳（三段式布局 header/body/footer），自适应桌面端 Dialog + 移动端 Drawer",
+        "ContextUsageModal：Token 用量详情弹窗",
+        "ErrorBoundary：错误边界组件",
+        "FilePreviewModal：文件预览弹窗"
+      ],
+      "publicApi": [
+        { "type": "component", "name": "ManagePanel", "description": "8合1管理面板", "methods": [] },
+        { "type": "component", "name": "MarkdownRenderer", "description": "Markdown 渲染器", "methods": [] },
+        { "type": "component", "name": "MermaidRenderer", "description": "Mermaid 图表渲染", "methods": [] },
+        { "type": "component", "name": "CommandPalette", "description": "命令面板", "methods": [] },
+        { "type": "component", "name": "ModalShell", "description": "弹窗外壳", "methods": [] },
+        { "type": "component", "name": "ContextUsageModal", "description": "Token 用量弹窗", "methods": [] },
+        { "type": "component", "name": "ErrorBoundary", "description": "错误边界", "methods": [] },
+        { "type": "component", "name": "FilePreviewModal", "description": "文件预览弹窗", "methods": [] }
+      ],
+      "configurationProperties": [],
+      "dependencies": { "internal": ["stores", "composables", "lib"], "external": [] },
+      "patterns": ["component"],
+      "docCoverage": { "hasReadme": false, "hasDoc": false, "readmeQuality": "none" }
+    },
+    {
+      "name": "composables",
+      "path": "src/composables/",
+      "summary": "组合式函数——流数据处理、命令面板总线、会话创建、文件预览、高亮、调试日志",
+      "responsibilities": [
+        "useStreamProcessor：注册/注销 Tauri stream-event 监听，去重，保存消息到 chat store",
+        "useCommandRegistry：命令面板命令动态注册，ChatCommandBus 跨组件通信",
+        "useCommandPalette：命令面板打开/关闭/搜索/导航逻辑",
+        "useNewSession：新建会话逻辑",
+        "useFilePreview：文件预览类型检测和内容加载",
+        "useHighlight：代码高亮",
+        "useDebugLog：调试日志输出"
+      ],
+      "publicApi": [
+        { "type": "function", "name": "useStreamProcessor", "description": "流事件处理", "methods": [] },
+        { "type": "function", "name": "useCommandRegistry", "description": "命令注册", "methods": [] },
+        { "type": "function", "name": "useCommandPalette", "description": "命令面板总线", "methods": [] },
+        { "type": "function", "name": "useNewSession", "description": "新建会话", "methods": [] },
+        { "type": "function", "name": "useFilePreview", "description": "文件预览", "methods": [] },
+        { "type": "function", "name": "useHighlight", "description": "代码高亮", "methods": [] },
+        { "type": "function", "name": "useDebugLog", "description": "调试日志", "methods": [] }
+      ],
+      "configurationProperties": [],
+      "dependencies": { "internal": ["stores", "lib"], "external": [] },
+      "patterns": ["composable"],
+      "docCoverage": { "hasReadme": false, "hasDoc": false, "readmeQuality": "none" }
+    },
+    {
+      "name": "stores",
+      "path": "src/stores/",
+      "summary": "Pinia 状态管理——会话、聊天消息、设置",
+      "responsibilities": [
+        "session store：会话列表、当前会话、CRUD 操作",
+        "chat store：消息列表、流状态、token 统计、usedAgents 追踪",
+        "settings store：API 配置、主题、语言、字号、Ponytail 模式持久化"
+      ],
+      "publicApi": [
+        { "type": "store", "name": "useSessionStore", "description": "会话状态管理", "methods": [] },
+        { "type": "store", "name": "useChatStore", "description": "聊天消息状态管理", "methods": [] },
+        { "type": "store", "name": "useSettingsStore", "description": "设置状态管理", "methods": [] }
+      ],
+      "configurationProperties": [],
+      "dependencies": { "internal": ["lib"], "external": ["pinia", "vue-i18n"] },
+      "patterns": ["store"],
+      "docCoverage": { "hasReadme": false, "hasDoc": false, "readmeQuality": "none" }
+    },
+    {
+      "name": "lib",
+      "path": "src/lib/",
+      "summary": "工具库——Tauri 桥接层、通用工具函数、拼音搜索、测试 Mock",
+      "responsibilities": [
+        "tauri-bridge.ts：封装所有 invoke() 调用，统一错误处理",
+        "utils.ts：通用工具函数",
+        "pinyin.ts：拼音首字母搜索（3755 常用汉字）",
+        "tauri-mock.ts：完整 Tauri API mock，供浏览器内 E2E 测试"
+      ],
+      "publicApi": [
+        { "type": "function", "name": "tauri-bridge", "description": "Tauri IPC 桥接层", "methods": [] },
+        { "type": "function", "name": "utils", "description": "通用工具函数", "methods": [] },
+        { "type": "function", "name": "pinyin", "description": "拼音搜索工具", "methods": [] },
+        { "type": "function", "name": "tauri-mock", "description": "Tauri API Mock", "methods": [] }
+      ],
+      "configurationProperties": [],
+      "dependencies": { "internal": [], "external": ["@tauri-apps/api"] },
+      "patterns": ["utility"],
+      "docCoverage": { "hasReadme": false, "hasDoc": false, "readmeQuality": "none" }
+    },
+    {
+      "name": "Rust 后端",
+      "path": "src-tauri/src/",
+      "summary": "Tauri 2 Rust 后端——23 个 IPC 命令、三线程进程模型、SQLite 持久化、NDJSON 流解析",
+      "responsibilities": [
+        "lib.rs：23 个 Tauri commands 注册 + AppState 管理",
+        "process.rs：三线程模型（Waiter/Stdout Reader/Stderr Reader）spawn Claude CLI",
+        "protocol.rs：NDJSON stream-json 事件解析（StreamLine → FrontendEvent）",
+        "session.rs：SessionManager — 会话 CRUD + 消息持久化 + DeepSeek API 连接测试",
+        "db.rs：SQLite 初始化 + WAL 模式 + 4 表 schema（sessions/messages/settings/approved_scenarios）",
+        "main.rs：程序入口，DB 初始化 + Tauri 启动"
+      ],
+      "publicApi": [
+        { "type": "class", "name": "lib::TauriCommands", "description": "23 个 IPC 命令", "methods": ["create_session", "list_sessions", "delete_session", "rename_session", "send_message", "send_stdin", "stop_session", "list_messages", "save_message", "spawn_claude_session", "get_claude_dir", "list_dir", "read_file_content", "read_file_base64", "write_file", "get_workspace_root", "reveal_in_explorer", "connect_llm", "sync_permission_settings", "add_approved_scenario", "remove_approved_scenario", "list_approved_scenarios", "store_claude_session"] },
+        { "type": "class", "name": "process::ProcessManager", "description": "三线程进程管理器", "methods": ["spawn", "stop"] },
+        { "type": "class", "name": "protocol::StreamLine", "description": "NDJSON 事件解析器", "methods": ["parse"] },
+        { "type": "class", "name": "session::SessionManager", "description": "会话管理器", "methods": ["create", "list", "delete", "rename"] },
+        { "type": "class", "name": "db::Db", "description": "SQLite 数据库", "methods": ["init", "migrate"] }
+      ],
+      "configurationProperties": [],
+      "dependencies": { "internal": [], "external": ["tauri 2", "rusqlite 0.31", "tokio 1", "reqwest 0.12", "serde_json 1"] },
+      "patterns": ["command-handler"],
+      "docCoverage": { "hasReadme": false, "hasDoc": false, "readmeQuality": "minimal" }
+    }
+  ],
+  "dependencyGraph": {
+    "nodes": ["前端-聊天", "前端-会话", "前端-文件", "前端-设置", "前端-布局", "前端-共享", "composables", "stores", "lib", "Rust 后端"],
+    "edges": [
+      { "from": "前端-聊天", "to": "前端-共享" },
+      { "from": "前端-聊天", "to": "stores" },
+      { "from": "前端-聊天", "to": "composables" },
+      { "from": "前端-聊天", "to": "lib" },
+      { "from": "前端-会话", "to": "stores" },
+      { "from": "前端-会话", "to": "lib" },
+      { "from": "前端-文件", "to": "前端-共享" },
+      { "from": "前端-文件", "to": "composables" },
+      { "from": "前端-文件", "to": "lib" },
+      { "from": "前端-设置", "to": "stores" },
+      { "from": "前端-设置", "to": "lib" },
+      { "from": "前端-布局", "to": "stores" },
+      { "from": "前端-布局", "to": "composables" },
+      { "from": "前端-共享", "to": "stores" },
+      { "from": "前端-共享", "to": "composables" },
+      { "from": "前端-共享", "to": "lib" },
+      { "from": "composables", "to": "stores" },
+      { "from": "composables", "to": "lib" },
+      { "from": "stores", "to": "lib" }
+    ]
+  },
+  "scanMeta": {
+    "scannedAt": "2026-06-25T00:30:00+08:00",
+    "moduleCount": 10,
+    "totalApiCount": 42,
+    "totalConfigCount": 0
+  }
+}

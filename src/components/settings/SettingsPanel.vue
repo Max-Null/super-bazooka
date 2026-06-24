@@ -2,12 +2,15 @@
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { useSettingsStore, type PonytailMode } from "@/stores/settings";
+import { useI18n } from "vue-i18n";
 import { connectLLM, readFileContent, writeFile, getClaudeDir } from "@/lib/tauri-bridge";
+import { translateError } from "@/lib/utils";
 import ErrorBoundary from "@/components/shared/ErrorBoundary.vue";
 import ModalShell from "@/components/shared/ModalShell.vue";
 import ManagePanel from "@/components/shared/ManagePanel.vue";
 
 const router = useRouter();
+const { t } = useI18n();
 const settings = useSettingsStore();
 
 // ── 权限模式 computed（与工具栏 activeMode 逻辑一致）──
@@ -99,6 +102,11 @@ const currentPonytail = computed(() => ponytailOptions.find(o => o.value === set
 // ── 连接测试 ──
 const testResult = ref<string | null>(null);
 const testError = ref<string | null>(null);
+const translatedTestError = computed(() => {
+  if (!testError.value) return null;
+  const { key, params } = translateError(testError.value);
+  return t(key, params as Record<string, string>);
+});
 const isTesting = ref(false);
 
 async function handleTest() {
@@ -106,7 +114,7 @@ async function handleTest() {
   // 去掉 [1M] 等上下文窗口标注，API 不接受
   const model = settings.model.replace(/\[.*\]/, '').trim();
   try { testResult.value = await connectLLM(settings.apiKey, settings.baseUrl, model); }
-  catch (err) { testError.value = String(err); }
+  catch (err) { testError.value = String(err); }  /* ponytail: translateError applied in template display */
   finally { isTesting.value = false; }
 }
 
@@ -149,7 +157,8 @@ async function saveSettingsJson() {
     jsonEditorSaved.value = true;
     setTimeout(() => (jsonEditorSaved.value = false), 2000);
   } catch (e) {
-    jsonEditorError.value = String(e);
+    const { key, params } = translateError(e);
+    jsonEditorError.value = t(key, params as any);
   }
 }
 </script>
@@ -168,10 +177,10 @@ async function saveSettingsJson() {
       <!-- 三区平铺 -->
       <div class="flex flex-wrap gap-8 flex-1">
 
-        <!-- API 配置 -->
+        <!-- CC 配置 -->
         <section class="space-y-4 w-[300px] shrink-0">
           <div class="flex items-center gap-2 mb-1">
-            <h3 class="text-[10px] font-semibold uppercase tracking-widest" :style="{ color: 'var(--text-muted)' }">{{ $t('settings.apiConfig') }}</h3>
+            <h3 class="text-[10px] font-semibold uppercase tracking-widest" :style="{ color: 'var(--text-muted)' }">{{ $t('settings.ccConfig') }}</h3>
             <button @click="openSettingsJson" class="text-[9px] px-1.5 py-0.5 rounded-full font-medium transition-colors hover:underline" :style="{ background: 'var(--accent-glow)', color: 'var(--accent)', cursor: 'pointer' }">{{ $t('settings.fromSettingsJson') }} ↗</button>
           </div>
           <div>
@@ -222,7 +231,19 @@ async function saveSettingsJson() {
             {{ isTesting ? $t('settings.testing') : $t('settings.test') }}
           </button>
           <div v-if="testResult" class="p-3 rounded-lg text-xs" style="background:var(--accent-glow); color:var(--accent)">✓ {{ testResult }}</div>
-          <div v-if="testError" class="p-3 rounded-lg text-xs break-all" style="background:var(--coral-glow); color:var(--coral); border:1px solid var(--coral); --tw-border-opacity:0.3">✕ {{ testError }}</div>
+          <div v-if="translatedTestError" class="p-3 rounded-lg text-xs break-all" style="background:var(--coral-glow); color:var(--coral); border:1px solid var(--coral); --tw-border-opacity:0.3">✕ {{ translatedTestError }}</div>
+          <div class="pt-2" style="border-top:1px solid var(--border-dim)">
+            <label class="block text-xs font-medium mb-1.5" style="color:var(--text-muted)">{{ $t('settings.claudePath') }}</label>
+            <div v-if="settings.resolvedClaudePath && settings.resolvedClaudePath !== 'claude'" class="text-[11px] font-mono py-1.5 truncate" :style="{ color: 'var(--accent)' }" :title="settings.resolvedClaudePath">
+              {{ $t('settings.claudePathDetected', { path: settings.resolvedClaudePath }) }}
+            </div>
+            <div v-else class="text-[11px] py-1.5" :style="{ color: 'var(--coral)' }">
+              {{ $t('settings.claudePathNotFound') }}
+            </div>
+            <div class="text-[10px] mb-1 mt-1" :style="{ color: 'var(--text-muted)' }">{{ $t('settings.claudePathOverride') }}</div>
+            <input v-model="settings.claudePath" type="text" :placeholder="$t('settings.claudePathOverridePlaceholder')"
+              class="settings-input w-full rounded-lg px-3.5 py-2 text-sm outline-none" />
+          </div>
         </section>
 
         <!-- CC 管理 -->

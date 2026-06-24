@@ -46,6 +46,8 @@ export interface SendOptions {
   model?: string;
   /** File paths to attach (parent dirs are added via --add-dir) */
   filePaths?: string[];
+  /** Manual claude CLI path (overrides auto-detect) */
+  claudePath?: string;
 }
 
 export async function sendMessage(sessionId: string, message: string, options?: SendOptions): Promise<string> {
@@ -59,6 +61,7 @@ export async function sendMessage(sessionId: string, message: string, options?: 
     ultracode: options?.ultracode ?? false,
     model: options?.model ?? null,
     filePaths: options?.filePaths ?? null,
+    claudePath: options?.claudePath ?? null,
   });
 }
 
@@ -214,6 +217,11 @@ export async function writeFile(path: string, content: string): Promise<void> {
 
 export async function getClaudeDir(): Promise<string> {
   return invoke("get_claude_dir");
+}
+
+/** 返回 claude CLI 的自动检测路径（不依赖用户手动配置） */
+export async function resolveClaudePath(): Promise<string> {
+  return invoke("resolve_claude_path");
 }
 
 /** 从 ~/.claude/settings.json 读取配置 */

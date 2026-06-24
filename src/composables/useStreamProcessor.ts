@@ -1,9 +1,11 @@
 import { ref } from "vue";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { useI18n } from "vue-i18n";
 import { useChatStore, type ToolUse } from "@/stores/chat";
 import { useSessionStore } from "@/stores/session";
 import { useDebugLog } from "@/composables/useDebugLog";
 import { storeClaudeSession, saveMessage, type StreamEvent, type ProcessExitedEvent } from "@/lib/tauri-bridge";
+import { translateError } from "@/lib/utils";
 
 let unlisten: UnlistenFn | null = null;
 let unlistenDebug: UnlistenFn | null = null;
@@ -41,6 +43,7 @@ export function useStreamProcessor() {
   const chat = useChatStore();
   const session = useSessionStore();
   const debugLog = useDebugLog();
+  const { t } = useI18n();
 
   async function startListening() {
     if (unlisten) return;
@@ -119,10 +122,12 @@ export function useStreamProcessor() {
           break;
         }
 
-        case "error":
-          chat.appendText(`\n\n> ⚠️ ${data.error || "Unknown error"}`);
+        case "error": {
+          const { key, params } = translateError(data.error || "Unknown error");
+          chat.appendText(`\n\n> ⚠️ ${t(key, params as any)}`);
           chat.finishAssistantMessage();
           break;
+        }
 
         default:
           debugLog.add(`📨 unknown type: ${data.type}`);
