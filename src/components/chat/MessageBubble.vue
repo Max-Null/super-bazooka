@@ -1,12 +1,20 @@
 <script setup lang="ts">
 import type { Message } from "@/stores/chat";
 import { ref, computed, onUnmounted, nextTick } from "vue";
+import { useI18n } from "vue-i18n";
 
 import { isImageFile, useFilePreview } from "@/composables/useFilePreview";
 import { formatNum } from "@/lib/utils";
 import MarkdownRenderer from "../shared/MarkdownRenderer.vue";
 
+const { t } = useI18n();
 const { getThumbnail, thumbnails } = useFilePreview();
+
+function toolLabel(name: string): string {
+  const key = `tools.${name}`;
+  const translated = t(key);
+  return translated !== key ? translated : name;
+}
 
 
 const props = defineProps<{ message: Message; approvalPending?: boolean }>();
@@ -208,7 +216,7 @@ function formatJSON(obj: unknown): string {
           style="background:var(--bg-root); border:1px solid var(--border-dim)"
         >
           <summary class="px-2.5 py-1.5 cursor-pointer select-none transition-colors hover:bg-[var(--bg-hover)]" style="color:var(--text-secondary)">
-            <span class="font-medium" style="color:var(--violet)">{{ tu.name }}</span>
+            <span class="font-medium" style="color:var(--violet)">{{ toolLabel(tu.name) }}</span>
             <span v-if="tu.thinkingDurationMs" class="ml-1" style="color:var(--text-muted)">🧠{{ (tu.thinkingDurationMs / 1000).toFixed(1) }}s</span>
             <span class="ml-2" style="color:var(--text-muted)">
               {{ summarizeInput(tu.input) }}
