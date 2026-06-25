@@ -296,13 +296,10 @@ async function handleSend(text: string) {
   }
 }
 
-// control_response 格式（Goose PR #7420 + Agent SDK 确认）:
-// allow: {"type":"control_response","request_id":"...","response":{"decision":"allow"}}
-// deny:  {"type":"control_response","request_id":"...","response":{"decision":"deny","message":"..."}}
+// control_response 格式（cli-agent-protocol skill 确认 + 实测通过）:
+// 嵌套：response.subtype/request_id/response.behavior/updatedInput/message
 async function handleAllow() {
   const cr = chat.pendingControlRequest; if (!cr) return;
-  // 正确格式（cli-agent-protocol skill + Goose PR #7420 确认）：
-  // request_id 在 response 内层，updatedInput 是 allow 必须字段
   const payload = {
     type: "control_response",
     response: {
@@ -446,7 +443,7 @@ async function handleStop() {
       type: "control_request",
       request_id: `interrupt_${Date.now()}`,
       request: { subtype: "interrupt" },
-    }) + "\n");
+    }));
   } catch {}
   // 等待 3 秒让 CC 优雅退出，超时再强杀
   await new Promise(r => setTimeout(r, 3000));
