@@ -306,11 +306,10 @@ pub async fn spawn_claude_session(
     let mut args = vec![
         "--print".to_string(),
         "--output-format".to_string(), "stream-json".to_string(),
-        "--input-format".to_string(), "stream-json".to_string(),
         "--verbose".to_string(),
         "--include-partial-messages".to_string(),
         // 关键 flag: 让 CLI 通过 stdout 发送 tool 审批请求（can_use_tool）
-        // 并通过 stdin NDJSON 接收宿主程序的审批决策。
+        // 并通过 stdin 接收宿主程序的审批决策。
         // 不加则非交互模式下所有 tool 直接 auto-deny
         "--permission-prompt-tool".to_string(), "stdio".to_string(),
     ];
