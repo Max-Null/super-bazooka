@@ -209,6 +209,7 @@ function formatJSON(obj: unknown): string {
         >
           <summary class="px-2.5 py-1.5 cursor-pointer select-none transition-colors hover:bg-[var(--bg-hover)]" style="color:var(--text-secondary)">
             <span class="font-medium" style="color:var(--violet)">{{ tu.name }}</span>
+            <span v-if="tu.thinkingDurationMs" class="ml-1" style="color:var(--text-muted)">🧠{{ (tu.thinkingDurationMs / 1000).toFixed(1) }}s</span>
             <span class="ml-2" style="color:var(--text-muted)">
               {{ summarizeInput(tu.input) }}
             </span>

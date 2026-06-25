@@ -27,6 +27,8 @@ export interface ToolUse {
   input: Record<string, unknown>;
   result?: string;
   isError?: boolean;
+  /** 该工具调用前的思考耗时（毫秒） */
+  thinkingDurationMs?: number;
 }
 
 export interface ControlRequest {

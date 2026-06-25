@@ -45,6 +45,18 @@ export function useStreamProcessor() {
   const debugLog = useDebugLog();
   const { t } = useI18n();
 
+  // 分阶段思考计时：每次 tool_use 前独立计时
+  let thinkingStart = 0;
+
+  function markThinkingStart() {
+    if (!thinkingStart) thinkingStart = Date.now();
+  }
+  function popThinkingDuration(): number {
+    const dur = thinkingStart ? Date.now() - thinkingStart : 0;
+    thinkingStart = 0;
+    return dur;
+  }
+
   async function startListening() {
     if (unlisten) return;
 
@@ -54,6 +66,7 @@ export function useStreamProcessor() {
 
       switch (data.type) {
         case "assistant":
+          if (data.text || data.thinking) markThinkingStart();
           if (data.text) {
             // 去重：当完整 assistant 事件携带的文本以已有内容开头时，
             // 说明之前已通过 text_delta 增量事件接收过，只追加新后缀。
@@ -79,10 +92,13 @@ export function useStreamProcessor() {
           }
           if (data.tool_use) {
             for (const tu of data.tool_use) {
+              // 记录该工具调用前的思考耗时，然后重置计时器
+              const thinkingDur = popThinkingDuration();
               chat.addToolUse({
                 id: tu.id,
                 name: tu.name,
                 input: tu.input,
+                thinkingDurationMs: thinkingDur,
               });
             }
           }
