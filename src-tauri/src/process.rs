@@ -308,11 +308,7 @@ pub async fn spawn_claude_session(
         "--output-format".to_string(), "stream-json".to_string(),
         "--verbose".to_string(),
         "--include-partial-messages".to_string(),
-        // 关键 flag: 让 CLI 通过 stdout 发送 tool 审批请求（can_use_tool）
-        // 并通过 stdin 接收宿主程序的审批决策。
-        // 不加则非交互模式下所有 tool 直接 auto-deny
-        "--permission-prompt-tool".to_string(), "stdio".to_string(),
-    ];
+    ]; // --permission-mode 在下文根据用户设置追加，控制审批行为
 
     // NOTE: --model is intentionally NOT passed to the CLI.
     // The Claude CLI uses its own configuration (~/.claude/settings.json)
