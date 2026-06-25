@@ -43,6 +43,13 @@ const commandBus = useCommandPaletteBus();
 import { isImageFile } from "@/composables/useFilePreview";
 const { getThumbnail, thumbnails } = useFilePreview();
 
+// 翻译 CC 工具名（中文环境 Bash→命令行、Write→写入文件，英文保持原名）
+function toolLabel(name: string): string {
+  const key = `tools.${name}`;
+  const translated = t(key);
+  return translated !== key ? translated : name;
+}
+
 // 复制 debug 日志
 function copyDebugLog() {
   const text = debugLog.lines.value.join('\n');
@@ -520,7 +527,7 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAut
       style="background:var(--amber-glow); border-top:1px solid var(--amber); border-color:var(--amber); --tw-border-opacity:0.25"
     >
       <span class="text-xs flex-1" style="color:var(--amber)">
-        {{ $t('chat.allowTool', { tool: chat.pendingControlRequest.tool_name }) }}
+        {{ $t('chat.allowTool', { tool: toolLabel(chat.pendingControlRequest.tool_name || '') }) }}
       </span>
       <button @click="handleAllow" class="px-3 py-1 rounded-md text-xs font-medium transition-colors" style="background:var(--accent-dim); color:white">{{ $t('chat.allow') }}</button>
       <button @click="handleDeny" class="px-3 py-1 rounded-md text-xs font-medium transition-colors" style="border:1px solid var(--coral); color:var(--coral)">{{ $t('chat.deny') }}</button>

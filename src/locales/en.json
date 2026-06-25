@@ -36,6 +36,27 @@
     "aboutCopyright": "© 2026 cc-gui contributors · MIT"
   },
 
+  "tools": {
+    "Bash": "Bash",
+    "PowerShell": "PowerShell",
+    "Write": "Write",
+    "Edit": "Edit",
+    "Read": "Read",
+    "WebFetch": "WebFetch",
+    "WebSearch": "WebSearch",
+    "Skill": "Skill",
+    "Workflow": "Workflow",
+    "Agent": "Agent",
+    "Task": "Task",
+    "NotebookEdit": "NotebookEdit",
+    "Monitor": "Monitor",
+    "Artifact": "Artifact",
+    "AskUserQuestion": "AskUserQuestion",
+    "ExitPlanMode": "ExitPlanMode",
+    "Glob": "Glob",
+    "Grep": "Grep"
+  },
+
   "settings": {
     "title": "Settings",
     "apiKey": "API Key",
