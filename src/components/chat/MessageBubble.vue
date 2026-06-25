@@ -9,7 +9,7 @@ import MarkdownRenderer from "../shared/MarkdownRenderer.vue";
 const { getThumbnail, thumbnails } = useFilePreview();
 
 
-const props = defineProps<{ message: Message }>();
+const props = defineProps<{ message: Message; approvalPending?: boolean }>();
 const emit = defineEmits<{
   edit: [id: string, content: string];
   resend: [id: string, content: string];
@@ -63,9 +63,9 @@ function startTimer() {
   stopTimer();
   liveElapsedMs.value = 0;
   timerInterval = setInterval(() => {
-    if (props.message.isStreaming) {
+    if (props.message.isStreaming && !props.approvalPending) {
       liveElapsedMs.value = Date.now() - props.message.timestamp;
-    } else {
+    } else if (!props.message.isStreaming) {
       stopTimer();
     }
   }, 100);
