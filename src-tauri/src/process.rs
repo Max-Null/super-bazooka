@@ -303,9 +303,13 @@ pub async fn spawn_claude_session(
 
     // Build command args (per docs: stream-json + verbose + include-partial-messages
     // for real-time token streaming)
+    // --input-format stream-json 是关键 flag：让 CC 进入双工 NDJSON 模式，通过 stdout 发
+    // control_request(can_use_tool) 审批请求，通过 stdin 收 control_response 审批决策。
+    // 不加此 flag 时 --print 模式直接 auto-approve/auto-deny，不会弹审批。
     let mut args = vec![
         "--print".to_string(),
         "--output-format".to_string(), "stream-json".to_string(),
+        "--input-format".to_string(), "stream-json".to_string(),
         "--verbose".to_string(),
         "--include-partial-messages".to_string(),
     ]; // --permission-mode 在下文根据用户设置追加，控制审批行为
@@ -376,7 +380,8 @@ pub async fn spawn_claude_session(
         args.push(resume_id.clone());
     }
 
-    args.push(params.message.clone());
+    // --input-format stream-json 模式下，消息通过 stdin NDJSON 发送，不能作为命令行参数
+    // args.push(params.message.clone());  // 已移除：消息在下文通过 stdin 写入
 
     #[cfg(target_os = "windows")]
     let mut cmd = {
@@ -418,7 +423,21 @@ pub async fn spawn_claude_session(
     // Take stdout, stderr, stdin
     let stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
     let stderr = child.stderr.take().ok_or("Failed to capture stderr")?;
-    let _stdin = child.stdin.take().ok_or("Failed to capture stdin")?;
+    let mut _stdin = child.stdin.take().ok_or("Failed to capture stdin")?;
+
+    // --input-format stream-json 模式：先通过 stdin 发送用户消息（NDJSON），再注册供后续控制响应使用
+    let user_msg = serde_json::json!({
+        "type": "user",
+        "message": {
+            "role": "user",
+            "content": params.message
+        }
+    });
+    let mut msg_json = serde_json::to_string(&user_msg)
+        .map_err(|e| format!("序列化用户消息失败: {}", e))?;
+    msg_json.push('\n');
+    _stdin.write_all(msg_json.as_bytes()).await
+        .map_err(|e| format!("stdin 写入用户消息失败: {}", e))?;
 
     // Register stdin handle for later writes (e.g., permission responses)
     {
