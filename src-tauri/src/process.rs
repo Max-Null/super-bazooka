@@ -510,6 +510,8 @@ pub async fn spawn_claude_session(
     // ── Thread 2: Stdout Reader (parse NDJSON, emit events) ──
     let sid_reader = session_id.clone();
     let app_reader = app_handle.clone();
+    // hook_callback 需要访问 stdin 自动回复（不阻塞会话）
+    let stdin_reader = stdin_manager.clone();
 
     tokio::spawn(async move {
         let reader = BufReader::new(stdout);
@@ -538,6 +540,23 @@ pub async fn spawn_claude_session(
                 }
 
                 let frontend_event = parsed.to_frontend_event(&sid_reader);
+                // hook_callback 自动回复 allow，不阻塞会话（后续可扩展为可阻断审批 UI）
+                if let Some(ref cr) = frontend_event.control_request {
+                    if cr.subtype == "hook_callback" {
+                        let resp = serde_json::json!({
+                            "type": "control_response",
+                            "response": {
+                                "subtype": "success",
+                                "request_id": cr.request_id.as_deref().unwrap_or(""),
+                                "response": { "behavior": "allow" }
+                            }
+                        });
+                        let mut resp_str = serde_json::to_string(&resp).unwrap_or_default();
+                        resp_str.push('\n');
+                        let mut sm = stdin_reader.lock().await;
+                        let _ = sm.send(&sid_reader, &resp_str).await;
+                    }
+                }
                 let _ = app_reader.emit("stream-event", &frontend_event);
             } else {
                 let _ = app_reader.emit(

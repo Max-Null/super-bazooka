@@ -373,10 +373,84 @@ async function handleResend(id: string, content: string) {
   await handleSend(content);
 }
 
+// ── AskUserQuestion 问答状态 ──
+interface Question { question: string; header: string; options: { label: string; description: string }[]; multiSelect: boolean }
+const questionAnswers = ref<Map<string, string | string[]>>(new Map());
+const questionOther = ref<Map<string, string>>(new Map());
+
+function getQuestions(): Question[] {
+  const input = chat.pendingControlRequest?.tool_input as Record<string, unknown> | undefined;
+  if (!input || !Array.isArray(input.questions)) return [];
+  return input.questions as Question[];
+}
+
+function toggleAnswer(question: string, label: string, multi: boolean) {
+  const cur = questionAnswers.value.get(question);
+  if (multi) {
+    const arr = (Array.isArray(cur) ? [...cur] : []) as string[];
+    const idx = arr.indexOf(label);
+    idx >= 0 ? arr.splice(idx, 1) : arr.push(label);
+    questionAnswers.value.set(question, arr);
+  } else {
+    questionAnswers.value.set(question, cur === label ? '' : label);
+  }
+  questionOther.value.delete(question);
+}
+
+function setOther(question: string, text: string) {
+  questionAnswers.value.delete(question);
+  questionOther.value.set(question, text);
+}
+
+async function submitAnswers() {
+  const cr = chat.pendingControlRequest; if (!cr) return;
+  const answers: Record<string, string | string[]> = {};
+  const questions = getQuestions();
+  for (const q of questions) {
+    const other = questionOther.value.get(q.question);
+    if (other !== undefined) { answers[q.question] = other; continue; }
+    const ans = questionAnswers.value.get(q.question);
+    if (ans) answers[q.question] = ans;
+  }
+  const payload = {
+    type: "control_response",
+    response: {
+      subtype: "success",
+      request_id: cr.request_id || "",
+      response: {
+        behavior: "allow",
+        updatedInput: { questions: cr.tool_input.questions, answers },
+      },
+    },
+  };
+  debugLog.add(`📤 AskUserQuestion answers: ${JSON.stringify(payload)}`);
+  await sendStdin(session.activeSessionId, JSON.stringify(payload));
+  questionAnswers.value.clear();
+  questionOther.value.clear();
+  chat.resolveControlRequest("allow");
+}
+
+function skipQuestions() {
+  handleDeny();
+  questionAnswers.value.clear();
+  questionOther.value.clear();
+}
+
 // ── Stop processing ──
 async function handleStop() {
-  if (!session.activeSessionId) return;
-  try { await stopSession(session.activeSessionId); } catch {}
+  const sid = session.activeSessionId;
+  if (!sid) return;
+  // 先发 interrupt 控制请求，让 CC 优雅中断
+  try {
+    await sendStdin(sid, JSON.stringify({
+      type: "control_request",
+      request_id: `interrupt_${Date.now()}`,
+      request: { subtype: "interrupt" },
+    }) + "\n");
+  } catch {}
+  // 等待 3 秒让 CC 优雅退出，超时再强杀
+  await new Promise(r => setTimeout(r, 3000));
+  try { await stopSession(sid); } catch {}
   chat.finishAssistantMessage();
 }
 
@@ -520,9 +594,9 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAut
       </div>
     </div>
 
-    <!-- Permission bar -->
+    <!-- Permission bar（AskUserQuestion 走独立问答弹窗）-->
     <div
-      v-if="chat.pendingControlRequest"
+      v-if="chat.pendingControlRequest && chat.pendingControlRequest.tool_name !== 'AskUserQuestion'"
       class="shrink-0 px-4 py-2.5 flex items-center gap-3"
       style="background:var(--amber-glow); border-top:1px solid var(--amber); border-color:var(--amber); --tw-border-opacity:0.25"
     >
@@ -601,6 +675,69 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAut
     <FilePreviewModal :file="previewFile" @close="previewFile = null" />
     <ContextUsageModal :open="showContextModal" @close="showContextModal = false" />
     <ManagePanel :open="showManage" :initialTab="manageTab" @close="showManage = false" @send-slash="(t) => handleSend(t)" />
+
+    <!-- AskUserQuestion 问答弹窗 -->
+    <ModalShell :open="chat.pendingControlRequest?.tool_name === 'AskUserQuestion'" size="md" position="top" @close="skipQuestions">
+      <template #header>
+        <span class="text-sm font-semibold" :style="{ color: 'var(--text-bright)' }">{{ $t('chat.askUserQuestion') }}</span>
+      </template>
+      <div class="space-y-4 max-h-[60vh] overflow-y-auto px-1">
+        <div v-for="(q, qi) in getQuestions()" :key="qi" class="space-y-2">
+          <div class="flex items-center gap-1.5">
+            <span v-if="q.header" class="text-[10px] px-1.5 py-0.5 rounded font-medium" :style="{ background: 'var(--accent-glow)', color: 'var(--accent)' }">{{ q.header }}</span>
+            <span class="text-xs font-medium" :style="{ color: 'var(--text-primary)' }">{{ q.question }}</span>
+          </div>
+          <div class="space-y-1 ml-1">
+            <label
+              v-for="opt in q.options"
+              :key="opt.label"
+              class="flex items-start gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors hover:bg-[var(--bg-hover)]"
+            >
+              <input
+                :type="q.multiSelect ? 'checkbox' : 'radio'"
+                :name="`q_${qi}`"
+                :checked="q.multiSelect
+                  ? (Array.isArray(questionAnswers.get(q.question)) && (questionAnswers.get(q.question) as string[]).includes(opt.label))
+                  : questionAnswers.get(q.question) === opt.label"
+                @change="toggleAnswer(q.question, opt.label, q.multiSelect)"
+                class="mt-0.5 shrink-0"
+              />
+              <div class="min-w-0">
+                <div class="text-xs font-medium" :style="{ color: 'var(--text-secondary)' }">{{ opt.label }}</div>
+                <div class="text-[11px] leading-relaxed" :style="{ color: 'var(--text-muted)' }">{{ opt.description }}</div>
+              </div>
+            </label>
+            <!-- Other 自由输入 -->
+            <label class="flex items-start gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors hover:bg-[var(--bg-hover)]">
+              <input
+                :type="q.multiSelect ? 'checkbox' : 'radio'"
+                :name="`q_${qi}`"
+                :checked="questionOther.has(q.question)"
+                @change="questionOther.set(q.question, '')"
+                class="mt-0.5 shrink-0"
+              />
+              <div class="flex-1 min-w-0">
+                <div class="text-xs font-medium" :style="{ color: 'var(--text-secondary)' }">Other</div>
+                <input
+                  v-if="questionOther.has(q.question)"
+                  :value="questionOther.get(q.question) || ''"
+                  @input="(e) => setOther(q.question, (e.target as HTMLInputElement).value)"
+                  placeholder="输入自定义答案..."
+                  class="mt-1 w-full rounded px-2 py-1 text-xs outline-none"
+                  :style="{ background: 'var(--bg-elevated)', border: '1px solid var(--border-dim)', color: 'var(--text-primary)', caretColor: 'var(--accent)' }"
+                />
+              </div>
+            </label>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <div class="flex items-center justify-end gap-2">
+          <button @click="skipQuestions" class="text-xs px-3 py-1.5 rounded transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-muted)' }">{{ $t('chat.skip') }}</button>
+          <button @click="submitAnswers" class="px-4 py-1.5 rounded text-xs font-medium transition-colors" :style="{ background: 'var(--accent)', color: 'var(--bg-root)' }">{{ $t('chat.submit') }}</button>
+        </div>
+      </template>
+    </ModalShell>
 
     <!-- 关于弹窗 -->
     <ModalShell :open="showAbout" size="sm" @close="showAbout = false">
