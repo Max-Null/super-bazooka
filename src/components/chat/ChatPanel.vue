@@ -490,16 +490,20 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAut
       </div>
 
       <!-- Debug -->
-      <div v-if="debugLog.lines.value.length > 0" class="max-w-3xl mx-auto px-4 pb-4">
+      <!-- Debug（鼠标移入显示复制图标）-->
+      <div v-if="debugLog.lines.value.length > 0" class="max-w-3xl mx-auto px-4 pb-4 group">
         <div class="flex items-center gap-2">
           <button @click="debugLog.toggle()" class="text-[11px] transition-colors hover:text-[var(--text-secondary)]" style="color:var(--text-muted)">
             {{ debugLog.visible.value ? '▾' : '▸' }} Debug ({{ debugLog.lines.value.length }})
           </button>
           <button
             @click="copyDebugLog()"
-            class="text-[10px] px-1.5 py-0.5 rounded transition-colors hover:bg-[var(--bg-hover)]"
-            style="color:var(--text-muted)"
-          >📋 复制</button>
+            class="w-4 h-4 flex items-center justify-center rounded opacity-0 group-hover:opacity-100 transition-opacity hover:bg-[var(--bg-hover)]"
+            :style="{ color: 'var(--text-muted)' }"
+            :title="$t('chat.copy')"
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </button>
         </div>
         <pre
           v-if="debugLog.visible.value"
