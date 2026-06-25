@@ -13,6 +13,7 @@
     "scrollToBottom": "Scroll to bottom",
     "allow": "Allow",
     "deny": "Deny",
+    "allowTool": "Allow {tool}?",
     "remove": "Remove",
     "copy": "Copy",
     "copied": "Copied",

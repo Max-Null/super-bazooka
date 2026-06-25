@@ -520,7 +520,7 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAut
       style="background:var(--amber-glow); border-top:1px solid var(--amber); border-color:var(--amber); --tw-border-opacity:0.25"
     >
       <span class="text-xs flex-1" style="color:var(--amber)">
-        Allow <code class="px-1 py-px rounded text-[11px]" style="background:rgba(245,166,35,0.1)">{{ chat.pendingControlRequest.tool_name }}</code>?
+        {{ $t('chat.allowTool', { tool: chat.pendingControlRequest.tool_name }) }}
       </span>
       <button @click="handleAllow" class="px-3 py-1 rounded-md text-xs font-medium transition-colors" style="background:var(--accent-dim); color:white">{{ $t('chat.allow') }}</button>
       <button @click="handleDeny" class="px-3 py-1 rounded-md text-xs font-medium transition-colors" style="border:1px solid var(--coral); color:var(--coral)">{{ $t('chat.deny') }}</button>

@@ -13,6 +13,7 @@
     "scrollToBottom": "滚动到底部",
     "allow": "允许",
     "deny": "拒绝",
+    "allowTool": "允许使用 {tool}？",
     "remove": "移除",
     "copy": "复制",
     "copied": "已复制",
