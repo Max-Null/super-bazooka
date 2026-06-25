@@ -681,7 +681,7 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAut
       <template #header>
         <span class="text-sm font-semibold" :style="{ color: 'var(--text-bright)' }">{{ $t('chat.askUserQuestion') }}</span>
       </template>
-      <div class="space-y-4 max-h-[60vh] overflow-y-auto px-1">
+      <div class="space-y-4 px-1">
         <div v-for="(q, qi) in getQuestions()" :key="qi" class="space-y-2">
           <div class="flex items-center gap-1.5">
             <span v-if="q.header" class="text-[10px] px-1.5 py-0.5 rounded font-medium whitespace-nowrap shrink-0" :style="{ background: 'var(--accent-glow)', color: 'var(--accent)' }">{{ q.header }}</span>
