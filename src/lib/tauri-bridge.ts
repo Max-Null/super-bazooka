@@ -14,6 +14,7 @@ export interface StreamEvent {
     subtype: string;
     tool_name?: string;
     tool_input: Record<string, unknown>;
+    request_id?: string;
   };
   duration_ms?: number;
   input_tokens?: number;

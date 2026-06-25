@@ -312,6 +312,10 @@ pub async fn spawn_claude_session(
         "--input-format".to_string(), "stream-json".to_string(),
         "--verbose".to_string(),
         "--include-partial-messages".to_string(),
+        // 关键 flag: 让 CC 通过 stdout 发送 can_use_tool 审批请求，通过 stdin 接收审批决策。
+        // 此 flag 不在 claude --help 中显示（SDK 内部专用），但 SDK 和第三方实现均使用。
+        // 不加则 --print 非交互模式下所有 tool 直接 auto-deny
+        "--permission-prompt-tool".to_string(), "stdio".to_string(),
     ]; // --permission-mode 在下文根据用户设置追加，控制审批行为
 
     // NOTE: --model is intentionally NOT passed to the CLI.
@@ -344,7 +348,7 @@ pub async fn spawn_claude_session(
     };
 
     args.push("--permission-mode".to_string());
-    args.push(cli_perm);
+    args.push(cli_perm.clone());
 
     // Effort → CLI flag mapping
     //
@@ -438,6 +442,21 @@ pub async fn spawn_claude_session(
     msg_json.push('\n');
     _stdin.write_all(msg_json.as_bytes()).await
         .map_err(|e| format!("stdin 写入用户消息失败: {}", e))?;
+
+    // 发送 set_permission_mode 控制请求，告知 CC 当前权限模式
+    let perm_req = serde_json::json!({
+        "type": "control_request",
+        "request_id": format!("perm_{}", params.session_id),
+        "request": {
+            "subtype": "set_permission_mode",
+            "mode": cli_perm  // 已在上文根据 plan_mode/auto_mode/permission_mode 解析
+        }
+    });
+    let mut perm_json = serde_json::to_string(&perm_req)
+        .map_err(|e| format!("序列化 set_permission_mode 失败: {}", e))?;
+    perm_json.push('\n');
+    _stdin.write_all(perm_json.as_bytes()).await
+        .map_err(|e| format!("stdin 写入 set_permission_mode 失败: {}", e))?;
 
     // Register stdin handle for later writes (e.g., permission responses)
     {

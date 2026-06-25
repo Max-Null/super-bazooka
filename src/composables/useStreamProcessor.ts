@@ -90,7 +90,10 @@ export function useStreamProcessor() {
 
         case "control_request":
           if (data.control_request) {
-            chat.addControlRequest(data.control_request);
+            const cr = data.control_request;
+            debugLog.add(`  🔐 subtype=${cr.subtype} tool=${cr.tool_name} request_id=${cr.request_id}`);
+            debugLog.add(`  🔐 tool_input keys: ${cr.tool_input ? Object.keys(cr.tool_input).join(',') : '(null)'}`);
+            chat.addControlRequest(cr);
           }
           break;
 

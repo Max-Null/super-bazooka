@@ -43,6 +43,17 @@ const commandBus = useCommandPaletteBus();
 import { isImageFile } from "@/composables/useFilePreview";
 const { getThumbnail, thumbnails } = useFilePreview();
 
+// 复制 debug 日志
+function copyDebugLog() {
+  const text = debugLog.lines.value.join('\n');
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand('copy');
+  document.body.removeChild(ta);
+}
+
 // ── Attached files ──
 interface AttachedFile { name: string; path: string }
 const attachedFiles = ref<AttachedFile[]>([]);
@@ -278,34 +289,29 @@ async function handleSend(text: string) {
   }
 }
 
+// control_response 格式（Goose PR #7420 + Agent SDK 确认）:
+// allow: {"type":"control_response","request_id":"...","response":{"decision":"allow"}}
+// deny:  {"type":"control_response","request_id":"...","response":{"decision":"deny","message":"..."}}
 async function handleAllow() {
   const cr = chat.pendingControlRequest; if (!cr) return;
-  await sendStdin(session.activeSessionId, JSON.stringify({
+  const payload = {
     type: "control_response",
-    response: {
-      subtype: "success",
-      request_id: cr.request_id || "",
-      response: {
-        behavior: "allow",
-        updatedInput: cr.tool_input,
-      },
-    },
-  }));
+    request_id: cr.request_id || "",
+    response: { decision: "allow" },
+  };
+  debugLog.add(`📤 control_response allow: ${JSON.stringify(payload)}`);
+  await sendStdin(session.activeSessionId, JSON.stringify(payload));
   chat.resolveControlRequest("allow");
 }
 async function handleDeny() {
   const cr = chat.pendingControlRequest; if (!cr) return;
-  await sendStdin(session.activeSessionId, JSON.stringify({
+  const payload = {
     type: "control_response",
-    response: {
-      subtype: "success",
-      request_id: cr.request_id || "",
-      response: {
-        behavior: "deny",
-        message: "User denied this action",
-      },
-    },
-  }));
+    request_id: cr.request_id || "",
+    response: { decision: "deny", message: "User denied this action" },
+  };
+  debugLog.add(`📤 control_response deny: ${JSON.stringify(payload)}`);
+  await sendStdin(session.activeSessionId, JSON.stringify(payload));
   chat.resolveControlRequest("deny");
 }
 
@@ -470,9 +476,16 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAut
 
       <!-- Debug -->
       <div v-if="debugLog.lines.value.length > 0" class="max-w-3xl mx-auto px-4 pb-4">
-        <button @click="debugLog.toggle()" class="text-[11px] transition-colors hover:text-[var(--text-secondary)]" style="color:var(--text-muted)">
-          {{ debugLog.visible.value ? '▾' : '▸' }} Debug ({{ debugLog.lines.value.length }})
-        </button>
+        <div class="flex items-center gap-2">
+          <button @click="debugLog.toggle()" class="text-[11px] transition-colors hover:text-[var(--text-secondary)]" style="color:var(--text-muted)">
+            {{ debugLog.visible.value ? '▾' : '▸' }} Debug ({{ debugLog.lines.value.length }})
+          </button>
+          <button
+            @click="copyDebugLog()"
+            class="text-[10px] px-1.5 py-0.5 rounded transition-colors hover:bg-[var(--bg-hover)]"
+            style="color:var(--text-muted)"
+          >📋 复制</button>
+        </div>
         <pre
           v-if="debugLog.visible.value"
           class="mt-2 p-3 rounded-lg text-[11px] font-mono leading-relaxed whitespace-pre-wrap break-all max-h-48 overflow-y-auto"
