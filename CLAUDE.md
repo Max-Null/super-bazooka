@@ -46,11 +46,34 @@ cc-gui/
 User Input (InputBar.vue)
   → sendMessage (Tauri IPC command, lib.rs)
     → sync_permission_settings → spawn_claude_session (process.rs)
-      → Claude Code CLI (subprocess, stream-json + --include-partial-messages)
-        → NDJSON lines → BufReader (process.rs)
-          → StreamLine::parse → to_frontend_event (protocol.rs)
-            → app_handle.emit("stream-event") (Tauri event)
-              → useStreamProcessor.ts listen → Pinia store → Vue 3 reactive render
+      → Claude Code CLI (subprocess, stream-json + --input-format stream-json)
+        │  ← stdin: {"type":"user","message":{...}} + set_permission_mode
+        │  → stdout: NDJSON lines → BufReader (process.rs)
+        │       → StreamLine::parse → to_frontend_event (protocol.rs)
+        │         → app_handle.emit("stream-event") (Tauri event)
+        │           → useStreamProcessor.ts listen → Pinia store → Vue 3 reactive render
+        │
+        ├─ control_request(can_use_tool/hook_callback)
+        │    → chat.pendingControlRequest → 审批栏/问答弹窗
+        │    → 用户操作 → control_response → stdin (StdinManager)
+        │
+        └─ control_request(interrupt)
+             ← 用户点停止 → stdin → CC 优雅退出 → 3s 超时 kill
+```
+
+### 审批交互流程
+
+```
+CC stdout: control_request
+  → protocol.rs: 提取 request_id, tool_name, tool_input
+    → StreamFrontendEvent → Tauri emit("stream-event")
+      → useStreamProcessor.ts → chat.addControlRequest()
+        → ChatPanel.vue 渲染:
+          ├─ tool_name === "AskUserQuestion" → 问答弹窗 (radio/checkbox/Other)
+          └─ 其他                                 → 审批栏 (允许/拒绝)
+            → handleAllow/handleDeny/submitAnswers
+              → sendStdin(control_response)
+                → Rust StdinManager.send() → CC stdin
 ```
 
 ### 功能索引（排查问题时先看这里）
@@ -60,7 +83,9 @@ User Input (InputBar.vue)
 | 功能 | 前端入口 | 核心逻辑 | 后端命令 | 数据源/配置 |
 |------|----------|----------|----------|-------------|
 | 聊天消息 | `ChatPanel.vue` | `useStreamProcessor.ts` 监听 `stream-event` → `chat` store | `send_message`, `send_stdin`, `stop_session`, `list_messages`, `save_message` | SQLite `messages` 表 |
-| 流事件处理 | `useStreamProcessor.ts` | 注册/注销 Tauri 事件监听，去重，保存消息 | `spawn_claude_session` (`process.rs`) | Claude CLI `stream-json` stdout |
+| 流事件处理 | `useStreamProcessor.ts` | 注册/注销 Tauri 事件监听，去重，保存消息，**分段思考计时** | `spawn_claude_session` (`process.rs`) | Claude CLI `stream-json` stdout |
+| **工具审批交互** | `ChatPanel.vue` 审批栏 | 收到 `control_request(can_use_tool)` 弹出审批栏，允许/拒绝 → `control_response` 写入 stdin | `send_stdin` (`lib.rs`) → `StdinManager.send()` | CC CLI stdin NDJSON |
+| **AskUserQuestion 问答** | `ChatPanel.vue` 问答弹窗 | `tool_name === "AskUserQuestion"` 时弹 radio/checkbox/Other 问答弹窗，提交 answers | 同上 | CC CLI stdin NDJSON |
 | 会话管理 | `SessionSidebar.vue` | `session` store → `tauri-bridge.ts` | `create_session`, `list_sessions`, `delete_session`, `rename_session`, `get_session`, `store_claude_session` | SQLite `sessions` 表 |
 | **MCP 管理** | `ManagePanel.vue` (tab `"mcp"`) | `loadMCP()` 扫描 `settings.json` + `.mcp.json`；`extractMcpServers()` 解析配置；`connectedMcpServers` 追踪运行时连接 | `get_claude_dir`, `read_file_content`, `get_workspace_root` | `~/.claude/settings.json`, `.mcp.json`, CLI 运行时 `system/init` 事件 |
 | 插件管理 | `ManagePanel.vue` (tab `"plugins"`) | `loadJSON("enabledPlugins")` 读取启停状态 | `get_claude_dir`, `read_file_content`, `write_file` | `~/.claude/settings.json` |
@@ -82,7 +107,7 @@ User Input (InputBar.vue)
 |------|------|
 | `main.rs` | 程序入口，初始化 DB + 启动 Tauri |
 | `lib.rs` | 23 个 Tauri commands：会话 CRUD、消息管理、文件操作、进程管理 |
-| `process.rs` | 三线程模型 spawn Claude CLI：Waiter（进程生命周期）、Stdout Reader（NDJSON 解析→事件发射）、Stderr Reader（错误转发） |
+| `process.rs` | 三线程模型 spawn Claude CLI：Waiter（进程生命周期）、Stdout Reader（NDJSON 解析→事件发射，含 `control_request` 处理）、Stderr Reader（错误转发）。**启动后通过 stdin 写入用户消息 NDJSON + `set_permission_mode` 控制请求** |
 | `protocol.rs` | `StreamLine`：解析 NDJSON → `StreamFrontendEvent`；支持 system/assistant/user/result/control_request/stream_event |
 | `session.rs` | `SessionManager`：SQLite 背书的会话 CRUD + 消息持久化 + DeepSeek API 连接测试 + BypassMode 批准场景 |
 | `db.rs` | `Db`：SQLite 初始化 + WAL 模式 + 4 张表（sessions, messages, settings, approved_scenarios）+ 3 个索引 |
@@ -262,3 +287,9 @@ npm run test:quick        # 快速测试（vitest + rust，跳过 e2e）
 22. **SessionStart Hook 行为规则注入**: 全局 CLAUDE.md 的行为规则移至 `~/.claude/hooks/behavioral-rules.md`，由 PowerShell 脚本在 SessionStart 时注入。Hook 注入无 "may not be relevant" 免责，CLAUDE.md 保留骨架版用于 `/compact` 后存活。
 23. **Ponytail 精简模式 GUI**: 工具栏新增 Ponytail 下拉（同权限/深度样式），选中直接发送 `/ponytail <mode>`。Setting 面板同思考深度样式下拉设默认值。状态持久化到 localStorage。
 24. **字号设置**: 支持小/中/大（14/18/22px），通过 `data-font-size` 属性 + `html { font-size }` CSS 实现全局 rem 缩放。ModalShell 宽度用 rem 适配。ManagePanel 内 `text-[*px]` 全部转为 `text-[*rem]` 以跟随字号。
+25. **NDJSON 双工协议**: CC 子进程以 `--output-format stream-json --input-format stream-json --permission-prompt-tool stdio` 启动（不带 `--print`，两者互斥）。用户消息通过 stdin 写入 NDJSON `{"type":"user","message":{...}}`。初始化后发 `set_permission_mode` 控制请求告知 CC 权限模式。
+26. **control_request/response 审批流**: CC 通过 stdout 发 `control_request(can_use_tool/hook_callback)` → `protocol.rs` 提取 `request_id`、`tool_name`、`tool_input` → 前端 `ChatPanel.vue` 渲染审批栏（通用工具）或问答弹窗（`tool_name === "AskUserQuestion"`）→ 用户操作后构造 `control_response(subtype:"success",request_id,response:{behavior,updatedInput/message})` 写入 stdin。`hook_callback` 不自动回复，走统一的用户审批流程。
+27. **AskUserQuestion 问答弹窗**: 识别 `tool_name === "AskUserQuestion"` 时不显示通用审批栏，弹出 `ModalShell` 内 radio/checkbox 选项组 + Other 自由输入。答案格式 `updatedInput:{questions,answers}`，answers key 精确匹配 question 原文，value 为 label 或 label[]。
+28. **interrupt 优雅停止**: 用户点击停止→先发 `control_request(subtype:"interrupt")` 到 stdin，等 3 秒让 CC 优雅退出，超时才 `pm.kill()`。
+29. **思考计时分段**: 每段 tool_use 前独立计时（`thinkingDurationMs`），总耗时 = 各段求和。去掉了实时 `setInterval` 计时器，不受审批暂停影响。
+30. **工具名 i18n**: `tools.Bash`→`命令行`、`tools.Write`→`写入文件` 等，`zh.json`/`en.json` 双份。`ChatPanel.vue` 和 `MessageBubble.vue` 共用 `toolLabel()` 映射。

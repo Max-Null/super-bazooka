@@ -3,7 +3,25 @@
 > 基于 [CCGUI Interactive Protocol Report](#) 对 cc-gui 当前实现的完整审计。
 >
 > 审计日期：2026-06-26
-> 交叉验证：Claude Code 官方 Agent SDK 文档 + claude-cli-agent-protocol 社区 skill
+> 实施日期：2026-06-26
+> **状态：P0 ✅ 完成 / P1 ✅ 完成 / P2 延后**
+
+---
+
+## 〇、实施结果
+
+| 阶段 | 项 | 状态 | 验证 |
+|------|----|------|------|
+| P0-1 | CLI flags（`--input-format stream-json` `--permission-prompt-tool stdio` 去 `--print`） | ✅ | control_request 成功到达前端 |
+| P0-2 | control_response 格式（嵌套 `response.subtype/request_id/response.behavior/updatedInput/message`） | ✅ | 允许/拒绝均成功，CC 正确响应 |
+| P0-2 | 用户消息改 stdin NDJSON | ✅ | CC 正常处理 prompt |
+| P0-2 | `set_permission_mode` 初始化请求 | ✅ | 权限模式同步 |
+| P1-1 | hook_callback → 前端审批（非自动允许） | ✅ | 安全审查后修正 |
+| P1-2 | AskUserQuestion 问答弹窗 | ✅ | radio/checkbox/Other 可用 |
+| P1-3 | interrupt 优雅停止（先发控制请求再 kill） | ✅ | 3 秒超时兜底 |
+| P1-4 | deny message + allow updatedInput | ✅ | 含在 P0-2 |
+| 附 | 工具名 i18n（Bash→命令行等） | ✅ | 审批栏+消息气泡 |
+| 附 | 思考计时重构（各段 thinkingDurationMs 求和） | ✅ | 去实时计时器 |
 
 ---
 
