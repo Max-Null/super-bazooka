@@ -1,0 +1,490 @@
+{
+  "project": {
+    "name": "cc-gui",
+    "version": "0.1.0",
+    "description": "Claude Code Desktop GUI — Tauri 2 + Vue 3 桌面应用。为 Claude Code CLI 提供图形化桌面界面，支持 DeepSeek API 代理后端。",
+    "type": "npm",
+    "techStack": {
+      "language": "TypeScript + Rust",
+      "framework": "vue3",
+      "frontend": {
+        "ui": "Vue 3.5",
+        "state": "Pinia 3.0",
+        "router": "Vue Router 4.6",
+        "i18n": "vue-i18n 10.0",
+        "css": "Tailwind CSS 4.3 + DaisyUI 5.5",
+        "editor": "CodeMirror 6",
+        "charts": "Mermaid 11.15",
+        "build": "Vite 6.4"
+      },
+      "backend": {
+        "framework": "Tauri 2.11",
+        "language": "Rust 2021 edition",
+        "async": "Tokio 1",
+        "http": "reqwest 0.12",
+        "db": "rusqlite 0.31 (bundled SQLite)",
+        "plugins": ["tauri-plugin-shell", "tauri-plugin-dialog"]
+      }
+    },
+    "entryFiles": ["src/main.ts", "src-tauri/src/main.rs"],
+    "configFiles": ["package.json", "src-tauri/Cargo.toml", "src-tauri/tauri.conf.json"]
+  },
+  "modules": [
+    {
+      "name": "前端-聊天",
+      "path": "src/components/chat/",
+      "type": "frontend",
+      "summary": "聊天核心界面 — 消息气泡渲染、输入栏（含工具栏和模式栏）、思考指示器、上下文用量指示器",
+      "responsibilities": ["消息显示与交互", "用户输入处理", "工具条（权限/深度/Ponytail模式切换）", "思考状态可视化", "Token用量展示"],
+      "patterns": ["sse-stream"],
+      "publicApi": [
+        { "name": "ChatPanel", "type": "component", "signature": "defineProps<{ activeSessionId?: string }>() 聊天主面板，组合 MessageBubble + InputBar + ModeBar 等", "file": "src/components/chat/ChatPanel.vue" },
+        { "name": "MessageBubble", "type": "component", "signature": "defineProps<{ message: Message; isLast: boolean }>() 单条消息气泡，支持 Markdown/Mermaid 渲染、思考折叠、工具调用展示、编辑/回滚操作", "file": "src/components/chat/MessageBubble.vue" },
+        { "name": "InputBar", "type": "component", "signature": "defineProps<{ sessionId?: string; isProcessing: boolean; autoMode: boolean }>() + defineEmits<{ send: [text: string, files?: AttachedFile[]] }>() 输入栏主组件，支持文本输入、文件附着、发送/停止", "file": "src/components/chat/InputBar.vue" },
+        { "name": "InputBarToolbar", "type": "component", "signature": "defineProps<{ planMode: boolean; autoMode: boolean; permissionMode: string; effort: string; ponytailMode: string; claudePath: string }>() + defineEmits 工具栏：计划模式/自动模式/权限/深度/Ponytail 切换", "file": "src/components/chat/InputBarToolbar.vue" },
+        { "name": "ModeBar", "type": "component", "signature": "defineProps<{ planMode: boolean; autoMode: boolean; permissionMode: string; effort: string; model?: string; isProcessing: boolean }>() + defineEmits 模式栏快捷切换", "file": "src/components/chat/ModeBar.vue" },
+        { "name": "ThinkingIndicator", "type": "component", "signature": "无Props，纯视觉组件。AI思考中时显示动画指示器", "file": "src/components/chat/ThinkingIndicator.vue" },
+        { "name": "ContextIndicator", "type": "component", "signature": "defineProps<{ inputTokens: number; outputTokens: number; costUSD: number }>() + defineEmits<{ openModal: [] }>() Token用量指示条，点击打开ContextUsageModal", "file": "src/components/chat/ContextIndicator.vue" }
+      ],
+      "dependencies": { "internal": ["前端-Store", "前端-组合式函数", "前端-Lib", "前端-共享", "前端-国际化"], "external": ["vue", "pinia", "vue-i18n", "mermaid", "highlight.js", "codemirror"] },
+      "configurationProperties": [],
+      "documentation": { "hasReadme": false, "hasDoc": false, "readmeQuality": "none" }
+    },
+    {
+      "name": "前端-布局",
+      "path": "src/components/layout/",
+      "type": "frontend",
+      "summary": "AppShell — 全局应用外壳，包含侧栏、导航栏、全局键盘快捷键绑定",
+      "responsibilities": ["主布局容器", "全局键盘快捷键（Ctrl+N新会话、Ctrl+K命令面板、Ctrl+E导出、Ctrl+Alt+T主题切换等）", "主题/字号切换响应"],
+      "patterns": ["responsive-layout"],
+      "publicApi": [
+        { "name": "AppShell", "type": "component", "signature": "无Props。全局布局容器，组合 SessionSidebar + NavBar + router-view", "file": "src/components/layout/AppShell.vue" }
+      ],
+      "dependencies": { "internal": ["前端-会话侧栏", "前端-Store", "前端-组合式函数", "前端-共享"], "external": ["vue", "vue-router", "pinia"] },
+      "configurationProperties": [],
+      "documentation": { "hasReadme": false, "hasDoc": false, "readmeQuality": "none" }
+    },
+    {
+      "name": "前端-会话侧栏",
+      "path": "src/components/session/",
+      "type": "frontend",
+      "summary": "SessionSidebar — 会话列表侧栏，展示所有会话、支持创建/重命名/删除操作",
+      "responsibilities": ["会话列表展示", "新建/切换/重命名/删除会话", "会话搜索过滤", "活跃会话高亮"],
+      "patterns": [],
+      "publicApi": [
+        { "name": "SessionSidebar", "type": "component", "signature": "defineProps<{ activeSessionId: string }>() + defineEmits<{ select: [id: string] }>() 会话侧边栏", "file": "src/components/session/SessionSidebar.vue" }
+      ],
+      "dependencies": { "internal": ["前端-Store", "前端-组合式函数"], "external": ["vue", "pinia"] },
+      "configurationProperties": [],
+      "documentation": { "hasReadme": false, "hasDoc": false, "readmeQuality": "none" }
+    },
+    {
+      "name": "前端-文件",
+      "path": "src/components/files/",
+      "type": "frontend",
+      "summary": "文件浏览与 diff 对比 — FilePanel 面板、FileTree 目录树、FilePreview 预览、DiffViewer 差异对比",
+      "responsibilities": ["文件系统目录树浏览", "文本/图片/二进制文件预览", "文件差异对比（行级）", "右键菜单操作"],
+      "patterns": [],
+      "publicApi": [
+        { "name": "FilePanel", "type": "component", "signature": "defineProps<{ workspaceRoot: string }>() 文件浏览面板，组合 FileTree + FilePreview", "file": "src/components/files/FilePanel.vue" },
+        { "name": "FileTree", "type": "component", "signature": "defineProps<{ rootPath: string; depth: number }>() + defineEmits<{ selectFile: [path: string] }>() 递归目录树组件", "file": "src/components/files/FileTree.vue" },
+        { "name": "FilePreview", "type": "component", "signature": "defineProps<{ path: string; filename: string; content: string; thumbnail: string | null }>() 文件内容预览（自动检测类型）", "file": "src/components/files/FilePreview.vue" },
+        { "name": "DiffViewer", "type": "component", "signature": "defineProps<{ oldStr: string; newStr: string }>() 行级差异对比（diff 库）", "file": "src/components/files/DiffViewer.vue" }
+      ],
+      "dependencies": { "internal": ["前端-Lib", "前端-组合式函数"], "external": ["vue", "diff"] },
+      "configurationProperties": [],
+      "documentation": { "hasReadme": false, "hasDoc": false, "readmeQuality": "none" }
+    },
+    {
+      "name": "前端-设置",
+      "path": "src/components/settings/",
+      "type": "frontend",
+      "summary": "SettingsPanel — API配置界面，包含 Key/Base URL/Model 配置及连接测试",
+      "responsibilities": ["DeepSeek API 配置", "连接测试", "主题/语言/字号切换"],
+      "patterns": [],
+      "publicApi": [
+        { "name": "SettingsPanel", "type": "component", "signature": "无Props。API配置面板 + 连接测试按钮", "file": "src/components/settings/SettingsPanel.vue" }
+      ],
+      "dependencies": { "internal": ["前端-Store", "前端-Lib"], "external": ["vue", "pinia", "vue-i18n"] },
+      "configurationProperties": [
+        { "prefix": "env", "fields": [{ "name": "VITE_DEV_SERVER_URL", "type": "string", "defaultValue": null, "description": "Vite 开发服务器地址" }] }
+      ],
+      "documentation": { "hasReadme": false, "hasDoc": false, "readmeQuality": "none" }
+    },
+    {
+      "name": "前端-共享",
+      "path": "src/components/shared/",
+      "type": "frontend",
+      "summary": "共享 UI 组件 — ManagePanel 8合1管理面板、Markdown/Mermaid 渲染器、命令面板、模态框外壳、上下文用量弹窗、错误边界、文件预览弹窗",
+      "responsibilities": ["管理面板（plugins/mcp/skills/agents/hooks/memory/permissions/styles 8个Tab）", "Markdown/Mermaid 内容渲染", "命令面板（Ctrl+K 拼音搜索）", "全局弹窗外壳", "Token/费用用量详情弹窗", "错误边界捕获", "文件预览弹窗"],
+      "patterns": [],
+      "publicApi": [
+        { "name": "ManagePanel", "type": "component", "signature": "defineProps<{ visible: boolean }>() + defineEmits<{ close: [] }>() 8合1管理面板，Tab切换管理所有 CC 配置", "file": "src/components/shared/ManagePanel.vue" },
+        { "name": "MarkdownRenderer", "type": "component", "signature": "defineProps<{ content: string; isStreaming: boolean }>() Markdown 渲染组件", "file": "src/components/shared/MarkdownRenderer.vue" },
+        { "name": "MermaidRenderer", "type": "component", "signature": "defineProps<{ code: string }>() Mermaid 图表渲染", "file": "src/components/shared/MermaidRenderer.vue" },
+        { "name": "CommandPalette", "type": "component", "signature": "无Props。命令面板（Ctrl+K 触发），支持拼音搜索和最近使用", "file": "src/components/shared/CommandPalette.vue" },
+        { "name": "ModalShell", "type": "component", "signature": "defineProps<{ visible: boolean; title: string; widthClass: string }>() + defineEmits<{ close: [] }>() 三段式弹窗外壳（#header / default / #footer）", "file": "src/components/shared/ModalShell.vue" },
+        { "name": "ContextUsageModal", "type": "component", "signature": "defineProps<{ visible: boolean }>() + defineEmits<{ close: [] }>() Token/费用用量详情弹窗", "file": "src/components/shared/ContextUsageModal.vue" },
+        { "name": "ErrorBoundary", "type": "component", "signature": "defineProps<{ fallback?: string }>() Vue errorBoundary 捕获子组件渲染错误", "file": "src/components/shared/ErrorBoundary.vue" },
+        { "name": "FilePreviewModal", "type": "component", "signature": "defineProps<{ visible: boolean; path: string; filename: string }>() + defineEmits<{ close: [] }>() 文件预览弹窗", "file": "src/components/shared/FilePreviewModal.vue" }
+      ],
+      "dependencies": { "internal": ["前端-Lib", "前端-Store", "前端-组合式函数"], "external": ["vue", "pinia", "vue-i18n", "mermaid", "highlight.js", "codemirror"] },
+      "configurationProperties": [],
+      "documentation": { "hasReadme": false, "hasDoc": false, "readmeQuality": "none" }
+    },
+    {
+      "name": "前端-组合式函数",
+      "path": "src/composables/",
+      "type": "frontend",
+      "summary": "Vue 3 Composables — 流处理、命令注册/面板、新会话、文件预览、调试日志、代码高亮",
+      "responsibilities": ["Tauri stream-event 监听与去重", "命令面板动态注册与调用", "新会话创建流程", "文件缩略图缓存", "调试日志收集", "代码高亮"],
+      "patterns": ["sse-stream", "store-deps"],
+      "publicApi": [
+        { "name": "useStreamProcessor", "type": "composable", "signature": "() => { startListening, stopListening } 注册 Tauri 事件监听（stream-event/stream-debug/stream-error/session-created/process-exited），事件去重后转入 chat store", "file": "src/composables/useStreamProcessor.ts" },
+        { "name": "connectedMcpServers", "type": "ref", "signature": "Ref<string[]> MCP 服务器连接状态（由 session-created 事件更新）", "file": "src/composables/useStreamProcessor.ts" },
+        { "name": "useCommandRegistry", "type": "composable", "signature": "() => { register, getCommands, registry } 命令注册系统，组件 onMounted 注册 → onUnmounted 注销", "file": "src/composables/useCommandRegistry.ts" },
+        { "name": "useCommandPaletteBus", "type": "composable", "signature": "() => { trigger, open } 命令面板事件总线（打开信号）", "file": "src/composables/useCommandPalette.ts" },
+        { "name": "emitChatCommand", "type": "function", "signature": "(action: string) => void 发送聊天命令到 ChatPanel", "file": "src/composables/useCommandPalette.ts" },
+        { "name": "useChatCommandBus", "type": "composable", "signature": "() => { chatCommand } ChatPanel 监听聊天命令", "file": "src/composables/useCommandPalette.ts" },
+        { "name": "useNewSession", "type": "composable", "signature": "() => { handleNew } 新建会话流程（创建→清空消息→清空日志→跳转/chat）", "file": "src/composables/useNewSession.ts" },
+        { "name": "useFilePreview", "type": "composable", "signature": "() => { getThumbnail, thumbnails } 图片缩略图缓存（base64），支持 isImageFile / mimeType 工具函数", "file": "src/composables/useFilePreview.ts" },
+        { "name": "useDebugLog", "type": "composable", "signature": "() => { entries, add, clear } 调试日志收集，监听 stream-debug 事件", "file": "src/composables/useDebugLog.ts" },
+        { "name": "useHighlight", "type": "composable", "signature": "() => { highlighted, highlight } highlight.js 代码高亮异步函数", "file": "src/composables/useHighlight.ts" }
+      ],
+      "dependencies": { "internal": ["前端-Store", "前端-Lib"], "external": ["vue", "@tauri-apps/api", "vue-i18n", "highlight.js"] },
+      "configurationProperties": [],
+      "documentation": { "hasReadme": false, "hasDoc": false, "readmeQuality": "none" }
+    },
+    {
+      "name": "前端-Store",
+      "path": "src/stores/",
+      "type": "frontend",
+      "summary": "Pinia 状态管理 — chat（消息流/工具调用/控制请求）、session（会话列表/CRUD）、settings（API配置/UI偏好/字号/主题/语言）",
+      "responsibilities": ["消息状态管理（流式追加、去重、编辑、回滚、导出）", "会话CRUD状态", "API配置 + UI偏好持久化（localStorage + ~/.claude/settings.json）"],
+      "patterns": ["store-deps"],
+      "publicApi": [
+        { "name": "useChatStore", "type": "store", "signature": "defineStore('chat', () => { messages, currentAssistantMsg, isProcessing, pendingControlRequest, usedAgents, addUserMessage, startAssistantMessage, appendText, appendThinking, addToolUse, addControlRequest, resolveControlRequest, finishAssistantMessage, clearMessages, loadMessages, updateMessage, truncateFromIndex, truncateAfterMessage, exportMarkdown })", "file": "src/stores/chat.ts" },
+        { "name": "useSessionStore", "type": "store", "signature": "defineStore('session', () => { sessions, activeSessionId, loadSessions, createSession, setActiveSession, renameSession, deleteSession, setClaudeSessionId, getActiveClaudeSessionId })", "file": "src/stores/session.ts" },
+        { "name": "useSettingsStore", "type": "store", "signature": "defineStore('settings', () => { apiKey, baseUrl, model, planMode, autoMode, permissionMode, effort, ponytailMode, theme, locale, fontSize, claudePath, resolvedClaudePath })", "file": "src/stores/settings.ts" }
+      ],
+      "dependencies": { "internal": ["前端-Lib"], "external": ["vue", "pinia"] },
+      "configurationProperties": [
+        { "prefix": "localStorage", "fields": [
+          { "name": "cc-gui-ui-settings", "type": "object", "defaultValue": "{ planMode:false, autoMode:true, permissionMode:'bypassPermissions', effort:'high', ponytailMode:'full', theme:'dark', locale:'zh', fontSize:'medium', claudePath:'' }", "description": "UI偏好持久化键" }
+        ]}
+      ],
+      "documentation": { "hasReadme": false, "hasDoc": false, "readmeQuality": "none" }
+    },
+    {
+      "name": "前端-Lib",
+      "path": "src/lib/",
+      "type": "frontend",
+      "summary": "工具库 — Tauri IPC 桥接封装、通用工具函数、拼音搜索、Tauri Mock",
+      "responsibilities": ["封装所有 invoke() 调用为类型安全函数", "错误信息国际化翻译函数", "数字格式化工具", "拼音首字母提取（3755汉字）", "前端测试用完整 Tauri API mock"],
+      "patterns": [],
+      "publicApi": [
+        { "name": "sendMessage", "type": "function", "signature": "(sessionId: string, message: string, options?: SendOptions) => Promise<string> 发送消息并启动CLI进程", "file": "src/lib/tauri-bridge.ts" },
+        { "name": "storeClaudeSession", "type": "function", "signature": "(ourSessionId: string, claudeSessionId: string) => Promise<void> 存储CLI会话UUID映射", "file": "src/lib/tauri-bridge.ts" },
+        { "name": "stopSession", "type": "function", "signature": "(sessionId: string) => Promise<void> 停止会话进程", "file": "src/lib/tauri-bridge.ts" },
+        { "name": "createSession", "type": "function", "signature": "(model?: string) => Promise<SessionData> 创建会话", "file": "src/lib/tauri-bridge.ts" },
+        { "name": "listSessions", "type": "function", "signature": "() => Promise<SessionData[]> 列出所有会话", "file": "src/lib/tauri-bridge.ts" },
+        { "name": "deleteSession", "type": "function", "signature": "(sessionId: string) => Promise<void> 删除会话", "file": "src/lib/tauri-bridge.ts" },
+        { "name": "renameSession", "type": "function", "signature": "(sessionId: string, title: string) => Promise<void> 重命名会话", "file": "src/lib/tauri-bridge.ts" },
+        { "name": "listMessages", "type": "function", "signature": "(sessionId: string) => Promise<MessageData[]> 列出会话消息", "file": "src/lib/tauri-bridge.ts" },
+        { "name": "saveMessage", "type": "function", "signature": "(id, sessionId, role, content, tokenUsage?) => Promise<void> 保存消息到DB", "file": "src/lib/tauri-bridge.ts" },
+        { "name": "updateMessageContent", "type": "function", "signature": "(messageId, sessionId, content) => Promise<void> 更新消息内容", "file": "src/lib/tauri-bridge.ts" },
+        { "name": "deleteMessagesAfter", "type": "function", "signature": "(messageId, sessionId) => Promise<number> 删除指定消息之后的所有消息", "file": "src/lib/tauri-bridge.ts" },
+        { "name": "connectLLM", "type": "function", "signature": "(apiKey, baseUrl, model) => Promise<string> DeepSeek API连接测试", "file": "src/lib/tauri-bridge.ts" },
+        { "name": "listDir", "type": "function", "signature": "(path: string) => Promise<FileEntry[]> 列出目录内容", "file": "src/lib/tauri-bridge.ts" },
+        { "name": "readFileContent", "type": "function", "signature": "(path: string) => Promise<string> 读取文件文本", "file": "src/lib/tauri-bridge.ts" },
+        { "name": "readFileBase64", "type": "function", "signature": "(path: string) => Promise<string> 读取文件base64编码", "file": "src/lib/tauri-bridge.ts" },
+        { "name": "getWorkspaceRoot", "type": "function", "signature": "() => Promise<string> 获取工作区根目录", "file": "src/lib/tauri-bridge.ts" },
+        { "name": "writeFile", "type": "function", "signature": "(path: string, content: string) => Promise<void> 写入文件（仅~/.claude/子树）", "file": "src/lib/tauri-bridge.ts" },
+        { "name": "getClaudeDir", "type": "function", "signature": "() => Promise<string> 获取~/.claude/目录路径", "file": "src/lib/tauri-bridge.ts" },
+        { "name": "resolveClaudePath", "type": "function", "signature": "() => Promise<string> 自动检测CLI路径", "file": "src/lib/tauri-bridge.ts" },
+        { "name": "getClaudeSettings", "type": "function", "signature": "() => Promise<ClaudeSettings> 读取~/.claude/settings.json", "file": "src/lib/tauri-bridge.ts" },
+        { "name": "setClaudeSettings", "type": "function", "signature": "(apiKey,baseUrl,model,effort,permissionMode) => Promise<void> 写入~/.claude/settings.json", "file": "src/lib/tauri-bridge.ts" },
+        { "name": "ensureItemDescriptions", "type": "function", "signature": "(items, apiKey, baseUrl) => Promise<DescriptionItem[]> 翻译描述缓存", "file": "src/lib/tauri-bridge.ts" },
+        { "name": "generateMcpDescriptions", "type": "function", "signature": "(names, apiKey, baseUrl) => Promise<DescriptionItem[]> 批量生成MCP中文描述", "file": "src/lib/tauri-bridge.ts" },
+        { "name": "formatNum", "type": "function", "signature": "(n: number) => string 数字格式化(k/M后缀)", "file": "src/lib/utils.ts" },
+        { "name": "formatTokenCount", "type": "function", "signature": "(n: number) => string Token数量格式化", "file": "src/lib/utils.ts" },
+        { "name": "translateError", "type": "function", "signature": "(err: unknown) => { key: string; params?: Record<string,string> } Rust错误→i18n key映射", "file": "src/lib/utils.ts" },
+        { "name": "toPinyinInitials", "type": "function", "signature": "(text: string) => string 提取中文拼音首字母（覆盖3755常用汉字）", "file": "src/lib/pinyin.ts" },
+        { "name": "TauriMock", "type": "class+functions", "signature": "完整的 Tauri API mock（invoke/listen/emit），支持浏览器内E2E测试", "file": "src/lib/tauri-mock.ts" }
+      ],
+      "dependencies": { "internal": [], "external": ["@tauri-apps/api"] },
+      "configurationProperties": [],
+      "documentation": { "hasReadme": false, "hasDoc": false, "readmeQuality": "none" }
+    },
+    {
+      "name": "前端-国际化",
+      "path": "src/locales/",
+      "type": "frontend",
+      "summary": "vue-i18n 中英双语翻译文件",
+      "responsibilities": ["所有用户可见字符串的中英双语翻译"],
+      "patterns": [],
+      "publicApi": [
+        { "name": "zh.json", "type": "i18n", "signature": "中文翻译 locale 文件", "file": "src/locales/zh.json" },
+        { "name": "en.json", "type": "i18n", "signature": "英文翻译 locale 文件", "file": "src/locales/en.json" }
+      ],
+      "dependencies": { "internal": [], "external": ["vue-i18n"] },
+      "configurationProperties": [],
+      "documentation": { "hasReadme": false, "hasDoc": false, "readmeQuality": "none" }
+    },
+    {
+      "name": "前端-路由",
+      "path": "src/router/",
+      "type": "frontend",
+      "summary": "Vue Router 路由配置 — /chat 和 /settings 两条路由",
+      "responsibilities": ["前端路由定义", "懒加载组件"],
+      "patterns": [],
+      "publicApi": [
+        { "name": "router", "type": "router", "signature": "createRouter({ history: createWebHistory(), routes: [{path:'/',redirect:'/chat'},{path:'/chat',name:'chat',component:()=>import('@/components/chat/ChatPanel.vue')},{path:'/settings',name:'settings',component:()=>import('@/components/settings/SettingsPanel.vue')}] })", "file": "src/router/index.ts" }
+      ],
+      "dependencies": { "internal": ["前端-聊天", "前端-设置"], "external": ["vue-router"] },
+      "configurationProperties": [],
+      "documentation": { "hasReadme": false, "hasDoc": false, "readmeQuality": "none" }
+    },
+    {
+      "name": "前端-样式",
+      "path": "src/assets/",
+      "type": "style",
+      "summary": "全局样式层 — 亮色/暗色主题变量、Tailwind CSS入口、字号rem缩放",
+      "responsibilities": ["CSS变量定义（暗色/亮色双主题）", "data-theme/data-font-size 属性驱动主题切换", "全局排版样式"],
+      "patterns": [],
+      "publicApi": [],
+      "dependencies": { "internal": [], "external": ["tailwindcss", "daisyui"] },
+      "configurationProperties": [],
+      "documentation": { "hasReadme": false, "hasDoc": false, "readmeQuality": "none" }
+    },
+    {
+      "name": "Rust-入口",
+      "path": "src-tauri/src/main.rs",
+      "type": "backend",
+      "summary": "Rust 程序入口 — 仅调用 cc_gui::run()，Windows 下关闭控制台窗口",
+      "responsibilities": ["程序入口", "Windows release 模式下隐藏控制台窗口"],
+      "patterns": [],
+      "publicApi": [
+        { "name": "main", "type": "function", "signature": "fn main() 程序入口，调用 cc_gui::run()", "file": "src-tauri/src/main.rs" }
+      ],
+      "dependencies": { "internal": ["Rust-Tauri命令"], "external": [] },
+      "configurationProperties": [],
+      "documentation": { "hasReadme": false, "hasDoc": false, "readmeQuality": "none" }
+    },
+    {
+      "name": "Rust-Tauri命令",
+      "path": "src-tauri/src/lib.rs",
+      "type": "backend",
+      "summary": "Tauri 主模块 — AppState 定义 + 30个 Tauri commands + 工具函数。是整个后端的核心编排层。",
+      "responsibilities": ["AppState 定义（db/process_manager/stdin_manager/session_manager）", "项目根目录检测（dev/production 双模式）", "30 个 Tauri commands（send_message/store_claude_session/connect_llm/stop_session/session CRUD/stdin/messages/文件操作/approved_scenarios/settings读写/翻译缓存/MCP描述生成）", "OpenAI 兼容端点 URL 规范化（openai_base）", "DeepSeek API 翻译", "CLI 路径自动检测"],
+      "patterns": [],
+      "publicApi": [
+        { "name": "AppState", "type": "struct", "signature": "pub struct AppState { pub db: Db, pub process_manager: Arc<Mutex<ProcessManager>>, pub stdin_manager: Arc<Mutex<StdinManager>>, pub session_manager: Arc<Mutex<SessionManager>> } Tauri 托管状态", "file": "src-tauri/src/lib.rs" },
+        { "name": "send_message", "type": "command", "signature": "async fn send_message(state, session_id, message, plan_mode, auto_mode, permission_mode, effort, ultracode, model, file_paths, claude_path, app_handle) -> Result<String, String> 核心发送命令，保存用户消息→spawn CLI→注册进程", "file": "src-tauri/src/lib.rs" },
+        { "name": "connect_llm", "type": "command", "signature": "async fn connect_llm(state, api_key, base_url, model) -> Result<String, String> DeepSeek API 连接测试", "file": "src-tauri/src/lib.rs" },
+        { "name": "stop_session", "type": "command", "signature": "async fn stop_session(state, session_id) -> Result<(), String> 终止CLI进程并更新状态", "file": "src-tauri/src/lib.rs" },
+        { "name": "create_session", "type": "command", "signature": "async fn create_session(state, model?) -> Result<Session, String> 创建会话", "file": "src-tauri/src/lib.rs" },
+        { "name": "list_sessions", "type": "command", "signature": "async fn list_sessions(state) -> Result<Vec<Session>, String> 列出会话", "file": "src-tauri/src/lib.rs" },
+        { "name": "delete_session", "type": "command", "signature": "async fn delete_session(state, session_id) -> Result<(), String> 删除会话", "file": "src-tauri/src/lib.rs" },
+        { "name": "rename_session", "type": "command", "signature": "async fn rename_session(state, session_id, title) -> Result<(), String> 重命名会话", "file": "src-tauri/src/lib.rs" },
+        { "name": "get_session", "type": "command", "signature": "async fn get_session(state, session_id) -> Result<Session, String> 获取单个会话", "file": "src-tauri/src/lib.rs" },
+        { "name": "send_stdin", "type": "command", "signature": "async fn send_stdin(state, session_id, data) -> Result<(), String> 向CLI进程标准输入写入数据", "file": "src-tauri/src/lib.rs" },
+        { "name": "add_approved_scenario", "type": "command", "signature": "async fn add_approved_scenario(state, tool_name, pattern) -> Result<(), String> 添加批准场景", "file": "src-tauri/src/lib.rs" },
+        { "name": "remove_approved_scenario", "type": "command", "signature": "async fn remove_approved_scenario(state, tool_name, pattern) -> Result<(), String> 移除批准场景", "file": "src-tauri/src/lib.rs" },
+        { "name": "list_approved_scenarios", "type": "command", "signature": "async fn list_approved_scenarios(state) -> Result<Vec<(String,String)>, String> 列出批准场景", "file": "src-tauri/src/lib.rs" },
+        { "name": "save_message", "type": "command", "signature": "async fn save_message(state, id, session_id, role, content, token_usage?) -> Result<(), String> 保存消息到DB", "file": "src-tauri/src/lib.rs" },
+        { "name": "update_message_content", "type": "command", "signature": "async fn update_message_content(state, message_id, session_id, content) -> Result<(), String> 更新消息内容", "file": "src-tauri/src/lib.rs" },
+        { "name": "delete_messages_after", "type": "command", "signature": "async fn delete_messages_after(state, message_id, session_id) -> Result<u32, String> 删除指定消息之后的所有消息", "file": "src-tauri/src/lib.rs" },
+        { "name": "list_messages", "type": "command", "signature": "async fn list_messages(state, session_id) -> Result<Vec<Message>, String> 列出会话消息", "file": "src-tauri/src/lib.rs" },
+        { "name": "list_dir", "type": "command", "signature": "async fn list_dir(path) -> Result<Vec<FileEntry>, String> 列出目录", "file": "src-tauri/src/lib.rs" },
+        { "name": "read_file_content", "type": "command", "signature": "async fn read_file_content(path) -> Result<String, String> 读取文件内容", "file": "src-tauri/src/lib.rs" },
+        { "name": "read_file_base64", "type": "command", "signature": "async fn read_file_base64(path) -> Result<String, String> 读取文件base64", "file": "src-tauri/src/lib.rs" },
+        { "name": "get_workspace_root", "type": "command", "signature": "async fn get_workspace_root() -> Result<String, String> 获取工作区根目录", "file": "src-tauri/src/lib.rs" },
+        { "name": "reveal_in_explorer", "type": "command", "signature": "async fn reveal_in_explorer(path) -> Result<(), String> 在文件管理器中显示", "file": "src-tauri/src/lib.rs" },
+        { "name": "write_file", "type": "command", "signature": "async fn write_file(path, content) -> Result<(), String> 安全写入文件（仅~/.claude/子树）", "file": "src-tauri/src/lib.rs" },
+        { "name": "get_claude_dir", "type": "command", "signature": "async fn get_claude_dir() -> Result<String, String> 获取~/.claude/路径", "file": "src-tauri/src/lib.rs" },
+        { "name": "resolve_claude_path", "type": "command", "signature": "fn resolve_claude_path() -> Result<String, String> CLI路径自动检测", "file": "src-tauri/src/lib.rs" },
+        { "name": "get_claude_settings", "type": "command", "signature": "fn get_claude_settings() -> Result<ClaudeSettings, String> 读取~/.claude/settings.json", "file": "src-tauri/src/lib.rs" },
+        { "name": "set_claude_settings", "type": "command", "signature": "fn set_claude_settings(api_key, base_url, model, effort, permission_mode) -> Result<(), String> 写入~/.claude/settings.json", "file": "src-tauri/src/lib.rs" },
+        { "name": "ensure_item_descriptions", "type": "command", "signature": "async fn ensure_item_descriptions(state, items, api_key, base_url) -> Result<Vec<DescriptionItem>, String> 翻译描述缓存（DB缓存+API翻译）", "file": "src-tauri/src/lib.rs" },
+        { "name": "generate_mcp_descriptions", "type": "command", "signature": "async fn generate_mcp_descriptions(state, names, api_key, base_url) -> Result<Vec<DescriptionItem>, String> 批量生成MCP中文描述", "file": "src-tauri/src/lib.rs" },
+        { "name": "clear_item_descriptions", "type": "command", "signature": "fn clear_item_descriptions(state) -> Result<(), String> 清空翻译缓存", "file": "src-tauri/src/lib.rs" },
+        { "name": "clear_mcp_descriptions", "type": "command", "signature": "fn clear_mcp_descriptions(state) -> Result<(), String> 清空MCP描述缓存", "file": "src-tauri/src/lib.rs" },
+        { "name": "get_auto_mode_status", "type": "command", "signature": "async fn get_auto_mode_status() -> Result<bool, String> 检查auto模式状态", "file": "src-tauri/src/lib.rs" },
+        { "name": "detect_project_root", "type": "function", "signature": "fn detect_project_root() -> String 项目根目录检测（dev/production双模式）", "file": "src-tauri/src/lib.rs" },
+        { "name": "subagent_model", "type": "function", "signature": "fn subagent_model() -> String 读取CLAUDE_CODE_SUBAGENT_MODEL环境变量，fallback deepseek-chat", "file": "src-tauri/src/lib.rs" },
+        { "name": "openai_base", "type": "function", "signature": "fn openai_base(base_url: &str) -> String 规范化OpenAI兼容端点URL（去除/anthropic和/v1后缀）", "file": "src-tauri/src/lib.rs" },
+        { "name": "translate_to_chinese", "type": "function", "signature": "async fn translate_to_chinese(api_key, base_url, text) -> Result<String, String> 调用DeepSeek API翻译描述", "file": "src-tauri/src/lib.rs" }
+      ],
+      "dependencies": { "internal": ["Rust-数据库", "Rust-进程管理", "Rust-会话管理"], "external": ["tauri 2", "serde", "serde_json", "tokio", "reqwest", "rusqlite", "dirs", "uuid", "base64"] },
+      "configurationProperties": [
+        { "prefix": "env", "fields": [
+          { "name": "CLAUDE_CODE_SUBAGENT_MODEL", "type": "string", "defaultValue": "deepseek-chat", "description": "子代理/翻译用模型（通过~/.claude/settings.json的env字段配置）" }
+        ]}
+      ],
+      "documentation": { "hasReadme": false, "hasDoc": false, "readmeQuality": "none" }
+    },
+    {
+      "name": "Rust-进程管理",
+      "path": "src-tauri/src/process.rs",
+      "type": "backend",
+      "summary": "三线程进程模型 — 基于 TOKENICODE 架构。Waiter（进程生命周期）、Stdout Reader（NDJSON解析→Tauri事件）、Stderr Reader（错误转发）。",
+      "responsibilities": ["CLI进程spawn（Windows CREATE_NO_WINDOW / Unix兼容）", "三线程模型：Waiter / Stdout Reader / Stderr Reader", "ProcessManager（注册/获取/终止）", "StdinManager（注册/发送/移除）", "CLI路径自动检测（native → npm global → PATH）", "权限模式同步（auto→settings.json，其他→CLI flag）", "Ultracode模式支持（xhigh + --settings ultracode）"],
+      "patterns": [],
+      "publicApi": [
+        { "name": "ManagedProcess", "type": "struct", "signature": "pub struct ManagedProcess { pub session_id, pub pid, kill_tx, exit_notify } 托管进程句柄", "file": "src-tauri/src/process.rs" },
+        { "name": "ProcessManager", "type": "struct", "signature": "pub struct ProcessManager { processes: HashMap<String, Arc<Mutex<ManagedProcess>>> } 进程注册表", "file": "src-tauri/src/process.rs" },
+        { "name": "ProcessManager::new", "type": "method", "signature": "pub fn new() -> Self 新建进程管理器", "file": "src-tauri/src/process.rs" },
+        { "name": "ProcessManager::register", "type": "method", "signature": "pub fn register(&mut self, id, process) 注册进程", "file": "src-tauri/src/process.rs" },
+        { "name": "ProcessManager::get", "type": "method", "signature": "pub fn get(&self, id) -> Option<Arc<Mutex<ManagedProcess>>> 获取进程", "file": "src-tauri/src/process.rs" },
+        { "name": "ProcessManager::kill", "type": "method", "signature": "pub async fn kill(&self, id) -> Result<(), String> 优雅终止进程（5秒超时）", "file": "src-tauri/src/process.rs" },
+        { "name": "StdinManager", "type": "struct", "signature": "pub struct StdinManager { handles: HashMap<String, ChildStdin> } 标准输入管理器", "file": "src-tauri/src/process.rs" },
+        { "name": "StdinManager::new", "type": "method", "signature": "pub fn new() -> Self 新建stdin管理器", "file": "src-tauri/src/process.rs" },
+        { "name": "StdinManager::register", "type": "method", "signature": "pub fn register(&mut self, id, stdin) 注册stdin句柄", "file": "src-tauri/src/process.rs" },
+        { "name": "StdinManager::send", "type": "method", "signature": "pub async fn send(&mut self, id, data) -> Result<(), String> 发送stdin数据", "file": "src-tauri/src/process.rs" },
+        { "name": "StdinManager::remove", "type": "method", "signature": "pub fn remove(&mut self, id) 移除stdin句柄", "file": "src-tauri/src/process.rs" },
+        { "name": "find_claude", "type": "function", "signature": "pub fn find_claude() -> Option<String> CLI路径自动检测（3级：native→npm→PATH）", "file": "src-tauri/src/process.rs" },
+        { "name": "SpawnParams", "type": "struct", "signature": "pub struct SpawnParams { session_id, message, resume_id, plan_mode, auto_mode, permission_mode, effort, ultracode, cwd, model, file_paths, claude_path } 启动参数", "file": "src-tauri/src/process.rs" },
+        { "name": "ProcessExitedEvent", "type": "struct", "signature": "pub struct ProcessExitedEvent { session_id, exit_code, success } 进程退出事件", "file": "src-tauri/src/process.rs" },
+        { "name": "spawn_claude_session", "type": "function", "signature": "pub async fn spawn_claude_session(params, app_handle, stdin_manager, session_manager) -> Result<Arc<Mutex<ManagedProcess>>, String> 主spawn函数：构建CLI参数→启动进程→创建三线程→返回ManagedProcess", "file": "src-tauri/src/process.rs" },
+        { "name": "sync_permission_settings", "type": "function", "signature": "fn sync_permission_settings(auto_mode, plan_mode, permission_mode) -> Result<(), String> 同步权限模式到~/.claude/settings.json", "file": "src-tauri/src/process.rs" }
+      ],
+      "dependencies": { "internal": ["Rust-协议解析", "Rust-会话管理"], "external": ["tauri 2", "tokio", "serde", "serde_json"] },
+      "configurationProperties": [],
+      "documentation": { "hasReadme": false, "hasDoc": false, "readmeQuality": "none" }
+    },
+    {
+      "name": "Rust-协议解析",
+      "path": "src-tauri/src/protocol.rs",
+      "type": "backend",
+      "summary": "Claude Code CLI stream-json 的 NDJSON 协议解析 — StreamEvent枚举（system/assistant/user/result/control_request）、ContentBlock枚举（text/thinking/tool_use）、StreamLine解析器、StreamFrontendEvent转前端事件",
+      "responsibilities": ["NDJSON 行解析（serde_json）", "StreamEvent 枚举（system/assistant/user/result/control_request）", "ContentBlock 解析（text/thinking/tool_use/tool_result）", "session_id/MCP服务器捕获", "StreamFrontendEvent 转换（含增量text_delta/input_json_delta处理）"],
+      "patterns": [],
+      "publicApi": [
+        { "name": "StreamEvent", "type": "enum", "signature": "pub enum StreamEvent { System{subtype,data}, Assistant{message,session_id,parent_tool_use_id,extra}, User{message,session_id,parent_tool_use_id,extra}, Result{subtype,result,num_turns,total_cost_usd,duration_ms,extra} } CLI stream-json事件枚举", "file": "src-tauri/src/protocol.rs" },
+        { "name": "AssistantMessage", "type": "struct", "signature": "pub struct AssistantMessage { content: Vec<ContentBlock>, model, stop_reason, stop_sequence, id } 助手消息", "file": "src-tauri/src/protocol.rs" },
+        { "name": "ContentBlock", "type": "enum", "signature": "pub enum ContentBlock { Text{text}, Thinking{thinking}, ToolUse{id,name,input} } 内容块枚举", "file": "src-tauri/src/protocol.rs" },
+        { "name": "UserMessage", "type": "struct", "signature": "pub struct UserMessage { content: Vec<UserContentBlock>, parent_tool_use_id } 用户消息", "file": "src-tauri/src/protocol.rs" },
+        { "name": "UserContentBlock", "type": "enum", "signature": "pub enum UserContentBlock { ToolResult{tool_use_id,content,is_error} } 用户内容块", "file": "src-tauri/src/protocol.rs" },
+        { "name": "StreamLine", "type": "struct", "signature": "pub struct StreamLine { inner: Value } NDJSON行解析器", "file": "src-tauri/src/protocol.rs" },
+        { "name": "StreamLine::parse", "type": "method", "signature": "pub fn parse(line: &str) -> Option<Self> 解析NDJSON行", "file": "src-tauri/src/protocol.rs" },
+        { "name": "StreamLine::capture_session_id", "type": "method", "signature": "pub fn capture_session_id(&self) -> Option<String> 提取system/init事件的session_id", "file": "src-tauri/src/protocol.rs" },
+        { "name": "StreamLine::capture_mcp_servers", "type": "method", "signature": "pub fn capture_mcp_servers(&self) -> Vec<String> 提取system/init事件的MCP服务器列表（原生mcp_servers字段优先，fallback解析mcp__前缀tool名）", "file": "src-tauri/src/protocol.rs" },
+        { "name": "StreamLine::to_frontend_event", "type": "method", "signature": "pub fn to_frontend_event(&self, session_id) -> StreamFrontendEvent 转换为前端事件（处理stream_event增量/assistant完整/result终态/control_request审批）", "file": "src-tauri/src/protocol.rs" },
+        { "name": "StreamFrontendEvent", "type": "struct", "signature": "pub struct StreamFrontendEvent { event_type, session_id, text, thinking, tool_use, control_request, is_final, error, duration_ms, input_tokens, output_tokens, cost_usd } 前端事件结构", "file": "src-tauri/src/protocol.rs" },
+        { "name": "ControlRequest", "type": "struct", "signature": "pub struct ControlRequest { subtype, tool_name, tool_input } CLI控制请求（工具审批）", "file": "src-tauri/src/protocol.rs" }
+      ],
+      "dependencies": { "internal": [], "external": ["serde", "serde_json"] },
+      "configurationProperties": [],
+      "documentation": { "hasReadme": false, "hasDoc": false, "readmeQuality": "none" }
+    },
+    {
+      "name": "Rust-会话管理",
+      "path": "src-tauri/src/session.rs",
+      "type": "backend",
+      "summary": "SessionManager — SQLite 背书的会话CRUD、消息持久化、DeepSeek API连接测试、审批场景管理",
+      "responsibilities": ["会话CRUD（创建/列出/获取/删除/重命名）", "CLI会话UUID映射（ourId↔claude_session_id）", "消息持久化（保存/列出/更新/截断）", "自动标题（首条用户消息前50字符）", "会话状态管理（idle/running/completed/error）", "DeepSeek API连接测试", "审批场景（add/remove/list/is_approved）", "Token统计（从消息JSON中聚合）"],
+      "patterns": [],
+      "publicApi": [
+        { "name": "Session", "type": "struct", "signature": "pub struct Session { id, title, cli_session_id, cwd, model, status, created_at, updated_at, message_count, total_tokens, total_cost } 会话数据", "file": "src-tauri/src/session.rs" },
+        { "name": "Message", "type": "struct", "signature": "pub struct Message { id, session_id, role, content(JSON), token_usage, created_at } 消息数据", "file": "src-tauri/src/session.rs" },
+        { "name": "SessionManager", "type": "struct", "signature": "pub struct SessionManager { db: Db } 会话管理器", "file": "src-tauri/src/session.rs" },
+        { "name": "SessionManager::new", "type": "method", "signature": "pub fn new(db: Db) -> Self 新建会话管理器", "file": "src-tauri/src/session.rs" },
+        { "name": "SessionManager::create_session", "type": "method", "signature": "pub fn create_session(&self, cwd, model) -> Result<Session, String> 创建会话（UUID v4）", "file": "src-tauri/src/session.rs" },
+        { "name": "SessionManager::get_session", "type": "method", "signature": "pub fn get_session(&self, id) -> Result<Session, String> 获取单个会话", "file": "src-tauri/src/session.rs" },
+        { "name": "SessionManager::list_sessions", "type": "method", "signature": "pub fn list_sessions(&self) -> Result<Vec<Session>, String> 列出所有会话（最新优先，含Token/费用聚合）", "file": "src-tauri/src/session.rs" },
+        { "name": "SessionManager::delete_session", "type": "method", "signature": "pub fn delete_session(&self, id) -> Result<(), String> 删除会话（CASCADE删除消息）", "file": "src-tauri/src/session.rs" },
+        { "name": "SessionManager::rename_session", "type": "method", "signature": "pub fn rename_session(&self, id, title) -> Result<(), String> 重命名会话", "file": "src-tauri/src/session.rs" },
+        { "name": "SessionManager::set_claude_session", "type": "method", "signature": "pub fn set_claude_session(&self, our_id, claude_id) -> Result<(), String> 存储CLI会话UUID映射", "file": "src-tauri/src/session.rs" },
+        { "name": "SessionManager::get_claude_session", "type": "method", "signature": "pub fn get_claude_session(&self, our_id) -> Option<String> 获取CLI会话UUID（用于--resume）", "file": "src-tauri/src/session.rs" },
+        { "name": "SessionManager::auto_title_from_first_message", "type": "method", "signature": "pub fn auto_title_from_first_message(&self, id, message) -> Result<(), String> 自动标题（首条消息前50字符），仅在默认识别名'New Chat'时生效", "file": "src-tauri/src/session.rs" },
+        { "name": "SessionManager::save_message", "type": "method", "signature": "pub fn save_message(&self, id, session_id, role, content, token_usage) -> Result<(), String> 保存消息（INSERT OR REPLACE）", "file": "src-tauri/src/session.rs" },
+        { "name": "SessionManager::list_messages", "type": "method", "signature": "pub fn list_messages(&self, session_id) -> Result<Vec<Message>, String> 列出会话消息（按创建时间升序）", "file": "src-tauri/src/session.rs" },
+        { "name": "SessionManager::update_message_content", "type": "method", "signature": "pub fn update_message_content(&self, id, session_id, content) -> Result<(), String> 更新消息内容", "file": "src-tauri/src/session.rs" },
+        { "name": "SessionManager::delete_messages_after", "type": "method", "signature": "pub fn delete_messages_after(&self, id, session_id) -> Result<u32, String> 删除指定消息之后的所有消息（回滚实现）", "file": "src-tauri/src/session.rs" },
+        { "name": "SessionManager::set_session_status", "type": "method", "signature": "pub fn set_session_status(&self, id, status) -> Result<(), String> 更新会话状态", "file": "src-tauri/src/session.rs" },
+        { "name": "SessionManager::test_connection", "type": "method", "signature": "pub async fn test_connection(&self, api_key, base_url, model) -> Result<String, String> DeepSeek API连接测试", "file": "src-tauri/src/session.rs" },
+        { "name": "SessionManager::add_approved_scenario", "type": "method", "signature": "pub fn add_approved_scenario(&self, tool_name, pattern) -> Result<(), String> 添加审批场景", "file": "src-tauri/src/session.rs" },
+        { "name": "SessionManager::remove_approved_scenario", "type": "method", "signature": "pub fn remove_approved_scenario(&self, tool_name, pattern) -> Result<(), String> 移除审批场景", "file": "src-tauri/src/session.rs" },
+        { "name": "SessionManager::is_approved", "type": "method", "signature": "pub fn is_approved(&self, tool_name, input_summary) -> bool 检查工具是否已批准", "file": "src-tauri/src/session.rs" },
+        { "name": "SessionManager::list_approved_scenarios", "type": "method", "signature": "pub fn list_approved_scenarios(&self) -> Result<Vec<(String,String)>, String> 列出所有审批场景", "file": "src-tauri/src/session.rs" }
+      ],
+      "dependencies": { "internal": ["Rust-数据库"], "external": ["rusqlite", "serde", "serde_json", "reqwest", "uuid"] },
+      "configurationProperties": [],
+      "documentation": { "hasReadme": false, "hasDoc": false, "readmeQuality": "none" }
+    },
+    {
+      "name": "Rust-数据库",
+      "path": "src-tauri/src/db.rs",
+      "type": "backend",
+      "summary": "SQLite 初始化与迁移 — WAL模式、5张表（sessions/messages/settings/approved_scenarios/item_descriptions）、3个索引",
+      "responsibilities": ["数据库目录管理（跨平台：%APPDATA%/cc-gui / ~/.local/share/cc-gui / ~/Library/Application Support/cc-gui）", "SQLite连接创建与WAL模式启用", "Schema迁移（5张表+3索引）", "Db结构体（线程安全 Arc<Mutex<Connection>>）"],
+      "patterns": [],
+      "publicApi": [
+        { "name": "Db", "type": "struct", "signature": "pub struct Db { pub conn: Arc<Mutex<Connection>> } 线程安全数据库句柄", "file": "src-tauri/src/db.rs" },
+        { "name": "Db::new", "type": "method", "signature": "pub fn new() -> SqliteResult<Self> 创建数据库连接并运行迁移", "file": "src-tauri/src/db.rs" },
+        { "name": "db_dir", "type": "function", "signature": "pub fn db_dir() -> PathBuf 获取数据库目录（跨平台）", "file": "src-tauri/src/db.rs" },
+        { "name": "db_path", "type": "function", "signature": "pub fn db_path() -> PathBuf 获取数据库文件路径", "file": "src-tauri/src/db.rs" },
+        { "name": "open_db", "type": "function", "signature": "pub fn open_db() -> SqliteResult<Connection> 打开/创建数据库+迁移", "file": "src-tauri/src/db.rs" }
+      ],
+      "dependencies": { "internal": [], "external": ["rusqlite 0.31 (bundled)", "dirs"] },
+      "configurationProperties": [
+        { "prefix": "db", "fields": [
+          { "name": "journal_mode", "type": "string", "defaultValue": "WAL", "description": "SQLite journal模式（PRAGMA journal_mode=WAL）" },
+          { "name": "foreign_keys", "type": "string", "defaultValue": "ON", "description": "外键约束（PRAGMA foreign_keys=ON）" }
+        ]},
+        { "prefix": "schema", "fields": [
+          { "name": "sessions", "type": "table", "defaultValue": null, "description": "会话表（id/title/cli_session_id/cwd/model/status/created_at/updated_at）" },
+          { "name": "messages", "type": "table", "defaultValue": null, "description": "消息表（id/session_id(FK)/role(enum:user|assistant|system)/content/token_usage/created_at）CASCADE删除" },
+          { "name": "settings", "type": "table", "defaultValue": null, "description": "设置表（key/value）" },
+          { "name": "approved_scenarios", "type": "table", "defaultValue": null, "description": "审批场景表（tool_name/pattern/created_at）联合主键" },
+          { "name": "item_descriptions", "type": "table", "defaultValue": null, "description": "翻译缓存表（item_type/name/desc_en/desc_zh/source_updated_at/translated_at）联合主键" }
+        ]}
+      ],
+      "documentation": { "hasReadme": false, "hasDoc": false, "readmeQuality": "none" }
+    }
+  ],
+  "dependencyGraph": {
+    "nodes": ["前端-聊天","前端-布局","前端-会话侧栏","前端-文件","前端-设置","前端-共享","前端-组合式函数","前端-Store","前端-Lib","前端-国际化","前端-路由","前端-样式","Rust-入口","Rust-Tauri命令","Rust-进程管理","Rust-协议解析","Rust-会话管理","Rust-数据库"],
+    "edges": [
+      {"from":"前端-聊天","to":"前端-Store"},
+      {"from":"前端-聊天","to":"前端-组合式函数"},
+      {"from":"前端-聊天","to":"前端-Lib"},
+      {"from":"前端-聊天","to":"前端-共享"},
+      {"from":"前端-聊天","to":"前端-国际化"},
+      {"from":"前端-布局","to":"前端-会话侧栏"},
+      {"from":"前端-布局","to":"前端-Store"},
+      {"from":"前端-布局","to":"前端-组合式函数"},
+      {"from":"前端-布局","to":"前端-共享"},
+      {"from":"前端-会话侧栏","to":"前端-Store"},
+      {"from":"前端-会话侧栏","to":"前端-组合式函数"},
+      {"from":"前端-文件","to":"前端-Lib"},
+      {"from":"前端-文件","to":"前端-组合式函数"},
+      {"from":"前端-设置","to":"前端-Store"},
+      {"from":"前端-设置","to":"前端-Lib"},
+      {"from":"前端-共享","to":"前端-Lib"},
+      {"from":"前端-共享","to":"前端-Store"},
+      {"from":"前端-共享","to":"前端-组合式函数"},
+      {"from":"前端-组合式函数","to":"前端-Store"},
+      {"from":"前端-组合式函数","to":"前端-Lib"},
+      {"from":"前端-Store","to":"前端-Lib"},
+      {"from":"前端-路由","to":"前端-聊天"},
+      {"from":"前端-路由","to":"前端-设置"},
+      {"from":"Rust-入口","to":"Rust-Tauri命令"},
+      {"from":"Rust-Tauri命令","to":"Rust-数据库"},
+      {"from":"Rust-Tauri命令","to":"Rust-进程管理"},
+      {"from":"Rust-Tauri命令","to":"Rust-会话管理"},
+      {"from":"Rust-进程管理","to":"Rust-协议解析"},
+      {"from":"Rust-进程管理","to":"Rust-会话管理"},
+      {"from":"Rust-会话管理","to":"Rust-数据库"}
+    ]
+  },
+  "scanMeta": {
+    "scannedAt": "2026-06-26T00:00:00.000Z",
+    "commit": "f67115370991f3521ab8aece00f990d651886eac",
+    "pluginVersion": "0.5.1",
+    "moduleCount": 18,
+    "totalApiCount": 103,
+    "totalConfigCount": 7
+  }
+}

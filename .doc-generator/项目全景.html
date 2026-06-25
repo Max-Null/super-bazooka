@@ -1,0 +1,655 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>cc-gui — 项目全景</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0f1923;--panel-bg:#182635;--text:#b8c7d9;--text-light:#8ba0b8;--accent:#3b82f6;--border:#243447;--hover:#1d3347;--red:#e74c3c;--blue:#3498db;--green:#2ecc71;--orange:#e67e22;--purple:#9b59b6;--gray:#95a5a6;--yellow:#f1c40f}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+/* Header + Tab */
+.header{padding:12px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-shrink:0}
+.header h1{font-size:16px;font-weight:600;color:#e2e8f0}
+.header .sub{font-size:11px;color:var(--text-light)}
+.tabs{display:flex;gap:0;border-bottom:1px solid var(--border);padding:0 20px;background:var(--panel-bg);flex-shrink:0}
+.tab{padding:8px 16px;font-size:12px;color:var(--text-light);cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;white-space:nowrap;user-select:none}
+.tab:hover{color:var(--text);background:var(--tab-active,var(--hover))}
+.tab.active{color:#e2e8f0;border-bottom-color:var(--accent);font-weight:500}
+
+/* Panes */
+.content{flex:1;overflow:hidden;position:relative}
+.pane{position:absolute;top:0;left:0;width:100%;height:100%;display:flex;flex-direction:column}
+.pane:not(.active){visibility:hidden;pointer-events:none;opacity:0}
+.pane.active{visibility:visible;pointer-events:auto;opacity:1}
+
+/* Mermaid pane — overflow:auto for scrollable diagrams */
+.pane-mermaid{overflow:auto;padding:20px;display:block!important}
+.pane-mermaid:not(.active){position:absolute;visibility:hidden;pointer-events:none;opacity:0;height:100%}
+.pane-mermaid.active{position:relative;visibility:visible;pointer-events:auto;opacity:1}
+.desc{font-size:12px;color:var(--text-light);line-height:1.6;margin-bottom:16px;padding:10px 14px;background:var(--panel-bg);border-left:3px solid var(--accent);border-radius:0 6px 6px 0}
+.mw{background:var(--panel-bg);border:1px solid var(--border);border-radius:8px;padding:20px;overflow:auto;margin-bottom:16px}
+.mw .mw-title{font-size:13px;font-weight:500;color:#e2e8f0;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+.mw svg{max-width:100%;height:auto}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:900px){.grid-2{grid-template-columns:1fr}}
+
+/* D3 pane — sidebar + graph layout */
+.dep-layout{display:flex;height:100%}
+.dep-sidebar{width:280px;min-width:280px;background:var(--panel-bg);border-right:1px solid var(--border);display:flex;flex-direction:column;z-index:10;overflow-y:auto}
+.dep-sidebar h2{font-size:14px;font-weight:600;color:#e2e8f0;padding:16px;border-bottom:1px solid var(--border)}
+.search-box{padding:10px 16px}
+.search-box input{width:100%;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;outline:none}
+.search-box input:focus{border-color:var(--accent)}
+.legend{padding:8px 16px;border-bottom:1px solid var(--border)}
+.legend-title{font-size:10px;text-transform:uppercase;color:var(--text-light);margin-bottom:4px;letter-spacing:.5px}
+.legend-items{display:flex;flex-wrap:wrap;gap:5px}
+.legend-item{display:flex;align-items:center;gap:3px;font-size:10px;cursor:pointer;opacity:.7;transition:opacity .15s}
+.legend-item:hover{opacity:1}
+.legend-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.stats{padding:8px 16px;display:flex;gap:12px;font-size:11px;color:var(--text-light);border-bottom:1px solid var(--border)}
+.stats span strong{color:var(--text)}
+.node-detail{flex:1;overflow-y:auto;padding:12px 16px}
+.node-detail .empty{color:var(--text-light);font-size:12px;text-align:center;margin-top:30px}
+.node-detail h3{font-size:14px;color:#e2e8f0;margin-bottom:4px}
+.node-detail .type-tag{display:inline-block;padding:2px 6px;border-radius:3px;font-size:10px;margin-bottom:6px}
+.node-detail .desc{font-size:11px;line-height:1.5;color:var(--text-light);margin-bottom:8px;padding:0;background:none;border-left:none}
+.node-detail .relations h4,.node-detail .methods h4{font-size:10px;text-transform:uppercase;color:var(--text-light);margin-bottom:4px;letter-spacing:.5px}
+.node-detail .relations .rel{display:block;padding:2px 0;font-size:11px;color:var(--text);cursor:pointer;border-bottom:1px solid var(--border)}
+.node-detail .relations .rel:hover{color:var(--accent)}
+.dep-graph{flex:1;position:relative}
+.dep-graph svg{width:100%;height:100%}
+.tooltip{position:absolute;pointer-events:none;background:rgba(15,25,35,.95);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:11px;opacity:0;transition:opacity .15s;max-width:220px;z-index:100}
+.tooltip .tt-name{font-weight:600;color:#e2e8f0}
+.tooltip .tt-type{font-size:10px;color:var(--text-light)}
+.tooltip .tt-desc{font-size:10px;color:var(--text-light);margin-top:3px}
+.minimap{position:absolute;bottom:10px;right:10px;width:150px;height:110px;background:rgba(15,25,35,.85);border:1px solid var(--border);border-radius:6px;overflow:hidden;z-index:50;cursor:pointer}
+.minimap svg{width:100%;height:100%}
+.minimap .viewport-rect{fill:rgba(59,130,246,.15);stroke:var(--accent);stroke-width:1}
+@media(max-width:768px){.dep-sidebar{width:240px;min-width:240px}}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>cc-gui</h1>
+  <span class="sub">项目全景 · Project Panorama</span>
+</div>
+
+<div class="tabs" id="tabBar"><div class="tab active" data-tab="dataflow">数据流</div><div class="tab" data-tab="dependency">模块依赖</div><div class="tab" data-tab="architecture">分层架构</div><div class="tab" data-tab="layout">布局决策</div><div class="tab" data-tab="stores">Store 依赖</div></div>
+
+<div class="content" id="mainContent">
+
+<!-- Tab: 数据流（Step 5 填充） -->
+<!-- pane-dataflow -->
+<div class="pane pane-mermaid active" id="pane-dataflow">
+  <div class="desc">SSE 数据流：用户输入到增量渲染的完整链路，含去重逻辑和桌面通知</div>
+  <div class="mw"><div class="mw-title">SSE 流式数据管道</div><pre class="mermaid">
+sequenceDiagram
+    participant User as 用户
+    participant InputBar as InputBar
+    participant Bridge as tauri-bridge
+    participant Rust as Rust Backend
+    participant CLI as Claude CLI
+    participant Protocol as protocol.rs
+    participant SP as useStreamProcessor
+    participant Chat as chat store
+    participant Vue as Vue 组件
+
+    User->>InputBar: 输入消息 + 文件
+    InputBar->>Bridge: sendMessage(sessionId, text, options)
+    Bridge->>Rust: invoke("send_message")
+    Rust->>Rust: 保存用户消息到 SQLite
+    Rust->>Rust: sync_permission_settings()
+    Rust->>CLI: spawn claude CLI (stream-json)
+
+    loop NDJSON 逐行
+        CLI-->>Protocol: stdout line
+        Protocol->>Protocol: StreamLine::parse(line)
+        Protocol->>Protocol: to_frontend_event(sessionId)
+        Protocol->>Rust: emit("stream-event", event)
+        Rust-->>SP: Tauri event
+        SP->>SP: 去重检查 (startsWith)
+        SP->>Chat: appendText / appendThinking / addToolUse
+        Chat-->>Vue: 响应式 re-render
+    end
+
+    CLI-->>Rust: 进程退出
+    Rust->>SP: emit("process-exited")
+    SP->>Chat: finishAssistantMessage(stats)
+    SP->>SP: 桌面通知 notifyComplete()
+  </pre></div>
+</div>
+
+<!-- Tab: 分层架构（Step 5 填充） -->
+<!-- pane-architecture -->
+<div class="pane pane-mermaid" id="pane-architecture">
+  <div class="desc">分层架构：入口层、前端业务层、状态层、Tauri IPC 桥、Rust 后端层</div>
+  <div class="mw"><div class="mw-title">全栈分层架构</div><pre class="mermaid">
+flowchart TD
+    subgraph "入口层"
+        Entry["main.rs / main.ts"]
+        Router["Vue Router"]
+        AppShell["AppShell 布局"]
+    end
+
+    subgraph "前端业务层"
+        ChatPanel["ChatPanel 聊天"]
+        SettingsPanel["SettingsPanel 设置"]
+        FilePanel["FilePanel 文件"]
+        ManagePanel["ManagePanel 管理"]
+        SessionSidebar["SessionSidebar 会话"]
+    end
+
+    subgraph "前端状态层"
+        ChatStore["chat store"]
+        SessionStore["session store"]
+        SettingsStore["settings store"]
+        Composables["7 composables"]
+        Lib["lib (tauri-bridge / utils / pinyin)"]
+    end
+
+    subgraph "Tauri IPC 桥"
+        TauriIPC["invoke() 30 commands"]
+    end
+
+    subgraph "Rust 后端层"
+        LibRs["lib.rs (AppState + 命令)"]
+        Process["process.rs (三线程)"]
+        Protocol["protocol.rs (NDJSON)"]
+        Session["session.rs (CRUD)"]
+        Db["db.rs (SQLite WAL)"]
+    end
+
+    subgraph "外部"
+        CLI["Claude Code CLI"]
+        DeepSeek["DeepSeek API"]
+    end
+
+    Entry --> Router
+    Router --> AppShell
+    AppShell --> ChatPanel
+    AppShell --> SettingsPanel
+    AppShell --> FilePanel
+    AppShell --> ManagePanel
+    AppShell --> SessionSidebar
+
+    ChatPanel --> ChatStore
+    ChatPanel --> Composables
+    SettingsPanel --> SettingsStore
+    SessionSidebar --> SessionStore
+    ManagePanel --> Lib
+    ChatStore --> Lib
+    SessionStore --> Lib
+    SettingsStore --> Lib
+    Composables --> Lib
+
+    Lib --> TauriIPC
+    TauriIPC --> LibRs
+    LibRs --> Process
+    LibRs --> Session
+    Process --> Protocol
+    Session --> Db
+    Process --> CLI
+    LibRs --> DeepSeek
+
+    style Entry fill:#e74c3c,color:#fff
+    style TauriIPC fill:#f39c12,color:#000
+    style LibRs fill:#3498db,color:#fff
+    style CLI fill:#2ecc71,color:#000
+  </pre></div>
+</div>
+
+<!-- Tab: 路由守卫（Step 5 填充） -->
+<!-- pane-route -->
+
+
+<!-- Tab: 布局决策（Step 5 填充） -->
+<!-- pane-layout -->
+<div class="pane pane-mermaid" id="pane-layout">
+  <div class="desc">布局决策：主题、字号、语言三路切换 + 全局快捷键 + 响应式侧栏</div>
+  <div class="mw"><div class="mw-title">布局切换决策</div><pre class="mermaid">
+flowchart TD
+    Start["AppShell onMounted"] --> LoadSettings["加载 settings store"]
+    LoadSettings --> Theme["data-theme: dark | light"]
+    LoadSettings --> FontSize["data-font-size: small | medium | large"]
+    LoadSettings --> Locale["vue-i18n locale: zh | en"]
+
+    Theme --> CSS["CSS 变量切换"]
+    CSS --> RootDark[":root (暗色默认)"]
+    CSS --> LightOverride["[data-theme=light] 覆写"]
+
+    FontSize --> RemScale["html { font-size: 14 | 18 | 22px }"]
+    RemScale --> GlobalRem["全局 rem 缩放"]
+
+    Locale --> I18n["vue-i18n 翻译加载"]
+    I18n --> ZhFile["zh.json"]
+    I18n --> EnFile["en.json"]
+
+    Start --> Shortcuts["全局键盘快捷键"]
+    Shortcuts --> CtrlK["Ctrl+K 命令面板"]
+    Shortcuts --> CtrlN["Ctrl+N 新会话"]
+    Shortcuts --> CtrlE["Ctrl+E 导出"]
+    Shortcuts --> CtrlAltT["Ctrl+Alt+T 主题切换"]
+
+    Start --> Sidebar["SessionSidebar 侧栏"]
+    Sidebar --> ResponsiveCollapse["响应式折叠"]
+
+    style Start fill:#e74c3c,color:#fff
+    style Theme fill:#3498db,color:#fff
+    style FontSize fill:#9b59b6,color:#fff
+    style Locale fill:#2ecc71,color:#000
+  </pre></div>
+</div>
+
+<!-- Tab: 业务全景（Step 5 填充） -->
+<!-- pane-business -->
+
+
+<!-- Tab: Store 依赖（Step 5 填充） -->
+<!-- pane-stores -->
+<div class="pane pane-mermaid" id="pane-stores">
+  <div class="desc">Store 依赖：三个 Pinia Store 的内部状态和持久化目标</div>
+  <div class="mw"><div class="mw-title">Store 状态与持久化</div><pre class="mermaid">
+flowchart TD
+    subgraph "3 Pinia Stores"
+        ChatStore["chat store"]
+        SessionStore["session store"]
+        SettingsStore["settings store"]
+    end
+
+    subgraph "chat store 内部"
+        Messages["messages: Message[]"]
+        CurrentMsg["currentAssistantMsg"]
+        IsProcessing["isProcessing"]
+        PendingCR["pendingControlRequest"]
+        UsedAgents["usedAgents: Set"]
+    end
+
+    subgraph "session store 内部"
+        Sessions["sessions: Session[]"]
+        ActiveId["activeSessionId"]
+    end
+
+    subgraph "settings store 内部"
+        ApiConf["apiKey / baseUrl / model"]
+        PermConf["planMode / autoMode / permissionMode / effort"]
+        UiConf["theme / locale / fontSize / ponytailMode"]
+        ClaudePath["claudePath / resolvedClaudePath"]
+    end
+
+    subgraph "持久化目标"
+        SQLite["SQLite (via Rust)"]
+        LS["localStorage"]
+        SettingsJSON["~/.claude/settings.json"]
+    end
+
+    ChatStore --> Messages
+    ChatStore --> CurrentMsg
+    ChatStore --> IsProcessing
+    ChatStore --> UsedAgents
+    ChatStore --> PendingCR
+    ChatStore --> SQLite
+
+    SessionStore --> Sessions
+    SessionStore --> ActiveId
+    SessionStore --> SQLite
+
+    SettingsStore --> ApiConf
+    SettingsStore --> PermConf
+    SettingsStore --> UiConf
+    SettingsStore --> ClaudePath
+    ApiConf --> SettingsJSON
+    PermConf --> LS
+    UiConf --> LS
+
+    style ChatStore fill:#e74c3c,color:#fff
+    style SessionStore fill:#3498db,color:#fff
+    style SettingsStore fill:#2ecc71,color:#000
+    style SQLite fill:#f39c12,color:#000
+    style LS fill:#9b59b6,color:#fff
+    style SettingsJSON fill:#1abc9c,color:#000
+  </pre></div>
+</div>
+
+<!-- Tab: 微前端（Step 5 填充） -->
+<!-- pane-micro -->
+
+
+<!-- Tab: 请求链路 / Filter 链（Step 5 填充，后端项目） -->
+<!-- pane-pipeline -->
+
+
+<!-- Tab: 模块依赖（Step 4 填充 —— D3 力导向图，硬编码结构） -->
+<div class="pane" id="pane-dependency">
+  <div class="dep-layout">
+    <div class="dep-sidebar">
+      <h2>cc-gui</h2>
+      <div class="search-box"><input type="text" id="d3search" placeholder="搜索节点..." autocomplete="off"></div>
+      <div class="legend"><div class="legend-title">图例</div><div class="legend-items" id="d3legend"></div></div>
+      <div class="stats"><span>节点 <strong id="d3nodes">0</strong></span><span>边 <strong id="d3edges">0</strong></span></div>
+      <div class="node-detail" id="d3detail"><div class="empty">点击节点查看详情</div></div>
+    </div>
+    <div class="dep-graph" id="d3graph">
+      <div class="minimap" id="d3minimap"><svg></svg></div>
+    </div>
+    <div class="tooltip" id="d3tooltip"></div>
+  </div>
+</div>
+
+</div><!-- /content -->
+
+<script src="https://d3js.org/d3.v7.min.js"
+  integrity="sha256-8glLv2FBs1lyLE/kVOtsSw8OQswQzHr5IfwVj864ZTk="
+  crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"
+  integrity="sha256-pDvBr9RG+cTMZqxd1F0C6NZeJvxTROwO94f4jW3bb54="
+  crossorigin="anonymous"></script>
+<script>
+// D3.js CDN 加载失败时的 fallback 提示
+if (typeof d3 === 'undefined') {
+  document.body.innerHTML =
+    '<div style="display:flex;align-items:center;justify-content:center;height:100vh;background:#0f1923;color:#b8c7d9;font-family:sans-serif;text-align:center;padding:40px"><div><h2 style="color:#e2e8f0;margin-bottom:12px">D3.js 加载失败</h2><p style="color:#8ba0b8;margin-bottom:8px">项目全景依赖 D3.js 渲染模块依赖图，CDN 加载被阻止（离线或防火墙）。</p><p style="color:#8ba0b8">请从 <a href="https://d3js.org/d3.v7.min.js" style="color:#3b82f6">d3js.org</a> 下载 d3.v7.min.js 放到本 HTML 同目录，然后重新打开。</p></div></div>';
+}
+
+// Mermaid CDN 加载失败的静默降级——Mermaid Tab 显示错误提示而非白屏
+if (typeof mermaid === 'undefined') {
+  document.addEventListener('DOMContentLoaded', function() {
+    var merPre = document.querySelectorAll('pre.mermaid');
+    for (var i = 0; i < merPre.length; i++) {
+      merPre[i].innerHTML = '<div style="color:#e74c3c;padding:16px;text-align:center;font-size:13px">Mermaid 加载失败——CDN（jsdelivr.net）不可达，请检查网络连接。</div>';
+    }
+  });
+}
+
+// ============ MERMAID INIT ============
+mermaid.initialize({
+  startOnLoad: true,
+  theme: 'dark',
+  themeVariables: {
+    primaryColor: '#1d3347', primaryTextColor: '#b8c7d9', primaryBorderColor: '#243447',
+    lineColor: '#3b82f6', secondaryColor: '#182635', tertiaryColor: '#0f1923',
+    noteBkgColor: '#1a2d3f', noteTextColor: '#8ba0b8',
+    actorBkg: '#1d3347', actorBorder: '#243447', actorTextColor: '#b8c7d9',
+    signalColor: '#8ba0b8', signalTextColor: '#b8c7d9',
+    labelBoxBkgColor: '#1d3347', labelBoxBorderColor: '#243447', loopTextColor: '#b8c7d9'
+  },
+  flowchart: { useMaxWidth: true, htmlLabels: true },
+  sequence: { useMaxWidth: true, showSequenceNumbers: false }
+});
+
+// ============ D3 DATA ============
+const DATA = {"nodes":[{"id":"前端-聊天","label":"前端-聊天","type":"模块","group":"模块","description":"聊天核心界面 — 消息气泡渲染、输入栏（含工具栏和模式栏）、思考指示器、上下文用量指示器"},{"id":"前端-聊天:ChatPanel","label":"ChatPanel","type":"组件","group":"前端组件","module":"前端-聊天","description":"defineProps<{ activeSessionId?: string }>() 聊天主面板，组合 MessageBubble + InputBar + ModeBar 等"},{"id":"前端-聊天:MessageBubble","label":"MessageBubble","type":"组件","group":"前端组件","module":"前端-聊天","description":"defineProps<{ message: Message; isLast: boolean }>() 单条消息气泡，支持 Markdown/Mermaid 渲染、思考折叠、工具调用展示、编辑/回滚操作"},{"id":"前端-聊天:InputBar","label":"InputBar","type":"组件","group":"前端组件","module":"前端-聊天","description":"defineProps<{ sessionId?: string; isProcessing: boolean; autoMode: boolean }>() + defineEmits<{ send: [text: string, fil"},{"id":"前端-聊天:InputBarToolbar","label":"InputBarToolbar","type":"组件","group":"前端组件","module":"前端-聊天","description":"defineProps<{ planMode: boolean; autoMode: boolean; permissionMode: string; effort: string; ponytailMode: string; claude"},{"id":"前端-聊天:ModeBar","label":"ModeBar","type":"组件","group":"前端组件","module":"前端-聊天","description":"defineProps<{ planMode: boolean; autoMode: boolean; permissionMode: string; effort: string; model?: string; isProcessing"},{"id":"前端-聊天:ThinkingIndicator","label":"ThinkingIndicator","type":"组件","group":"前端组件","module":"前端-聊天","description":"无Props，纯视觉组件。AI思考中时显示动画指示器"},{"id":"前端-聊天:ContextIndicator","label":"ContextIndicator","type":"组件","group":"前端组件","module":"前端-聊天","description":"defineProps<{ inputTokens: number; outputTokens: number; costUSD: number }>() + defineEmits<{ openModal: [] }>() Token用量"},{"id":"前端-布局","label":"前端-布局","type":"模块","group":"模块","description":"AppShell — 全局应用外壳，包含侧栏、导航栏、全局键盘快捷键绑定"},{"id":"前端-布局:AppShell","label":"AppShell","type":"组件","group":"前端组件","module":"前端-布局","description":"无Props。全局布局容器，组合 SessionSidebar + NavBar + router-view"},{"id":"前端-会话侧栏","label":"前端-会话侧栏","type":"模块","group":"模块","description":"SessionSidebar — 会话列表侧栏，展示所有会话、支持创建/重命名/删除操作"},{"id":"前端-会话侧栏:SessionSidebar","label":"SessionSidebar","type":"组件","group":"前端组件","module":"前端-会话侧栏","description":"defineProps<{ activeSessionId: string }>() + defineEmits<{ select: [id: string] }>() 会话侧边栏"},{"id":"前端-文件","label":"前端-文件","type":"模块","group":"模块","description":"文件浏览与 diff 对比 — FilePanel 面板、FileTree 目录树、FilePreview 预览、DiffViewer 差异对比"},{"id":"前端-文件:FilePanel","label":"FilePanel","type":"组件","group":"前端组件","module":"前端-文件","description":"defineProps<{ workspaceRoot: string }>() 文件浏览面板，组合 FileTree + FilePreview"},{"id":"前端-文件:FileTree","label":"FileTree","type":"组件","group":"前端组件","module":"前端-文件","description":"defineProps<{ rootPath: string; depth: number }>() + defineEmits<{ selectFile: [path: string] }>() 递归目录树组件"},{"id":"前端-文件:FilePreview","label":"FilePreview","type":"组件","group":"前端组件","module":"前端-文件","description":"defineProps<{ path: string; filename: string; content: string; thumbnail: string | null }>() 文件内容预览（自动检测类型）"},{"id":"前端-文件:DiffViewer","label":"DiffViewer","type":"组件","group":"前端组件","module":"前端-文件","description":"defineProps<{ oldStr: string; newStr: string }>() 行级差异对比（diff 库）"},{"id":"前端-设置","label":"前端-设置","type":"模块","group":"模块","description":"SettingsPanel — API配置界面，包含 Key/Base URL/Model 配置及连接测试"},{"id":"前端-设置:SettingsPanel","label":"SettingsPanel","type":"组件","group":"前端组件","module":"前端-设置","description":"无Props。API配置面板 + 连接测试按钮"},{"id":"前端-设置:cfg:VITE_DEV_SERVER_URL","label":"VITE_DEV_SERVER_URL","type":"配置","group":"配置","module":"前端-设置","description":"env.VITE_DEV_SERVER_URL = -"},{"id":"前端-共享","label":"前端-共享","type":"模块","group":"模块","description":"共享 UI 组件 — ManagePanel 8合1管理面板、Markdown/Mermaid 渲染器、命令面板、模态框外壳、上下文用量弹窗、错误边界、文件预览弹窗"},{"id":"前端-共享:ManagePanel","label":"ManagePanel","type":"组件","group":"前端组件","module":"前端-共享","description":"defineProps<{ visible: boolean }>() + defineEmits<{ close: [] }>() 8合1管理面板，Tab切换管理所有 CC 配置"},{"id":"前端-共享:MarkdownRenderer","label":"MarkdownRenderer","type":"组件","group":"前端组件","module":"前端-共享","description":"defineProps<{ content: string; isStreaming: boolean }>() Markdown 渲染组件"},{"id":"前端-共享:MermaidRenderer","label":"MermaidRenderer","type":"组件","group":"前端组件","module":"前端-共享","description":"defineProps<{ code: string }>() Mermaid 图表渲染"},{"id":"前端-共享:CommandPalette","label":"CommandPalette","type":"组件","group":"前端组件","module":"前端-共享","description":"无Props。命令面板（Ctrl+K 触发），支持拼音搜索和最近使用"},{"id":"前端-共享:ModalShell","label":"ModalShell","type":"组件","group":"前端组件","module":"前端-共享","description":"defineProps<{ visible: boolean; title: string; widthClass: string }>() + defineEmits<{ close: [] }>() 三段式弹窗外壳（#header / "},{"id":"前端-共享:ContextUsageModal","label":"ContextUsageModal","type":"组件","group":"前端组件","module":"前端-共享","description":"defineProps<{ visible: boolean }>() + defineEmits<{ close: [] }>() Token/费用用量详情弹窗"},{"id":"前端-共享:ErrorBoundary","label":"ErrorBoundary","type":"组件","group":"前端组件","module":"前端-共享","description":"defineProps<{ fallback?: string }>() Vue errorBoundary 捕获子组件渲染错误"},{"id":"前端-共享:FilePreviewModal","label":"FilePreviewModal","type":"组件","group":"前端组件","module":"前端-共享","description":"defineProps<{ visible: boolean; path: string; filename: string }>() + defineEmits<{ close: [] }>() 文件预览弹窗"},{"id":"前端-组合式函数","label":"前端-组合式函数","type":"模块","group":"模块","description":"Vue 3 Composables — 流处理、命令注册/面板、新会话、文件预览、调试日志、代码高亮"},{"id":"前端-组合式函数:useStreamProcessor","label":"useStreamProcessor","type":"组合函数","group":"组合式函数","module":"前端-组合式函数","description":"() => { startListening, stopListening } 注册 Tauri 事件监听（stream-event/stream-debug/stream-error/session-created/process-exi"},{"id":"前端-组合式函数:connectedMcpServers","label":"connectedMcpServers","type":"函数","group":"工具库","module":"前端-组合式函数","description":"Ref<string[]> MCP 服务器连接状态（由 session-created 事件更新）"},{"id":"前端-组合式函数:useCommandRegistry","label":"useCommandRegistry","type":"组合函数","group":"组合式函数","module":"前端-组合式函数","description":"() => { register, getCommands, registry } 命令注册系统，组件 onMounted 注册 → onUnmounted 注销"},{"id":"前端-组合式函数:useCommandPaletteBus","label":"useCommandPaletteBus","type":"组合函数","group":"组合式函数","module":"前端-组合式函数","description":"() => { trigger, open } 命令面板事件总线（打开信号）"},{"id":"前端-组合式函数:emitChatCommand","label":"emitChatCommand","type":"函数","group":"工具库","module":"前端-组合式函数","description":"(action: string) => void 发送聊天命令到 ChatPanel"},{"id":"前端-组合式函数:useChatCommandBus","label":"useChatCommandBus","type":"组合函数","group":"组合式函数","module":"前端-组合式函数","description":"() => { chatCommand } ChatPanel 监听聊天命令"},{"id":"前端-组合式函数:useNewSession","label":"useNewSession","type":"组合函数","group":"组合式函数","module":"前端-组合式函数","description":"() => { handleNew } 新建会话流程（创建→清空消息→清空日志→跳转/chat）"},{"id":"前端-组合式函数:useFilePreview","label":"useFilePreview","type":"组合函数","group":"组合式函数","module":"前端-组合式函数","description":"() => { getThumbnail, thumbnails } 图片缩略图缓存（base64），支持 isImageFile / mimeType 工具函数"},{"id":"前端-组合式函数:useDebugLog","label":"useDebugLog","type":"组合函数","group":"组合式函数","module":"前端-组合式函数","description":"() => { entries, add, clear } 调试日志收集，监听 stream-debug 事件"},{"id":"前端-组合式函数:useHighlight","label":"useHighlight","type":"组合函数","group":"组合式函数","module":"前端-组合式函数","description":"() => { highlighted, highlight } highlight.js 代码高亮异步函数"},{"id":"前端-Store","label":"前端-Store","type":"模块","group":"模块","description":"Pinia 状态管理 — chat（消息流/工具调用/控制请求）、session（会话列表/CRUD）、settings（API配置/UI偏好/字号/主题/语言）"},{"id":"前端-Store:useChatStore","label":"useChatStore","type":"Store","group":"状态管理","module":"前端-Store","description":"defineStore('chat', () => { messages, currentAssistantMsg, isProcessing, pendingControlRequest, usedAgents, addUserMessa"},{"id":"前端-Store:useSessionStore","label":"useSessionStore","type":"Store","group":"状态管理","module":"前端-Store","description":"defineStore('session', () => { sessions, activeSessionId, loadSessions, createSession, setActiveSession, renameSession, "},{"id":"前端-Store:useSettingsStore","label":"useSettingsStore","type":"Store","group":"状态管理","module":"前端-Store","description":"defineStore('settings', () => { apiKey, baseUrl, model, planMode, autoMode, permissionMode, effort, ponytailMode, theme,"},{"id":"前端-Store:cfg:cc-gui-ui-settings","label":"cc-gui-ui-settings","type":"配置","group":"配置","module":"前端-Store","description":"localStorage.cc-gui-ui-settings = { planMode:false, autoMode:true, permissionMode:'bypassPermissions', effort:'high', ponytailMode:'full', theme:'dark', locale:'zh', fontSize:'medium', claudePath:'' }"},{"id":"前端-Lib","label":"前端-Lib","type":"模块","group":"模块","description":"工具库 — Tauri IPC 桥接封装、通用工具函数、拼音搜索、Tauri Mock"},{"id":"前端-Lib:sendMessage","label":"sendMessage","type":"函数","group":"工具库","module":"前端-Lib","description":"(sessionId: string, message: string, options?: SendOptions) => Promise<string> 发送消息并启动CLI进程"},{"id":"前端-Lib:storeClaudeSession","label":"storeClaudeSession","type":"函数","group":"工具库","module":"前端-Lib","description":"(ourSessionId: string, claudeSessionId: string) => Promise<void> 存储CLI会话UUID映射"},{"id":"前端-Lib:stopSession","label":"stopSession","type":"函数","group":"工具库","module":"前端-Lib","description":"(sessionId: string) => Promise<void> 停止会话进程"},{"id":"前端-Lib:createSession","label":"createSession","type":"函数","group":"工具库","module":"前端-Lib","description":"(model?: string) => Promise<SessionData> 创建会话"},{"id":"前端-Lib:listSessions","label":"listSessions","type":"函数","group":"工具库","module":"前端-Lib","description":"() => Promise<SessionData[]> 列出所有会话"},{"id":"前端-Lib:deleteSession","label":"deleteSession","type":"函数","group":"工具库","module":"前端-Lib","description":"(sessionId: string) => Promise<void> 删除会话"},{"id":"前端-Lib:renameSession","label":"renameSession","type":"函数","group":"工具库","module":"前端-Lib","description":"(sessionId: string, title: string) => Promise<void> 重命名会话"},{"id":"前端-Lib:listMessages","label":"listMessages","type":"函数","group":"工具库","module":"前端-Lib","description":"(sessionId: string) => Promise<MessageData[]> 列出会话消息"},{"id":"前端-Lib:saveMessage","label":"saveMessage","type":"函数","group":"工具库","module":"前端-Lib","description":"(id, sessionId, role, content, tokenUsage?) => Promise<void> 保存消息到DB"},{"id":"前端-Lib:updateMessageContent","label":"updateMessageContent","type":"函数","group":"工具库","module":"前端-Lib","description":"(messageId, sessionId, content) => Promise<void> 更新消息内容"},{"id":"前端-Lib:deleteMessagesAfter","label":"deleteMessagesAfter","type":"函数","group":"工具库","module":"前端-Lib","description":"(messageId, sessionId) => Promise<number> 删除指定消息之后的所有消息"},{"id":"前端-Lib:connectLLM","label":"connectLLM","type":"函数","group":"工具库","module":"前端-Lib","description":"(apiKey, baseUrl, model) => Promise<string> DeepSeek API连接测试"},{"id":"前端-Lib:listDir","label":"listDir","type":"函数","group":"工具库","module":"前端-Lib","description":"(path: string) => Promise<FileEntry[]> 列出目录内容"},{"id":"前端-Lib:readFileContent","label":"readFileContent","type":"函数","group":"工具库","module":"前端-Lib","description":"(path: string) => Promise<string> 读取文件文本"},{"id":"前端-Lib:readFileBase64","label":"readFileBase64","type":"函数","group":"工具库","module":"前端-Lib","description":"(path: string) => Promise<string> 读取文件base64编码"},{"id":"前端-Lib:getWorkspaceRoot","label":"getWorkspaceRoot","type":"函数","group":"工具库","module":"前端-Lib","description":"() => Promise<string> 获取工作区根目录"},{"id":"前端-Lib:writeFile","label":"writeFile","type":"函数","group":"工具库","module":"前端-Lib","description":"(path: string, content: string) => Promise<void> 写入文件（仅~/.claude/子树）"},{"id":"前端-Lib:getClaudeDir","label":"getClaudeDir","type":"函数","group":"工具库","module":"前端-Lib","description":"() => Promise<string> 获取~/.claude/目录路径"},{"id":"前端-Lib:resolveClaudePath","label":"resolveClaudePath","type":"函数","group":"工具库","module":"前端-Lib","description":"() => Promise<string> 自动检测CLI路径"},{"id":"前端-Lib:getClaudeSettings","label":"getClaudeSettings","type":"函数","group":"工具库","module":"前端-Lib","description":"() => Promise<ClaudeSettings> 读取~/.claude/settings.json"},{"id":"前端-Lib:setClaudeSettings","label":"setClaudeSettings","type":"函数","group":"工具库","module":"前端-Lib","description":"(apiKey,baseUrl,model,effort,permissionMode) => Promise<void> 写入~/.claude/settings.json"},{"id":"前端-Lib:ensureItemDescriptions","label":"ensureItemDescriptions","type":"函数","group":"工具库","module":"前端-Lib","description":"(items, apiKey, baseUrl) => Promise<DescriptionItem[]> 翻译描述缓存"},{"id":"前端-Lib:generateMcpDescriptions","label":"generateMcpDescriptions","type":"函数","group":"工具库","module":"前端-Lib","description":"(names, apiKey, baseUrl) => Promise<DescriptionItem[]> 批量生成MCP中文描述"},{"id":"前端-Lib:formatNum","label":"formatNum","type":"函数","group":"工具库","module":"前端-Lib","description":"(n: number) => string 数字格式化(k/M后缀)"},{"id":"前端-Lib:formatTokenCount","label":"formatTokenCount","type":"函数","group":"工具库","module":"前端-Lib","description":"(n: number) => string Token数量格式化"},{"id":"前端-Lib:translateError","label":"translateError","type":"函数","group":"工具库","module":"前端-Lib","description":"(err: unknown) => { key: string; params?: Record<string,string> } Rust错误→i18n key映射"},{"id":"前端-Lib:toPinyinInitials","label":"toPinyinInitials","type":"函数","group":"工具库","module":"前端-Lib","description":"(text: string) => string 提取中文拼音首字母（覆盖3755常用汉字）"},{"id":"前端-Lib:TauriMock","label":"TauriMock","type":"函数","group":"工具库","module":"前端-Lib","description":"完整的 Tauri API mock（invoke/listen/emit），支持浏览器内E2E测试"},{"id":"前端-国际化","label":"前端-国际化","type":"模块","group":"模块","description":"vue-i18n 中英双语翻译文件"},{"id":"前端-国际化:zh.json","label":"zh.json","type":"国际化","group":"国际化","module":"前端-国际化","description":"中文翻译 locale 文件"},{"id":"前端-国际化:en.json","label":"en.json","type":"国际化","group":"国际化","module":"前端-国际化","description":"英文翻译 locale 文件"},{"id":"前端-路由","label":"前端-路由","type":"模块","group":"模块","description":"Vue Router 路由配置 — /chat 和 /settings 两条路由"},{"id":"前端-路由:router","label":"router","type":"路由","group":"路由配置","module":"前端-路由","description":"createRouter({ history: createWebHistory(), routes: [{path:'/',redirect:'/chat'},{path:'/chat',name:'chat',component:()="},{"id":"前端-样式","label":"前端-样式","type":"模块","group":"样式","description":"全局样式层 — 亮色/暗色主题变量、Tailwind CSS入口、字号rem缩放"},{"id":"Rust-入口","label":"Rust-入口","type":"模块","group":"模块","description":"Rust 程序入口 — 仅调用 cc_gui::run()，Windows 下关闭控制台窗口"},{"id":"Rust-入口:main","label":"main","type":"函数","group":"工具库","module":"Rust-入口","description":"fn main() 程序入口，调用 cc_gui::run()"},{"id":"Rust-Tauri命令","label":"Rust-Tauri命令","type":"模块","group":"模块","description":"Tauri 主模块 — AppState 定义 + 30个 Tauri commands + 工具函数。是整个后端的核心编排层。"},{"id":"Rust-Tauri命令:AppState","label":"AppState","type":"结构体","group":"后端核心","module":"Rust-Tauri命令","description":"pub struct AppState { pub db: Db, pub process_manager: Arc<Mutex<ProcessManager>>, pub stdin_manager: Arc<Mutex<StdinMan"},{"id":"Rust-Tauri命令:send_message","label":"send_message","type":"命令","group":"后端命令","module":"Rust-Tauri命令","description":"async fn send_message(state, session_id, message, plan_mode, auto_mode, permission_mode, effort, ultracode, model, file_"},{"id":"Rust-Tauri命令:connect_llm","label":"connect_llm","type":"命令","group":"后端命令","module":"Rust-Tauri命令","description":"async fn connect_llm(state, api_key, base_url, model) -> Result<String, String> DeepSeek API 连接测试"},{"id":"Rust-Tauri命令:stop_session","label":"stop_session","type":"命令","group":"后端命令","module":"Rust-Tauri命令","description":"async fn stop_session(state, session_id) -> Result<(), String> 终止CLI进程并更新状态"},{"id":"Rust-Tauri命令:create_session","label":"create_session","type":"命令","group":"后端命令","module":"Rust-Tauri命令","description":"async fn create_session(state, model?) -> Result<Session, String> 创建会话"},{"id":"Rust-Tauri命令:list_sessions","label":"list_sessions","type":"命令","group":"后端命令","module":"Rust-Tauri命令","description":"async fn list_sessions(state) -> Result<Vec<Session>, String> 列出会话"},{"id":"Rust-Tauri命令:delete_session","label":"delete_session","type":"命令","group":"后端命令","module":"Rust-Tauri命令","description":"async fn delete_session(state, session_id) -> Result<(), String> 删除会话"},{"id":"Rust-Tauri命令:rename_session","label":"rename_session","type":"命令","group":"后端命令","module":"Rust-Tauri命令","description":"async fn rename_session(state, session_id, title) -> Result<(), String> 重命名会话"},{"id":"Rust-Tauri命令:get_session","label":"get_session","type":"命令","group":"后端命令","module":"Rust-Tauri命令","description":"async fn get_session(state, session_id) -> Result<Session, String> 获取单个会话"},{"id":"Rust-Tauri命令:send_stdin","label":"send_stdin","type":"命令","group":"后端命令","module":"Rust-Tauri命令","description":"async fn send_stdin(state, session_id, data) -> Result<(), String> 向CLI进程标准输入写入数据"},{"id":"Rust-Tauri命令:add_approved_scenario","label":"add_approved_scenario","type":"命令","group":"后端命令","module":"Rust-Tauri命令","description":"async fn add_approved_scenario(state, tool_name, pattern) -> Result<(), String> 添加批准场景"},{"id":"Rust-Tauri命令:remove_approved_scenario","label":"remove_approved_scenario","type":"命令","group":"后端命令","module":"Rust-Tauri命令","description":"async fn remove_approved_scenario(state, tool_name, pattern) -> Result<(), String> 移除批准场景"},{"id":"Rust-Tauri命令:list_approved_scenarios","label":"list_approved_scenarios","type":"命令","group":"后端命令","module":"Rust-Tauri命令","description":"async fn list_approved_scenarios(state) -> Result<Vec<(String,String)>, String> 列出批准场景"},{"id":"Rust-Tauri命令:save_message","label":"save_message","type":"命令","group":"后端命令","module":"Rust-Tauri命令","description":"async fn save_message(state, id, session_id, role, content, token_usage?) -> Result<(), String> 保存消息到DB"},{"id":"Rust-Tauri命令:update_message_content","label":"update_message_content","type":"命令","group":"后端命令","module":"Rust-Tauri命令","description":"async fn update_message_content(state, message_id, session_id, content) -> Result<(), String> 更新消息内容"},{"id":"Rust-Tauri命令:delete_messages_after","label":"delete_messages_after","type":"命令","group":"后端命令","module":"Rust-Tauri命令","description":"async fn delete_messages_after(state, message_id, session_id) -> Result<u32, String> 删除指定消息之后的所有消息"},{"id":"Rust-Tauri命令:list_messages","label":"list_messages","type":"命令","group":"后端命令","module":"Rust-Tauri命令","description":"async fn list_messages(state, session_id) -> Result<Vec<Message>, String> 列出会话消息"},{"id":"Rust-Tauri命令:list_dir","label":"list_dir","type":"命令","group":"后端命令","module":"Rust-Tauri命令","description":"async fn list_dir(path) -> Result<Vec<FileEntry>, String> 列出目录"},{"id":"Rust-Tauri命令:read_file_content","label":"read_file_content","type":"命令","group":"后端命令","module":"Rust-Tauri命令","description":"async fn read_file_content(path) -> Result<String, String> 读取文件内容"},{"id":"Rust-Tauri命令:read_file_base64","label":"read_file_base64","type":"命令","group":"后端命令","module":"Rust-Tauri命令","description":"async fn read_file_base64(path) -> Result<String, String> 读取文件base64"},{"id":"Rust-Tauri命令:get_workspace_root","label":"get_workspace_root","type":"命令","group":"后端命令","module":"Rust-Tauri命令","description":"async fn get_workspace_root() -> Result<String, String> 获取工作区根目录"},{"id":"Rust-Tauri命令:reveal_in_explorer","label":"reveal_in_explorer","type":"命令","group":"后端命令","module":"Rust-Tauri命令","description":"async fn reveal_in_explorer(path) -> Result<(), String> 在文件管理器中显示"},{"id":"Rust-Tauri命令:write_file","label":"write_file","type":"命令","group":"后端命令","module":"Rust-Tauri命令","description":"async fn write_file(path, content) -> Result<(), String> 安全写入文件（仅~/.claude/子树）"},{"id":"Rust-Tauri命令:get_claude_dir","label":"get_claude_dir","type":"命令","group":"后端命令","module":"Rust-Tauri命令","description":"async fn get_claude_dir() -> Result<String, String> 获取~/.claude/路径"},{"id":"Rust-Tauri命令:resolve_claude_path","label":"resolve_claude_path","type":"命令","group":"后端命令","module":"Rust-Tauri命令","description":"fn resolve_claude_path() -> Result<String, String> CLI路径自动检测"},{"id":"Rust-Tauri命令:get_claude_settings","label":"get_claude_settings","type":"命令","group":"后端命令","module":"Rust-Tauri命令","description":"fn get_claude_settings() -> Result<ClaudeSettings, String> 读取~/.claude/settings.json"},{"id":"Rust-Tauri命令:set_claude_settings","label":"set_claude_settings","type":"命令","group":"后端命令","module":"Rust-Tauri命令","description":"fn set_claude_settings(api_key, base_url, model, effort, permission_mode) -> Result<(), String> 写入~/.claude/settings.jso"},{"id":"Rust-Tauri命令:ensure_item_descriptions","label":"ensure_item_descriptions","type":"命令","group":"后端命令","module":"Rust-Tauri命令","description":"async fn ensure_item_descriptions(state, items, api_key, base_url) -> Result<Vec<DescriptionItem>, String> 翻译描述缓存（DB缓存+A"},{"id":"Rust-Tauri命令:generate_mcp_descriptions","label":"generate_mcp_descriptions","type":"命令","group":"后端命令","module":"Rust-Tauri命令","description":"async fn generate_mcp_descriptions(state, names, api_key, base_url) -> Result<Vec<DescriptionItem>, String> 批量生成MCP中文描述"},{"id":"Rust-Tauri命令:clear_item_descriptions","label":"clear_item_descriptions","type":"命令","group":"后端命令","module":"Rust-Tauri命令","description":"fn clear_item_descriptions(state) -> Result<(), String> 清空翻译缓存"},{"id":"Rust-Tauri命令:clear_mcp_descriptions","label":"clear_mcp_descriptions","type":"命令","group":"后端命令","module":"Rust-Tauri命令","description":"fn clear_mcp_descriptions(state) -> Result<(), String> 清空MCP描述缓存"},{"id":"Rust-Tauri命令:get_auto_mode_status","label":"get_auto_mode_status","type":"命令","group":"后端命令","module":"Rust-Tauri命令","description":"async fn get_auto_mode_status() -> Result<bool, String> 检查auto模式状态"},{"id":"Rust-Tauri命令:detect_project_root","label":"detect_project_root","type":"函数","group":"工具库","module":"Rust-Tauri命令","description":"fn detect_project_root() -> String 项目根目录检测（dev/production双模式）"},{"id":"Rust-Tauri命令:subagent_model","label":"subagent_model","type":"函数","group":"工具库","module":"Rust-Tauri命令","description":"fn subagent_model() -> String 读取CLAUDE_CODE_SUBAGENT_MODEL环境变量，fallback deepseek-chat"},{"id":"Rust-Tauri命令:openai_base","label":"openai_base","type":"函数","group":"工具库","module":"Rust-Tauri命令","description":"fn openai_base(base_url: &str) -> String 规范化OpenAI兼容端点URL（去除/anthropic和/v1后缀）"},{"id":"Rust-Tauri命令:translate_to_chinese","label":"translate_to_chinese","type":"函数","group":"工具库","module":"Rust-Tauri命令","description":"async fn translate_to_chinese(api_key, base_url, text) -> Result<String, String> 调用DeepSeek API翻译描述"},{"id":"Rust-Tauri命令:cfg:CLAUDE_CODE_SUBAGENT_MODEL","label":"CLAUDE_CODE_SUBAGENT_MODEL","type":"配置","group":"配置","module":"Rust-Tauri命令","description":"env.CLAUDE_CODE_SUBAGENT_MODEL = deepseek-chat"},{"id":"Rust-进程管理","label":"Rust-进程管理","type":"模块","group":"模块","description":"三线程进程模型 — 基于 TOKENICODE 架构。Waiter（进程生命周期）、Stdout Reader（NDJSON解析→Tauri事件）、Stderr Reader（错误转发）。"},{"id":"Rust-进程管理:ManagedProcess","label":"ManagedProcess","type":"结构体","group":"后端核心","module":"Rust-进程管理","description":"pub struct ManagedProcess { pub session_id, pub pid, kill_tx, exit_notify } 托管进程句柄"},{"id":"Rust-进程管理:ProcessManager","label":"ProcessManager","type":"结构体","group":"后端核心","module":"Rust-进程管理","description":"pub struct ProcessManager { processes: HashMap<String, Arc<Mutex<ManagedProcess>>> } 进程注册表"},{"id":"Rust-进程管理:ProcessManager::new","label":"ProcessManager::new","type":"方法","group":"后端核心","module":"Rust-进程管理","description":"pub fn new() -> Self 新建进程管理器"},{"id":"Rust-进程管理:ProcessManager::register","label":"ProcessManager::register","type":"方法","group":"后端核心","module":"Rust-进程管理","description":"pub fn register(&mut self, id, process) 注册进程"},{"id":"Rust-进程管理:ProcessManager::get","label":"ProcessManager::get","type":"方法","group":"后端核心","module":"Rust-进程管理","description":"pub fn get(&self, id) -> Option<Arc<Mutex<ManagedProcess>>> 获取进程"},{"id":"Rust-进程管理:ProcessManager::kill","label":"ProcessManager::kill","type":"方法","group":"后端核心","module":"Rust-进程管理","description":"pub async fn kill(&self, id) -> Result<(), String> 优雅终止进程（5秒超时）"},{"id":"Rust-进程管理:StdinManager","label":"StdinManager","type":"结构体","group":"后端核心","module":"Rust-进程管理","description":"pub struct StdinManager { handles: HashMap<String, ChildStdin> } 标准输入管理器"},{"id":"Rust-进程管理:StdinManager::new","label":"StdinManager::new","type":"方法","group":"后端核心","module":"Rust-进程管理","description":"pub fn new() -> Self 新建stdin管理器"},{"id":"Rust-进程管理:StdinManager::register","label":"StdinManager::register","type":"方法","group":"后端核心","module":"Rust-进程管理","description":"pub fn register(&mut self, id, stdin) 注册stdin句柄"},{"id":"Rust-进程管理:StdinManager::send","label":"StdinManager::send","type":"方法","group":"后端核心","module":"Rust-进程管理","description":"pub async fn send(&mut self, id, data) -> Result<(), String> 发送stdin数据"},{"id":"Rust-进程管理:StdinManager::remove","label":"StdinManager::remove","type":"方法","group":"后端核心","module":"Rust-进程管理","description":"pub fn remove(&mut self, id) 移除stdin句柄"},{"id":"Rust-进程管理:find_claude","label":"find_claude","type":"函数","group":"工具库","module":"Rust-进程管理","description":"pub fn find_claude() -> Option<String> CLI路径自动检测（3级：native→npm→PATH）"},{"id":"Rust-进程管理:SpawnParams","label":"SpawnParams","type":"结构体","group":"后端核心","module":"Rust-进程管理","description":"pub struct SpawnParams { session_id, message, resume_id, plan_mode, auto_mode, permission_mode, effort, ultracode, cwd, "},{"id":"Rust-进程管理:ProcessExitedEvent","label":"ProcessExitedEvent","type":"结构体","group":"后端核心","module":"Rust-进程管理","description":"pub struct ProcessExitedEvent { session_id, exit_code, success } 进程退出事件"},{"id":"Rust-进程管理:spawn_claude_session","label":"spawn_claude_session","type":"函数","group":"工具库","module":"Rust-进程管理","description":"pub async fn spawn_claude_session(params, app_handle, stdin_manager, session_manager) -> Result<Arc<Mutex<ManagedProcess"},{"id":"Rust-进程管理:sync_permission_settings","label":"sync_permission_settings","type":"函数","group":"工具库","module":"Rust-进程管理","description":"fn sync_permission_settings(auto_mode, plan_mode, permission_mode) -> Result<(), String> 同步权限模式到~/.claude/settings.json"},{"id":"Rust-协议解析","label":"Rust-协议解析","type":"模块","group":"模块","description":"Claude Code CLI stream-json 的 NDJSON 协议解析 — StreamEvent枚举（system/assistant/user/result/control_request）、ContentBlock枚举（text/thinking/tool_use）、StreamLine解析器、StreamFrontendEvent转前端事件"},{"id":"Rust-协议解析:StreamEvent","label":"StreamEvent","type":"枚举","group":"后端核心","module":"Rust-协议解析","description":"pub enum StreamEvent { System{subtype,data}, Assistant{message,session_id,parent_tool_use_id,extra}, User{message,sessio"},{"id":"Rust-协议解析:AssistantMessage","label":"AssistantMessage","type":"结构体","group":"后端核心","module":"Rust-协议解析","description":"pub struct AssistantMessage { content: Vec<ContentBlock>, model, stop_reason, stop_sequence, id } 助手消息"},{"id":"Rust-协议解析:ContentBlock","label":"ContentBlock","type":"枚举","group":"后端核心","module":"Rust-协议解析","description":"pub enum ContentBlock { Text{text}, Thinking{thinking}, ToolUse{id,name,input} } 内容块枚举"},{"id":"Rust-协议解析:UserMessage","label":"UserMessage","type":"结构体","group":"后端核心","module":"Rust-协议解析","description":"pub struct UserMessage { content: Vec<UserContentBlock>, parent_tool_use_id } 用户消息"},{"id":"Rust-协议解析:UserContentBlock","label":"UserContentBlock","type":"枚举","group":"后端核心","module":"Rust-协议解析","description":"pub enum UserContentBlock { ToolResult{tool_use_id,content,is_error} } 用户内容块"},{"id":"Rust-协议解析:StreamLine","label":"StreamLine","type":"结构体","group":"后端核心","module":"Rust-协议解析","description":"pub struct StreamLine { inner: Value } NDJSON行解析器"},{"id":"Rust-协议解析:StreamLine::parse","label":"StreamLine::parse","type":"方法","group":"后端核心","module":"Rust-协议解析","description":"pub fn parse(line: &str) -> Option<Self> 解析NDJSON行"},{"id":"Rust-协议解析:StreamLine::capture_session_id","label":"StreamLine::capture_session_id","type":"方法","group":"后端核心","module":"Rust-协议解析","description":"pub fn capture_session_id(&self) -> Option<String> 提取system/init事件的session_id"},{"id":"Rust-协议解析:StreamLine::capture_mcp_servers","label":"StreamLine::capture_mcp_servers","type":"方法","group":"后端核心","module":"Rust-协议解析","description":"pub fn capture_mcp_servers(&self) -> Vec<String> 提取system/init事件的MCP服务器列表（原生mcp_servers字段优先，fallback解析mcp__前缀tool名）"},{"id":"Rust-协议解析:StreamLine::to_frontend_event","label":"StreamLine::to_frontend_event","type":"方法","group":"后端核心","module":"Rust-协议解析","description":"pub fn to_frontend_event(&self, session_id) -> StreamFrontendEvent 转换为前端事件（处理stream_event增量/assistant完整/result终态/control"},{"id":"Rust-协议解析:StreamFrontendEvent","label":"StreamFrontendEvent","type":"结构体","group":"后端核心","module":"Rust-协议解析","description":"pub struct StreamFrontendEvent { event_type, session_id, text, thinking, tool_use, control_request, is_final, error, dur"},{"id":"Rust-协议解析:ControlRequest","label":"ControlRequest","type":"结构体","group":"后端核心","module":"Rust-协议解析","description":"pub struct ControlRequest { subtype, tool_name, tool_input } CLI控制请求（工具审批）"},{"id":"Rust-会话管理","label":"Rust-会话管理","type":"模块","group":"模块","description":"SessionManager — SQLite 背书的会话CRUD、消息持久化、DeepSeek API连接测试、审批场景管理"},{"id":"Rust-会话管理:Session","label":"Session","type":"结构体","group":"后端核心","module":"Rust-会话管理","description":"pub struct Session { id, title, cli_session_id, cwd, model, status, created_at, updated_at, message_count, total_tokens,"},{"id":"Rust-会话管理:Message","label":"Message","type":"结构体","group":"后端核心","module":"Rust-会话管理","description":"pub struct Message { id, session_id, role, content(JSON), token_usage, created_at } 消息数据"},{"id":"Rust-会话管理:SessionManager","label":"SessionManager","type":"结构体","group":"后端核心","module":"Rust-会话管理","description":"pub struct SessionManager { db: Db } 会话管理器"},{"id":"Rust-会话管理:SessionManager::new","label":"SessionManager::new","type":"方法","group":"后端核心","module":"Rust-会话管理","description":"pub fn new(db: Db) -> Self 新建会话管理器"},{"id":"Rust-会话管理:SessionManager::create_session","label":"SessionManager::create_session","type":"方法","group":"后端核心","module":"Rust-会话管理","description":"pub fn create_session(&self, cwd, model) -> Result<Session, String> 创建会话（UUID v4）"},{"id":"Rust-会话管理:SessionManager::get_session","label":"SessionManager::get_session","type":"方法","group":"后端核心","module":"Rust-会话管理","description":"pub fn get_session(&self, id) -> Result<Session, String> 获取单个会话"},{"id":"Rust-会话管理:SessionManager::list_sessions","label":"SessionManager::list_sessions","type":"方法","group":"后端核心","module":"Rust-会话管理","description":"pub fn list_sessions(&self) -> Result<Vec<Session>, String> 列出所有会话（最新优先，含Token/费用聚合）"},{"id":"Rust-会话管理:SessionManager::delete_session","label":"SessionManager::delete_session","type":"方法","group":"后端核心","module":"Rust-会话管理","description":"pub fn delete_session(&self, id) -> Result<(), String> 删除会话（CASCADE删除消息）"},{"id":"Rust-会话管理:SessionManager::rename_session","label":"SessionManager::rename_session","type":"方法","group":"后端核心","module":"Rust-会话管理","description":"pub fn rename_session(&self, id, title) -> Result<(), String> 重命名会话"},{"id":"Rust-会话管理:SessionManager::set_claude_session","label":"SessionManager::set_claude_session","type":"方法","group":"后端核心","module":"Rust-会话管理","description":"pub fn set_claude_session(&self, our_id, claude_id) -> Result<(), String> 存储CLI会话UUID映射"},{"id":"Rust-会话管理:SessionManager::get_claude_session","label":"SessionManager::get_claude_session","type":"方法","group":"后端核心","module":"Rust-会话管理","description":"pub fn get_claude_session(&self, our_id) -> Option<String> 获取CLI会话UUID（用于--resume）"},{"id":"Rust-会话管理:SessionManager::auto_title_from_first_message","label":"SessionManager::auto_title_from_first_message","type":"方法","group":"后端核心","module":"Rust-会话管理","description":"pub fn auto_title_from_first_message(&self, id, message) -> Result<(), String> 自动标题（首条消息前50字符），仅在默认识别名'New Chat'时生效"},{"id":"Rust-会话管理:SessionManager::save_message","label":"SessionManager::save_message","type":"方法","group":"后端核心","module":"Rust-会话管理","description":"pub fn save_message(&self, id, session_id, role, content, token_usage) -> Result<(), String> 保存消息（INSERT OR REPLACE）"},{"id":"Rust-会话管理:SessionManager::list_messages","label":"SessionManager::list_messages","type":"方法","group":"后端核心","module":"Rust-会话管理","description":"pub fn list_messages(&self, session_id) -> Result<Vec<Message>, String> 列出会话消息（按创建时间升序）"},{"id":"Rust-会话管理:SessionManager::update_message_content","label":"SessionManager::update_message_content","type":"方法","group":"后端核心","module":"Rust-会话管理","description":"pub fn update_message_content(&self, id, session_id, content) -> Result<(), String> 更新消息内容"},{"id":"Rust-会话管理:SessionManager::delete_messages_after","label":"SessionManager::delete_messages_after","type":"方法","group":"后端核心","module":"Rust-会话管理","description":"pub fn delete_messages_after(&self, id, session_id) -> Result<u32, String> 删除指定消息之后的所有消息（回滚实现）"},{"id":"Rust-会话管理:SessionManager::set_session_status","label":"SessionManager::set_session_status","type":"方法","group":"后端核心","module":"Rust-会话管理","description":"pub fn set_session_status(&self, id, status) -> Result<(), String> 更新会话状态"},{"id":"Rust-会话管理:SessionManager::test_connection","label":"SessionManager::test_connection","type":"方法","group":"后端核心","module":"Rust-会话管理","description":"pub async fn test_connection(&self, api_key, base_url, model) -> Result<String, String> DeepSeek API连接测试"},{"id":"Rust-会话管理:SessionManager::add_approved_scenario","label":"SessionManager::add_approved_scenario","type":"方法","group":"后端核心","module":"Rust-会话管理","description":"pub fn add_approved_scenario(&self, tool_name, pattern) -> Result<(), String> 添加审批场景"},{"id":"Rust-会话管理:SessionManager::remove_approved_scenario","label":"SessionManager::remove_approved_scenario","type":"方法","group":"后端核心","module":"Rust-会话管理","description":"pub fn remove_approved_scenario(&self, tool_name, pattern) -> Result<(), String> 移除审批场景"},{"id":"Rust-会话管理:SessionManager::is_approved","label":"SessionManager::is_approved","type":"方法","group":"后端核心","module":"Rust-会话管理","description":"pub fn is_approved(&self, tool_name, input_summary) -> bool 检查工具是否已批准"},{"id":"Rust-会话管理:SessionManager::list_approved_scenarios","label":"SessionManager::list_approved_scenarios","type":"方法","group":"后端核心","module":"Rust-会话管理","description":"pub fn list_approved_scenarios(&self) -> Result<Vec<(String,String)>, String> 列出所有审批场景"},{"id":"Rust-数据库","label":"Rust-数据库","type":"模块","group":"模块","description":"SQLite 初始化与迁移 — WAL模式、5张表（sessions/messages/settings/approved_scenarios/item_descriptions）、3个索引"},{"id":"Rust-数据库:Db","label":"Db","type":"结构体","group":"后端核心","module":"Rust-数据库","description":"pub struct Db { pub conn: Arc<Mutex<Connection>> } 线程安全数据库句柄"},{"id":"Rust-数据库:Db::new","label":"Db::new","type":"方法","group":"后端核心","module":"Rust-数据库","description":"pub fn new() -> SqliteResult<Self> 创建数据库连接并运行迁移"},{"id":"Rust-数据库:db_dir","label":"db_dir","type":"函数","group":"工具库","module":"Rust-数据库","description":"pub fn db_dir() -> PathBuf 获取数据库目录（跨平台）"},{"id":"Rust-数据库:db_path","label":"db_path","type":"函数","group":"工具库","module":"Rust-数据库","description":"pub fn db_path() -> PathBuf 获取数据库文件路径"},{"id":"Rust-数据库:open_db","label":"open_db","type":"函数","group":"工具库","module":"Rust-数据库","description":"pub fn open_db() -> SqliteResult<Connection> 打开/创建数据库+迁移"},{"id":"Rust-数据库:cfg:journal_mode","label":"journal_mode","type":"配置","group":"配置","module":"Rust-数据库","description":"db.journal_mode = WAL"},{"id":"Rust-数据库:cfg:foreign_keys","label":"foreign_keys","type":"配置","group":"配置","module":"Rust-数据库","description":"db.foreign_keys = ON"},{"id":"Rust-数据库:cfg:sessions","label":"sessions","type":"配置","group":"配置","module":"Rust-数据库","description":"schema.sessions = -"},{"id":"Rust-数据库:cfg:messages","label":"messages","type":"配置","group":"配置","module":"Rust-数据库","description":"schema.messages = -"},{"id":"Rust-数据库:cfg:settings","label":"settings","type":"配置","group":"配置","module":"Rust-数据库","description":"schema.settings = -"},{"id":"Rust-数据库:cfg:approved_scenarios","label":"approved_scenarios","type":"配置","group":"配置","module":"Rust-数据库","description":"schema.approved_scenarios = -"},{"id":"Rust-数据库:cfg:item_descriptions","label":"item_descriptions","type":"配置","group":"配置","module":"Rust-数据库","description":"schema.item_descriptions = -"}],"edges":[{"source":"前端-聊天:ChatPanel","target":"前端-聊天","relation":"所属模块"},{"source":"前端-聊天:MessageBubble","target":"前端-聊天","relation":"所属模块"},{"source":"前端-聊天:InputBar","target":"前端-聊天","relation":"所属模块"},{"source":"前端-聊天:InputBarToolbar","target":"前端-聊天","relation":"所属模块"},{"source":"前端-聊天:ModeBar","target":"前端-聊天","relation":"所属模块"},{"source":"前端-聊天:ThinkingIndicator","target":"前端-聊天","relation":"所属模块"},{"source":"前端-聊天:ContextIndicator","target":"前端-聊天","relation":"所属模块"},{"source":"前端-布局:AppShell","target":"前端-布局","relation":"所属模块"},{"source":"前端-会话侧栏:SessionSidebar","target":"前端-会话侧栏","relation":"所属模块"},{"source":"前端-文件:FilePanel","target":"前端-文件","relation":"所属模块"},{"source":"前端-文件:FileTree","target":"前端-文件","relation":"所属模块"},{"source":"前端-文件:FilePreview","target":"前端-文件","relation":"所属模块"},{"source":"前端-文件:DiffViewer","target":"前端-文件","relation":"所属模块"},{"source":"前端-设置:SettingsPanel","target":"前端-设置","relation":"所属模块"},{"source":"前端-设置:cfg:VITE_DEV_SERVER_URL","target":"前端-设置","relation":"所属模块"},{"source":"前端-共享:ManagePanel","target":"前端-共享","relation":"所属模块"},{"source":"前端-共享:MarkdownRenderer","target":"前端-共享","relation":"所属模块"},{"source":"前端-共享:MermaidRenderer","target":"前端-共享","relation":"所属模块"},{"source":"前端-共享:CommandPalette","target":"前端-共享","relation":"所属模块"},{"source":"前端-共享:ModalShell","target":"前端-共享","relation":"所属模块"},{"source":"前端-共享:ContextUsageModal","target":"前端-共享","relation":"所属模块"},{"source":"前端-共享:ErrorBoundary","target":"前端-共享","relation":"所属模块"},{"source":"前端-共享:FilePreviewModal","target":"前端-共享","relation":"所属模块"},{"source":"前端-组合式函数:useStreamProcessor","target":"前端-组合式函数","relation":"所属模块"},{"source":"前端-组合式函数:connectedMcpServers","target":"前端-组合式函数","relation":"所属模块"},{"source":"前端-组合式函数:useCommandRegistry","target":"前端-组合式函数","relation":"所属模块"},{"source":"前端-组合式函数:useCommandPaletteBus","target":"前端-组合式函数","relation":"所属模块"},{"source":"前端-组合式函数:emitChatCommand","target":"前端-组合式函数","relation":"所属模块"},{"source":"前端-组合式函数:useChatCommandBus","target":"前端-组合式函数","relation":"所属模块"},{"source":"前端-组合式函数:useNewSession","target":"前端-组合式函数","relation":"所属模块"},{"source":"前端-组合式函数:useFilePreview","target":"前端-组合式函数","relation":"所属模块"},{"source":"前端-组合式函数:useDebugLog","target":"前端-组合式函数","relation":"所属模块"},{"source":"前端-组合式函数:useHighlight","target":"前端-组合式函数","relation":"所属模块"},{"source":"前端-Store:useChatStore","target":"前端-Store","relation":"所属模块"},{"source":"前端-Store:useSessionStore","target":"前端-Store","relation":"所属模块"},{"source":"前端-Store:useSettingsStore","target":"前端-Store","relation":"所属模块"},{"source":"前端-Store:cfg:cc-gui-ui-settings","target":"前端-Store","relation":"所属模块"},{"source":"前端-Lib:sendMessage","target":"前端-Lib","relation":"所属模块"},{"source":"前端-Lib:storeClaudeSession","target":"前端-Lib","relation":"所属模块"},{"source":"前端-Lib:stopSession","target":"前端-Lib","relation":"所属模块"},{"source":"前端-Lib:createSession","target":"前端-Lib","relation":"所属模块"},{"source":"前端-Lib:listSessions","target":"前端-Lib","relation":"所属模块"},{"source":"前端-Lib:deleteSession","target":"前端-Lib","relation":"所属模块"},{"source":"前端-Lib:renameSession","target":"前端-Lib","relation":"所属模块"},{"source":"前端-Lib:listMessages","target":"前端-Lib","relation":"所属模块"},{"source":"前端-Lib:saveMessage","target":"前端-Lib","relation":"所属模块"},{"source":"前端-Lib:updateMessageContent","target":"前端-Lib","relation":"所属模块"},{"source":"前端-Lib:deleteMessagesAfter","target":"前端-Lib","relation":"所属模块"},{"source":"前端-Lib:connectLLM","target":"前端-Lib","relation":"所属模块"},{"source":"前端-Lib:listDir","target":"前端-Lib","relation":"所属模块"},{"source":"前端-Lib:readFileContent","target":"前端-Lib","relation":"所属模块"},{"source":"前端-Lib:readFileBase64","target":"前端-Lib","relation":"所属模块"},{"source":"前端-Lib:getWorkspaceRoot","target":"前端-Lib","relation":"所属模块"},{"source":"前端-Lib:writeFile","target":"前端-Lib","relation":"所属模块"},{"source":"前端-Lib:getClaudeDir","target":"前端-Lib","relation":"所属模块"},{"source":"前端-Lib:resolveClaudePath","target":"前端-Lib","relation":"所属模块"},{"source":"前端-Lib:getClaudeSettings","target":"前端-Lib","relation":"所属模块"},{"source":"前端-Lib:setClaudeSettings","target":"前端-Lib","relation":"所属模块"},{"source":"前端-Lib:ensureItemDescriptions","target":"前端-Lib","relation":"所属模块"},{"source":"前端-Lib:generateMcpDescriptions","target":"前端-Lib","relation":"所属模块"},{"source":"前端-Lib:formatNum","target":"前端-Lib","relation":"所属模块"},{"source":"前端-Lib:formatTokenCount","target":"前端-Lib","relation":"所属模块"},{"source":"前端-Lib:translateError","target":"前端-Lib","relation":"所属模块"},{"source":"前端-Lib:toPinyinInitials","target":"前端-Lib","relation":"所属模块"},{"source":"前端-Lib:TauriMock","target":"前端-Lib","relation":"所属模块"},{"source":"前端-国际化:zh.json","target":"前端-国际化","relation":"所属模块"},{"source":"前端-国际化:en.json","target":"前端-国际化","relation":"所属模块"},{"source":"前端-路由:router","target":"前端-路由","relation":"所属模块"},{"source":"Rust-入口:main","target":"Rust-入口","relation":"所属模块"},{"source":"Rust-Tauri命令:AppState","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-Tauri命令:send_message","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-Tauri命令:connect_llm","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-Tauri命令:stop_session","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-Tauri命令:create_session","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-Tauri命令:list_sessions","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-Tauri命令:delete_session","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-Tauri命令:rename_session","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-Tauri命令:get_session","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-Tauri命令:send_stdin","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-Tauri命令:add_approved_scenario","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-Tauri命令:remove_approved_scenario","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-Tauri命令:list_approved_scenarios","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-Tauri命令:save_message","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-Tauri命令:update_message_content","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-Tauri命令:delete_messages_after","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-Tauri命令:list_messages","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-Tauri命令:list_dir","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-Tauri命令:read_file_content","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-Tauri命令:read_file_base64","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-Tauri命令:get_workspace_root","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-Tauri命令:reveal_in_explorer","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-Tauri命令:write_file","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-Tauri命令:get_claude_dir","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-Tauri命令:resolve_claude_path","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-Tauri命令:get_claude_settings","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-Tauri命令:set_claude_settings","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-Tauri命令:ensure_item_descriptions","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-Tauri命令:generate_mcp_descriptions","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-Tauri命令:clear_item_descriptions","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-Tauri命令:clear_mcp_descriptions","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-Tauri命令:get_auto_mode_status","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-Tauri命令:detect_project_root","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-Tauri命令:subagent_model","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-Tauri命令:openai_base","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-Tauri命令:translate_to_chinese","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-Tauri命令:cfg:CLAUDE_CODE_SUBAGENT_MODEL","target":"Rust-Tauri命令","relation":"所属模块"},{"source":"Rust-进程管理:ManagedProcess","target":"Rust-进程管理","relation":"所属模块"},{"source":"Rust-进程管理:ProcessManager","target":"Rust-进程管理","relation":"所属模块"},{"source":"Rust-进程管理:ProcessManager::new","target":"Rust-进程管理","relation":"所属模块"},{"source":"Rust-进程管理:ProcessManager::register","target":"Rust-进程管理","relation":"所属模块"},{"source":"Rust-进程管理:ProcessManager::get","target":"Rust-进程管理","relation":"所属模块"},{"source":"Rust-进程管理:ProcessManager::kill","target":"Rust-进程管理","relation":"所属模块"},{"source":"Rust-进程管理:StdinManager","target":"Rust-进程管理","relation":"所属模块"},{"source":"Rust-进程管理:StdinManager::new","target":"Rust-进程管理","relation":"所属模块"},{"source":"Rust-进程管理:StdinManager::register","target":"Rust-进程管理","relation":"所属模块"},{"source":"Rust-进程管理:StdinManager::send","target":"Rust-进程管理","relation":"所属模块"},{"source":"Rust-进程管理:StdinManager::remove","target":"Rust-进程管理","relation":"所属模块"},{"source":"Rust-进程管理:find_claude","target":"Rust-进程管理","relation":"所属模块"},{"source":"Rust-进程管理:SpawnParams","target":"Rust-进程管理","relation":"所属模块"},{"source":"Rust-进程管理:ProcessExitedEvent","target":"Rust-进程管理","relation":"所属模块"},{"source":"Rust-进程管理:spawn_claude_session","target":"Rust-进程管理","relation":"所属模块"},{"source":"Rust-进程管理:sync_permission_settings","target":"Rust-进程管理","relation":"所属模块"},{"source":"Rust-协议解析:StreamEvent","target":"Rust-协议解析","relation":"所属模块"},{"source":"Rust-协议解析:AssistantMessage","target":"Rust-协议解析","relation":"所属模块"},{"source":"Rust-协议解析:ContentBlock","target":"Rust-协议解析","relation":"所属模块"},{"source":"Rust-协议解析:UserMessage","target":"Rust-协议解析","relation":"所属模块"},{"source":"Rust-协议解析:UserContentBlock","target":"Rust-协议解析","relation":"所属模块"},{"source":"Rust-协议解析:StreamLine","target":"Rust-协议解析","relation":"所属模块"},{"source":"Rust-协议解析:StreamLine::parse","target":"Rust-协议解析","relation":"所属模块"},{"source":"Rust-协议解析:StreamLine::capture_session_id","target":"Rust-协议解析","relation":"所属模块"},{"source":"Rust-协议解析:StreamLine::capture_mcp_servers","target":"Rust-协议解析","relation":"所属模块"},{"source":"Rust-协议解析:StreamLine::to_frontend_event","target":"Rust-协议解析","relation":"所属模块"},{"source":"Rust-协议解析:StreamFrontendEvent","target":"Rust-协议解析","relation":"所属模块"},{"source":"Rust-协议解析:ControlRequest","target":"Rust-协议解析","relation":"所属模块"},{"source":"Rust-会话管理:Session","target":"Rust-会话管理","relation":"所属模块"},{"source":"Rust-会话管理:Message","target":"Rust-会话管理","relation":"所属模块"},{"source":"Rust-会话管理:SessionManager","target":"Rust-会话管理","relation":"所属模块"},{"source":"Rust-会话管理:SessionManager::new","target":"Rust-会话管理","relation":"所属模块"},{"source":"Rust-会话管理:SessionManager::create_session","target":"Rust-会话管理","relation":"所属模块"},{"source":"Rust-会话管理:SessionManager::get_session","target":"Rust-会话管理","relation":"所属模块"},{"source":"Rust-会话管理:SessionManager::list_sessions","target":"Rust-会话管理","relation":"所属模块"},{"source":"Rust-会话管理:SessionManager::delete_session","target":"Rust-会话管理","relation":"所属模块"},{"source":"Rust-会话管理:SessionManager::rename_session","target":"Rust-会话管理","relation":"所属模块"},{"source":"Rust-会话管理:SessionManager::set_claude_session","target":"Rust-会话管理","relation":"所属模块"},{"source":"Rust-会话管理:SessionManager::get_claude_session","target":"Rust-会话管理","relation":"所属模块"},{"source":"Rust-会话管理:SessionManager::auto_title_from_first_message","target":"Rust-会话管理","relation":"所属模块"},{"source":"Rust-会话管理:SessionManager::save_message","target":"Rust-会话管理","relation":"所属模块"},{"source":"Rust-会话管理:SessionManager::list_messages","target":"Rust-会话管理","relation":"所属模块"},{"source":"Rust-会话管理:SessionManager::update_message_content","target":"Rust-会话管理","relation":"所属模块"},{"source":"Rust-会话管理:SessionManager::delete_messages_after","target":"Rust-会话管理","relation":"所属模块"},{"source":"Rust-会话管理:SessionManager::set_session_status","target":"Rust-会话管理","relation":"所属模块"},{"source":"Rust-会话管理:SessionManager::test_connection","target":"Rust-会话管理","relation":"所属模块"},{"source":"Rust-会话管理:SessionManager::add_approved_scenario","target":"Rust-会话管理","relation":"所属模块"},{"source":"Rust-会话管理:SessionManager::remove_approved_scenario","target":"Rust-会话管理","relation":"所属模块"},{"source":"Rust-会话管理:SessionManager::is_approved","target":"Rust-会话管理","relation":"所属模块"},{"source":"Rust-会话管理:SessionManager::list_approved_scenarios","target":"Rust-会话管理","relation":"所属模块"},{"source":"Rust-数据库:Db","target":"Rust-数据库","relation":"所属模块"},{"source":"Rust-数据库:Db::new","target":"Rust-数据库","relation":"所属模块"},{"source":"Rust-数据库:db_dir","target":"Rust-数据库","relation":"所属模块"},{"source":"Rust-数据库:db_path","target":"Rust-数据库","relation":"所属模块"},{"source":"Rust-数据库:open_db","target":"Rust-数据库","relation":"所属模块"},{"source":"Rust-数据库:cfg:journal_mode","target":"Rust-数据库","relation":"所属模块"},{"source":"Rust-数据库:cfg:foreign_keys","target":"Rust-数据库","relation":"所属模块"},{"source":"Rust-数据库:cfg:sessions","target":"Rust-数据库","relation":"所属模块"},{"source":"Rust-数据库:cfg:messages","target":"Rust-数据库","relation":"所属模块"},{"source":"Rust-数据库:cfg:settings","target":"Rust-数据库","relation":"所属模块"},{"source":"Rust-数据库:cfg:approved_scenarios","target":"Rust-数据库","relation":"所属模块"},{"source":"Rust-数据库:cfg:item_descriptions","target":"Rust-数据库","relation":"所属模块"},{"source":"前端-聊天","target":"前端-Store","relation":"模块依赖"},{"source":"前端-聊天","target":"前端-组合式函数","relation":"模块依赖"},{"source":"前端-聊天","target":"前端-Lib","relation":"模块依赖"},{"source":"前端-聊天","target":"前端-共享","relation":"模块依赖"},{"source":"前端-聊天","target":"前端-国际化","relation":"模块依赖"},{"source":"前端-布局","target":"前端-会话侧栏","relation":"模块依赖"},{"source":"前端-布局","target":"前端-Store","relation":"模块依赖"},{"source":"前端-布局","target":"前端-组合式函数","relation":"模块依赖"},{"source":"前端-布局","target":"前端-共享","relation":"模块依赖"},{"source":"前端-会话侧栏","target":"前端-Store","relation":"模块依赖"},{"source":"前端-会话侧栏","target":"前端-组合式函数","relation":"模块依赖"},{"source":"前端-文件","target":"前端-Lib","relation":"模块依赖"},{"source":"前端-文件","target":"前端-组合式函数","relation":"模块依赖"},{"source":"前端-设置","target":"前端-Store","relation":"模块依赖"},{"source":"前端-设置","target":"前端-Lib","relation":"模块依赖"},{"source":"前端-共享","target":"前端-Lib","relation":"模块依赖"},{"source":"前端-共享","target":"前端-Store","relation":"模块依赖"},{"source":"前端-共享","target":"前端-组合式函数","relation":"模块依赖"},{"source":"前端-组合式函数","target":"前端-Store","relation":"模块依赖"},{"source":"前端-组合式函数","target":"前端-Lib","relation":"模块依赖"},{"source":"前端-Store","target":"前端-Lib","relation":"模块依赖"},{"source":"前端-路由","target":"前端-聊天","relation":"模块依赖"},{"source":"前端-路由","target":"前端-设置","relation":"模块依赖"},{"source":"Rust-入口","target":"Rust-Tauri命令","relation":"模块依赖"},{"source":"Rust-Tauri命令","target":"Rust-数据库","relation":"模块依赖"},{"source":"Rust-Tauri命令","target":"Rust-进程管理","relation":"模块依赖"},{"source":"Rust-Tauri命令","target":"Rust-会话管理","relation":"模块依赖"},{"source":"Rust-进程管理","target":"Rust-协议解析","relation":"模块依赖"},{"source":"Rust-进程管理","target":"Rust-会话管理","relation":"模块依赖"},{"source":"Rust-会话管理","target":"Rust-数据库","relation":"模块依赖"}]};
+const GROUP_COLORS = {"模块":"#e74c3c","配置":"#9b59b6","样式":"#607d8b","前端组件":"#f1c40f","后端命令":"#1abc9c","后端核心":"#e91e63","国际化":"#00bcd4","工具库":"#ff9800","状态管理":"#795548","组合式函数":"#8bc34a","路由配置":"#ff5722"};
+
+// ============ UTILS ============
+function esc(s) {
+  if (s == null) return "";
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+}
+
+// ============ D3 FORCE GRAPH (lazy init on first tab switch) ============
+var d3initialized = false;
+var d3simulation = null;
+
+function initD3() {
+  if (d3initialized) return;
+  if (typeof d3 === 'undefined') return; // CDN failed, no D3
+  d3initialized = true;
+
+  var container = document.getElementById("d3graph");
+  var W = container.clientWidth || 800;
+  var H = container.clientHeight || 600;
+  if (W < 100) W = 800; // fallback if container hidden
+
+  var svg = d3.select("#d3graph").append("svg").attr("width", W).attr("height", H);
+  var g = svg.append("g");
+  var zoom = d3.zoom().scaleExtent([0.15, 4]).on("zoom", function(e) {
+    g.attr("transform", e.transform);
+    updateMiniViewport();
+  });
+  svg.call(zoom);
+
+  // Legend
+  var legendEl = document.getElementById("d3legend");
+  var groups = [...new Set(DATA.nodes.map(function(n) { return n.group; }))].filter(Boolean);
+  document.getElementById("d3nodes").textContent = DATA.nodes.length;
+  document.getElementById("d3edges").textContent = DATA.edges.length;
+  groups.forEach(function(grp) {
+    var item = document.createElement("span");
+    item.className = "legend-item";
+    item.innerHTML = '<span class="legend-dot" style="background:' + (GROUP_COLORS[grp] || "#666") + '"></span>' + esc(grp);
+    item.onclick = function() { highlightGroup(grp); };
+    legendEl.appendChild(item);
+  });
+
+  var nodeMap = new Map(DATA.nodes.map(function(n) { return [n.id, n]; }));
+  var links = DATA.edges.map(function(e) { return { source: e.source, target: e.target, relation: e.relation }; });
+
+  var simulation = d3.forceSimulation(DATA.nodes)
+    .force("link", d3.forceLink(links).id(function(d) { return d.id; }).distance(100))
+    .force("charge", d3.forceManyBody().strength(-250))
+    .force("center", d3.forceCenter(W / 2, H / 2))
+    .force("collision", d3.forceCollide().radius(function(d) { return nodeR(d); }));
+  d3simulation = simulation;
+
+  var linkEl = g.append("g").selectAll("line").data(links).join("line")
+    .attr("stroke", "#2a3f54")
+    .attr("stroke-width", function(d) { return d.relation === "模块依赖" ? 2 : 0.8; })
+    .attr("stroke-opacity", 0.6);
+
+  var nodeEl = g.append("g").selectAll("circle").data(DATA.nodes).join("circle")
+    .attr("r", function(d) { return nodeR(d); })
+    .attr("fill", function(d) { return GROUP_COLORS[d.group] || "#666"; })
+    .attr("stroke", "#1a2d3f").attr("stroke-width", 1.5).attr("cursor", "pointer")
+    .call(drag(simulation));
+
+  var labelEl = g.append("g").selectAll("text").data(DATA.nodes).join("text")
+    .text(function(d) { return d.label.length > 14 ? d.label.slice(0, 13) + "…" : d.label; })
+    .attr("font-size", function(d) { return d.type === "模块" ? "9px" : "7px"; })
+    .attr("fill", "#8ba0b8")
+    .attr("dx", function(d) { return nodeR(d) + 5; }).attr("dy", 3)
+    .attr("pointer-events", "none");
+
+  var tooltip = document.getElementById("d3tooltip");
+
+  nodeEl.on("mouseover", function(event, d) {
+    tooltip.style.opacity = "1";
+    tooltip.innerHTML = '<div class="tt-name">' + esc(d.label) + '</div>'
+      + '<div class="tt-type">' + esc(d.type) + ' · ' + esc(d.group || "") + '</div>'
+      + (d.description ? '<div class="tt-desc">' + esc(d.description) + '</div>' : "");
+    var neighbors = new Set();
+    links.forEach(function(l) { if (l.source.id === d.id) neighbors.add(l.target.id); if (l.target.id === d.id) neighbors.add(l.source.id); });
+    nodeEl.attr("opacity", function(n) { return n.id === d.id || neighbors.has(n.id) ? 1 : 0.12; });
+    linkEl.attr("stroke-opacity", function(l) { return l.source.id === d.id || l.target.id === d.id ? 0.9 : 0.04; });
+  }).on("mousemove", function(event) {
+    tooltip.style.left = (event.offsetX + 12) + "px";
+    tooltip.style.top = (event.offsetY - 10) + "px";
+  }).on("mouseout", function() {
+    tooltip.style.opacity = "0";
+    nodeEl.attr("opacity", 1);
+    linkEl.attr("stroke-opacity", 0.6);
+  });
+
+  nodeEl.on("click", function(event, d) { showDetail(d); });
+
+  function showDetail(d) {
+    var detail = document.getElementById("d3detail");
+    var neighbors = [];
+    links.forEach(function(l) {
+      if (l.source.id === d.id) neighbors.push({ dir: "→", node: nodeMap.get(l.target.id), rel: l.relation });
+      if (l.target.id === d.id) neighbors.push({ dir: "←", node: nodeMap.get(l.source.id), rel: l.relation });
+    });
+    var unique = [...new Map(neighbors.map(function(n) { return [n.node.id, n]; })).values()];
+    detail.innerHTML =
+      '<h3>' + esc(d.label) + '</h3>'
+      + '<span class="type-tag" style="background:' + (GROUP_COLORS[d.group] || "#666") + ';color:#fff">' + esc(d.type) + ' · ' + esc(d.group || "") + '</span>'
+      + (d.module ? '<div style="font-size:11px;color:var(--text-light);margin-bottom:4px">模块：' + esc(d.module) + '</div>' : "")
+      + (d.description ? '<div class="desc">' + esc(d.description) + '</div>' : "")
+      + (unique.length
+        ? '<div class="relations"><h4>关联节点（' + unique.length + '）</h4>'
+          + unique.slice(0, 12).map(function(n) {
+              return '<span class="rel" data-node-id="' + esc(n.node.id) + '" role="button" tabindex="0">' + n.dir + ' ' + esc(n.node.label) + ' <span style="color:var(--text-light);font-size:10px">' + esc(n.rel) + '</span></span>';
+            }).join("")
+          + (unique.length > 12 ? '<div style="font-size:10px;color:var(--text-light)">...及其他 ' + (unique.length - 12) + ' 个</div>' : "")
+          + '</div>'
+        : "");
+    // 事件委托：处理关联节点点击（替代 inline onclick，避免 esc() 在 HTML 属性值中的 XSS 面）
+    detail.querySelectorAll('.rel[data-node-id]').forEach(function(el) {
+      el.addEventListener('click', function() { focusD3Node(el.dataset.nodeId); });
+      el.addEventListener('keydown', function(e) { if (e.key === 'Enter') focusD3Node(el.dataset.nodeId); });
+    });
+  }
+
+  // Search
+  document.getElementById("d3search").addEventListener("input", function(e) {
+    var q = e.target.value.toLowerCase();
+    if (!q) { nodeEl.attr("opacity", 1); linkEl.attr("stroke-opacity", 0.6); labelEl.attr("opacity", 1); return; }
+    var matched = new Set();
+    DATA.nodes.forEach(function(n) {
+      if (n.label.toLowerCase().includes(q) || n.id.toLowerCase().includes(q)
+        || (n.module || "").toLowerCase().includes(q) || (n.description || "").toLowerCase().includes(q)) {
+        matched.add(n.id);
+      }
+    });
+    nodeEl.attr("opacity", function(n) { return matched.has(n.id) ? 1 : 0.06; });
+    linkEl.attr("stroke-opacity", function(l) { return matched.has(l.source.id) && matched.has(l.target.id) ? 0.9 : 0.02; });
+    labelEl.attr("opacity", function(n) { return matched.has(n.id) ? 1 : 0; });
+  });
+
+  function highlightGroup(group) {
+    nodeEl.attr("opacity", function(n) { return n.group === group ? 1 : 0.08; });
+    linkEl.attr("stroke-opacity", 0.04);
+    labelEl.attr("opacity", function(n) { return n.group === group ? 1 : 0; });
+  }
+
+  window.focusD3Node = function(id) {
+    var node = DATA.nodes.find(function(n) { return n.id === id; });
+    if (!node) return;
+    nodeEl.attr("opacity", 1); linkEl.attr("stroke-opacity", 0.6); labelEl.attr("opacity", 1);
+    var t = d3.zoomIdentity.translate(W / 2 - node.x, H / 2 - node.y).scale(2);
+    svg.transition().duration(500).call(zoom.transform, t);
+    showDetail(node);
+  };
+
+  function nodeR(d) {
+    var deg = links.filter(function(l) { return l.source.id === d.id || l.target.id === d.id; }).length;
+    return d.type === "模块" ? 7 + deg * 1.5 : 4 + Math.min(deg, 8);
+  }
+
+  function drag(sim) {
+    return d3.drag()
+      .on("start", function(event, d) { if (!event.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+      .on("drag", function(event, d) { d.fx = event.x; d.fy = event.y; })
+      .on("end", function(event, d) { if (!event.active) sim.alphaTarget(0); d.fx = null; d.fy = null; });
+  }
+
+  simulation.on("tick", function() {
+    linkEl.attr("x1", function(d) { return d.source.x; }).attr("y1", function(d) { return d.source.y; })
+      .attr("x2", function(d) { return d.target.x; }).attr("y2", function(d) { return d.target.y; });
+    nodeEl.attr("cx", function(d) { return d.x; }).attr("cy", function(d) { return d.y; });
+    labelEl.attr("x", function(d) { return d.x; }).attr("y", function(d) { return d.y; });
+  });
+
+  window.addEventListener("resize", function() {
+    var w = container.clientWidth, h = container.clientHeight;
+    svg.attr("width", w).attr("height", h);
+    simulation.force("center", d3.forceCenter(w / 2, h / 2)).restart();
+  });
+
+  // Minimap
+  var mmSvg = d3.select("#d3minimap svg");
+  var mmW = 150, mmH = 110, mmPad = 6, mmScale = 1, mmTx = 0, mmTy = 0;
+
+  simulation.on("end", function() {
+    var xs = DATA.nodes.map(function(n) { return n.x; }), ys = DATA.nodes.map(function(n) { return n.y; });
+    var xMin = Math.min.apply(null, xs), xMax = Math.max.apply(null, xs);
+    var yMin = Math.min.apply(null, ys), yMax = Math.max.apply(null, ys);
+    var dataW = xMax - xMin || 1, dataH = yMax - yMin || 1;
+    mmScale = Math.min((mmW - mmPad * 2) / dataW, (mmH - mmPad * 2) / dataH);
+    mmTx = mmPad - xMin * mmScale; mmTy = mmPad - yMin * mmScale;
+    mmSvg.selectAll("circle").data(DATA.nodes).join("circle")
+      .attr("cx", function(d) { return d.x * mmScale + mmTx; }).attr("cy", function(d) { return d.y * mmScale + mmTy; })
+      .attr("r", 1.2).attr("fill", function(d) { return GROUP_COLORS[d.group] || "#666"; }).attr("opacity", 0.7);
+    mmSvg.append("rect").attr("class", "viewport-rect");
+    updateMiniViewport();
+  });
+
+  function updateMiniViewport() {
+    var t = d3.zoomTransform(svg.node());
+    var vpX = (-t.x) / t.k, vpY = (-t.y) / t.k, vpW = W / t.k, vpH = H / t.k;
+    mmSvg.select(".viewport-rect")
+      .attr("x", vpX * mmScale + mmTx).attr("y", vpY * mmScale + mmTy)
+      .attr("width", vpW * mmScale).attr("height", vpH * mmScale);
+  }
+
+  var mmEl = document.getElementById("d3minimap"), mmDragging = false, mmStartT;
+  mmEl.addEventListener("mousedown", function(e) {
+    mmDragging = true; mmStartT = d3.zoomTransform(svg.node()); mmEl.style.cursor = "grabbing"; miniPan(e); e.preventDefault();
+  });
+  window.addEventListener("mousemove", function(e) { if (!mmDragging) return; miniPan(e); });
+  window.addEventListener("mouseup", function() { if (!mmDragging) return; mmDragging = false; mmEl.style.cursor = ""; });
+
+  function miniPan(e) {
+    var rect = mmEl.getBoundingClientRect(), mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    svg.call(zoom.transform, d3.zoomIdentity.translate(
+      -(mx - mmTx) / mmScale * mmStartT.k + W / 2,
+      -(my - mmTy) / mmScale * mmStartT.k + H / 2).scale(mmStartT.k));
+  }
+}
+
+// ============ TAB SWITCHING ============
+var activeTab = null;
+// 记录初始激活的 Tab（HTML 中第一个带 .active 的 pane）
+var panes = document.querySelectorAll('.pane');
+for (var i = 0; i < panes.length; i++) {
+  if (panes[i].classList.contains('active')) {
+    activeTab = panes[i].id.replace('pane-', '');
+    break;
+  }
+}
+
+function switchTab(name) {
+  if (name === activeTab) return;
+  activeTab = name;
+
+  // Tab buttons
+  document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+  var tabBtn = document.querySelector('.tab[data-tab="' + name + '"]');
+  if (tabBtn) tabBtn.classList.add('active');
+
+  // Panes
+  document.querySelectorAll('.pane').forEach(function(p) { p.classList.remove('active'); });
+  var pane = document.getElementById('pane-' + name);
+  if (!pane) return;
+  pane.classList.add('active');
+
+  // Lazy init D3 on first visit to dependency tab
+  if (name === 'dependency' && !d3initialized) {
+    setTimeout(initD3, 100);
+  }
+
+  // Re-render Mermaid in the activated pane (hidden panes may have failed initial render)
+  var blocks = pane.querySelectorAll('pre.mermaid');
+  if (blocks.length > 0) {
+    for (var i = 0; i < blocks.length; i++) {
+      var svg = blocks[i].querySelector('svg');
+      if (!svg || svg.getAttribute('aria-roledescription') === 'error') {
+        blocks[i].removeAttribute('data-processed');
+      }
+    }
+    try { mermaid.run({ nodes: blocks }); } catch(e) {}
+  }
+}
+
+// Bind tab clicks
+document.querySelectorAll('.tab').forEach(function(tab) {
+  tab.addEventListener('click', function() { switchTab(tab.dataset.tab); });
+});
+
+// Init D3 after page load (dependency tab may not be the default, but preload anyway)
+setTimeout(initD3, 500);
+</script>
+</body>
+</html>
