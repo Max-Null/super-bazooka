@@ -556,7 +556,6 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAut
             v-for="msg in chat.messages"
             :key="msg.id"
             :message="msg"
-            :approval-pending="chat.pendingControlRequest !== null"
             @edit-save="handleEditSave"
             @resend="handleResend"
             @preview-file="(f) => previewFile = f"

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Message } from "@/stores/chat";
-import { ref, computed, onUnmounted, nextTick } from "vue";
+import { ref, computed, nextTick } from "vue";
 import { useI18n } from "vue-i18n";
 
 import { isImageFile, useFilePreview } from "@/composables/useFilePreview";
@@ -17,7 +17,7 @@ function toolLabel(name: string): string {
 }
 
 
-const props = defineProps<{ message: Message; approvalPending?: boolean }>();
+const props = defineProps<{ message: Message }>();
 const emit = defineEmits<{
   edit: [id: string, content: string];
   resend: [id: string, content: string];
@@ -63,55 +63,20 @@ function onEditKeydown(e: KeyboardEvent) {
   }
 }
 
-// ── Live timer during streaming（增量累积，暂停期间不累加）──
-const liveElapsedMs = ref(0);
-let timerInterval: ReturnType<typeof setInterval> | null = null;
-let lastTick = 0;
-
-function startTimer() {
-  stopTimer();
-  liveElapsedMs.value = 0;
-  lastTick = Date.now();
-  timerInterval = setInterval(() => {
-    const now = Date.now();
-    if (props.message.isStreaming && !props.approvalPending) {
-      liveElapsedMs.value += now - lastTick;
-    }
-    lastTick = now;
-    if (!props.message.isStreaming) stopTimer();
-  }, 100);
+// ── 思考总耗时：各段 tool_use 前思考时间求和（精确，无需实时计时器）──
+function totalThinkingMs(): number {
+  return props.message.toolUses.reduce((sum, tu) => sum + (tu.thinkingDurationMs || 0), 0);
 }
-
-function stopTimer() {
-  if (timerInterval) {
-    clearInterval(timerInterval);
-    timerInterval = null;
-  }
-}
-
-// Restart timer on mount if message is still streaming
-if (props.message.isStreaming) {
-  startTimer();
-}
-
-// Watch for streaming state changes
-import { watch } from "vue";
-watch(() => props.message.isStreaming, (streaming) => {
-  if (streaming) startTimer();
-  else stopTimer();
-});
-
-onUnmounted(() => stopTimer());
-
 // ── Elapsed display ──
 const elapsedSeconds = computed(() => {
-  // Final duration from the result event (most accurate)
+  // 结束后用 CC 报告的精确耗时
   if (props.message.durationMs) {
     return (props.message.durationMs / 1000).toFixed(1);
   }
-  // Live timer during streaming
-  if (props.message.isStreaming && liveElapsedMs.value > 0) {
-    return (liveElapsedMs.value / 1000).toFixed(1);
+  // 流式期间：各段 tool_use 前思考时间求和
+  const thinking = totalThinkingMs();
+  if (thinking > 0) {
+    return (thinking / 1000).toFixed(1);
   }
   return null;
 });
