@@ -63,19 +63,22 @@ function onEditKeydown(e: KeyboardEvent) {
   }
 }
 
-// ── Live timer during streaming ──
+// ── Live timer during streaming（增量累积，暂停期间不累加）──
 const liveElapsedMs = ref(0);
 let timerInterval: ReturnType<typeof setInterval> | null = null;
+let lastTick = 0;
 
 function startTimer() {
   stopTimer();
   liveElapsedMs.value = 0;
+  lastTick = Date.now();
   timerInterval = setInterval(() => {
+    const now = Date.now();
     if (props.message.isStreaming && !props.approvalPending) {
-      liveElapsedMs.value = Date.now() - props.message.timestamp;
-    } else if (!props.message.isStreaming) {
-      stopTimer();
+      liveElapsedMs.value += now - lastTick;
     }
+    lastTick = now;
+    if (!props.message.isStreaming) stopTimer();
   }, 100);
 }
 
