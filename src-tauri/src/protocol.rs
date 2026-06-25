@@ -286,14 +286,30 @@ impl StreamLine {
                 }
             },
             "control_request" => {
-                let subtype = self.inner["subtype"].as_str().unwrap_or("unknown");
-                let tool_name = self.inner["tool_name"].as_str().map(|s| s.to_string());
-                let tool_input = self.inner["tool_input"].clone();
+                // Handle both flat format (legacy) and nested format under "request" key.
+                // Flat:    {"type":"control_request","subtype":"...","tool_name":"...","tool_input":{...},"request_id":"..."}
+                // Nested:  {"type":"control_request","request_id":"...","request":{"subtype":"...","tool_name":"...","input":{...}}}
+                let req = &self.inner["request"];
+                let subtype = req["subtype"].as_str()
+                    .or_else(|| self.inner["subtype"].as_str())
+                    .unwrap_or("unknown");
+                let tool_name = req["tool_name"].as_str()
+                    .or_else(|| self.inner["tool_name"].as_str())
+                    .map(|s| s.to_string());
+                // 用于 updatedInput 回传的工具输入
+                let tool_input = if req["input"].is_object() {
+                    req["input"].clone()
+                } else {
+                    self.inner["tool_input"].clone()
+                };
+                // request_id: 响应时必须原样带回
+                let request_id = self.inner["request_id"].as_str().map(|s| s.to_string());
 
                 let control = ControlRequest {
                     subtype: subtype.to_string(),
                     tool_name,
                     tool_input,
+                    request_id,
                 };
 
                 StreamFrontendEvent {
@@ -335,6 +351,8 @@ pub struct ControlRequest {
     pub subtype: String,
     pub tool_name: Option<String>,
     pub tool_input: Value,
+    /// 控制请求的唯一 ID，响应时必须原样带回
+    pub request_id: Option<String>,
 }
 
 impl StreamFrontendEvent {

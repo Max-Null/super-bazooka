@@ -33,6 +33,8 @@ export interface ControlRequest {
   subtype: string;
   tool_name?: string;
   tool_input: Record<string, unknown>;
+  /** 控制请求的唯一 ID，响应时必须原样带回 */
+  request_id?: string;
   /** Resolved: 'allow' | 'deny' | null (pending) */
   resolution?: string;
 }

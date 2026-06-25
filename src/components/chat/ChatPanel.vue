@@ -280,12 +280,32 @@ async function handleSend(text: string) {
 
 async function handleAllow() {
   const cr = chat.pendingControlRequest; if (!cr) return;
-  await sendStdin(session.activeSessionId, JSON.stringify({type:"control_response",response:"allow"}));
+  await sendStdin(session.activeSessionId, JSON.stringify({
+    type: "control_response",
+    response: {
+      subtype: "success",
+      request_id: cr.request_id || "",
+      response: {
+        behavior: "allow",
+        updatedInput: cr.tool_input,
+      },
+    },
+  }));
   chat.resolveControlRequest("allow");
 }
 async function handleDeny() {
   const cr = chat.pendingControlRequest; if (!cr) return;
-  await sendStdin(session.activeSessionId, JSON.stringify({type:"control_response",response:"deny"}));
+  await sendStdin(session.activeSessionId, JSON.stringify({
+    type: "control_response",
+    response: {
+      subtype: "success",
+      request_id: cr.request_id || "",
+      response: {
+        behavior: "deny",
+        message: "User denied this action",
+      },
+    },
+  }));
   chat.resolveControlRequest("deny");
 }
 
