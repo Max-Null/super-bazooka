@@ -306,8 +306,10 @@ pub async fn spawn_claude_session(
     // --input-format stream-json 是关键 flag：让 CC 进入双工 NDJSON 模式，通过 stdout 发
     // control_request(can_use_tool) 审批请求，通过 stdin 收 control_response 审批决策。
     // 不加此 flag 时 --print 模式直接 auto-approve/auto-deny，不会弹审批。
+    // 协议规范：不要同时使用 --print 和 --input-format stream-json。
+    // --print 是单轮非交互模式，--input-format stream-json 是双工流模式，两者互斥。
+    // 消息已通过 stdin NDJSON 发送，不需要 --print。
     let mut args = vec![
-        "--print".to_string(),
         "--output-format".to_string(), "stream-json".to_string(),
         "--input-format".to_string(), "stream-json".to_string(),
         "--verbose".to_string(),

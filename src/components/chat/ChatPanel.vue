@@ -294,10 +294,18 @@ async function handleSend(text: string) {
 // deny:  {"type":"control_response","request_id":"...","response":{"decision":"deny","message":"..."}}
 async function handleAllow() {
   const cr = chat.pendingControlRequest; if (!cr) return;
+  // 正确格式（cli-agent-protocol skill + Goose PR #7420 确认）：
+  // request_id 在 response 内层，updatedInput 是 allow 必须字段
   const payload = {
     type: "control_response",
-    request_id: cr.request_id || "",
-    response: { decision: "allow" },
+    response: {
+      subtype: "success",
+      request_id: cr.request_id || "",
+      response: {
+        behavior: "allow",
+        updatedInput: cr.tool_input,  // 必须原样回传工具输入
+      },
+    },
   };
   debugLog.add(`📤 control_response allow: ${JSON.stringify(payload)}`);
   await sendStdin(session.activeSessionId, JSON.stringify(payload));
@@ -307,8 +315,14 @@ async function handleDeny() {
   const cr = chat.pendingControlRequest; if (!cr) return;
   const payload = {
     type: "control_response",
-    request_id: cr.request_id || "",
-    response: { decision: "deny", message: "User denied this action" },
+    response: {
+      subtype: "success",
+      request_id: cr.request_id || "",
+      response: {
+        behavior: "deny",
+        message: "User denied this action",  // deny 必须填 message
+      },
+    },
   };
   debugLog.add(`📤 control_response deny: ${JSON.stringify(payload)}`);
   await sendStdin(session.activeSessionId, JSON.stringify(payload));
