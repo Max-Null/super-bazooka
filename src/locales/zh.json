@@ -208,7 +208,7 @@
     "skillsDesc": "来源：自定义（~/.claude/skills/）+ 已启用插件。按来源分组显示。描述来自 SKILL.md 的 YAML 头部。点击行可查看/编辑。",
     "agentsDesc": "来源：自定义（~/.claude/agents/）+ 插件提供。描述来自 .md 文件 YAML 头部。🟢 绿点=当前会话使用过，⚪ 灰点=未使用。",
     "hooksDesc": "事件 → [匹配规则 → {'类型, 命令'}]。支持 SessionStart、PreToolUse 等生命周期。配置在 ~/.claude/settings.json 的 hooks 字段。",
-    "stylesDesc": "输出风格（outputStyles）控制 Claude 的回复格式和呈现方式。配置在 ~/.claude/settings.json 的 outputStyles 字段中。格式示例：{'{ \"json\": true }'} 使回复尽量以 JSON 格式输出。"
+    "stylesDesc": "输出风格（outputStyles）控制 Claude 的回复格式和呈现方式。配置在 ~/.claude/settings.json 的 outputStyles 字段中。例如设置 \"json\": true 使回复尽量以 JSON 格式输出。"
   },
 
   "error": {

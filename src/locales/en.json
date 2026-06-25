@@ -208,7 +208,7 @@
     "skillsDesc": "Sources: custom (~/.claude/skills/) + enabled plugins. Grouped by source. Descriptions from SKILL.md YAML frontmatter. Click to view/edit.",
     "agentsDesc": "Sources: custom (~/.claude/agents/) + plugins. Descriptions from .md YAML frontmatter. 🟢 Green=used this session, ⚪ Gray=not used.",
     "hooksDesc": "Event → [matcher → {'type, command'}]. Supports SessionStart, PreToolUse, and other lifecycles. Configured in ~/.claude/settings.json hooks field.",
-    "stylesDesc": "Output styles control how Claude formats responses. Configured in ~/.claude/settings.json under the outputStyles field. Example: {'{ \"json\": true }'} formats responses as JSON."
+    "stylesDesc": "Output styles control how Claude formats responses. Configured in ~/.claude/settings.json under the outputStyles field. For example, setting \"json\": true formats responses as JSON."
   },
 
   "error": {
