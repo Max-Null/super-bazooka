@@ -203,7 +203,7 @@
     "mcpTypeWs": "WebSocket",
     "translateError": "Translation failed",
     "retranslate": "Retranslate",
-    "pluginsDesc": "Plugin descriptions are read from .claude-plugin/plugin.json metadata in the marketplace. Marketplace is determined by the @ suffix in the plugin key.",
+    "pluginsDesc": "Plugin descriptions are read from .claude-plugin/plugin.json metadata in the marketplace. Marketplace is determined by the {'@'} suffix in the plugin key.",
     "mcpDesc": "Sources: user config from ~/.claude.json, plugins from enabled plugins only. Descriptions are AI-generated and cached locally — click \"Retranslate\" to refresh.",
     "skillsDesc": "Sources: custom (~/.claude/skills/) + enabled plugins. Grouped by source. Descriptions from SKILL.md YAML frontmatter. Click to view/edit.",
     "agentsDesc": "Sources: custom (~/.claude/agents/) + plugins. Descriptions from .md YAML frontmatter. 🟢 Green=used this session, ⚪ Gray=not used.",
@@ -213,7 +213,7 @@
 
   "error": {
     "retry": "Retry",
-    "claudeNotFound": "Claude Code CLI not found. Please install: npm install -g @anthropic-ai/claude-code, or specify the claude path in Settings",
+    "claudeNotFound": "Claude Code CLI not found. Please install: npm install -g {'@anthropic-ai/claude-code'}, or specify the claude path in Settings",
     "spawnFailed": "Failed to spawn Claude: {error}",
     "fileReadError": "Failed to read file: {error}",
     "fileWriteError": "Failed to write file: {error}",

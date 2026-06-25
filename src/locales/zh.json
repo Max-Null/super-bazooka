@@ -203,7 +203,7 @@
     "mcpTypeWs": "WebSocket",
     "translateError": "翻译失败",
     "retranslate": "重新翻译",
-    "pluginsDesc": "插件描述来自 marketplace 中 .claude-plugin/plugin.json 元数据。按名称 key 后的 @ 确定 marketplace。",
+    "pluginsDesc": "插件描述来自 marketplace 中 .claude-plugin/plugin.json 元数据。按名称 key 后的 {'@'} 确定 marketplace。",
     "mcpDesc": "来源：用户配置来自 ~/.claude.json，插件来自已启用的插件。描述由 AI 自动生成并缓存，点击「重新翻译」刷新。",
     "skillsDesc": "来源：自定义（~/.claude/skills/）+ 已启用插件。按来源分组显示。描述来自 SKILL.md 的 YAML 头部。点击行可查看/编辑。",
     "agentsDesc": "来源：自定义（~/.claude/agents/）+ 插件提供。描述来自 .md 文件 YAML 头部。🟢 绿点=当前会话使用过，⚪ 灰点=未使用。",
@@ -213,7 +213,7 @@
 
   "error": {
     "retry": "重试",
-    "claudeNotFound": "找不到 Claude Code CLI。请先安装：npm install -g @anthropic-ai/claude-code，或在设置中手动指定 claude 路径",
+    "claudeNotFound": "找不到 Claude Code CLI。请先安装：npm install -g {'@anthropic-ai/claude-code'}，或在设置中手动指定 claude 路径",
     "spawnFailed": "启动 Claude 失败: {error}",
     "fileReadError": "读取文件失败: {error}",
     "fileWriteError": "写入文件失败: {error}",
