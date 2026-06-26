@@ -433,6 +433,65 @@ function skipQuestions() {
   questionOther.value.clear();
 }
 
+// ── ExitPlanMode 计划审核 ──
+const planFeedback = ref("");
+
+function getPlan(): { plan: string; planFilePath: string } {
+  const input = chat.pendingControlRequest?.tool_input as Record<string, unknown> | undefined;
+  return {
+    plan: (input?.plan as string) || "",
+    planFilePath: (input?.planFilePath as string) || "",
+  };
+}
+
+async function approvePlan() {
+  const cr = chat.pendingControlRequest; if (!cr) return;
+  const payload = {
+    type: "control_response",
+    response: {
+      subtype: "success",
+      request_id: cr.request_id || "",
+      response: {
+        behavior: "allow",
+        updatedInput: cr.tool_input,
+      },
+    },
+  };
+  await sendStdin(session.activeSessionId, JSON.stringify(payload));
+  planFeedback.value = "";
+  chat.resolveControlRequest("allow");
+}
+
+async function rejectPlan(message: string) {
+  const cr = chat.pendingControlRequest; if (!cr) return;
+  const payload = {
+    type: "control_response",
+    response: {
+      subtype: "success",
+      request_id: cr.request_id || "",
+      response: {
+        behavior: "deny",
+        message: message || "Plan rejected",
+      },
+    },
+  };
+  await sendStdin(session.activeSessionId, JSON.stringify(payload));
+  planFeedback.value = "";
+  chat.resolveControlRequest("deny");
+}
+
+async function exportPlan() {
+  const { plan } = getPlan();
+  if (!plan) return;
+  const blob = new Blob([plan], { type: "text/markdown" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "plan.md";
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 // ── Stop processing ──
 async function handleStop() {
   const sid = session.activeSessionId;
@@ -593,7 +652,7 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAut
 
     <!-- Permission bar（AskUserQuestion 走独立问答弹窗）-->
     <div
-      v-if="chat.pendingControlRequest && chat.pendingControlRequest.tool_name !== 'AskUserQuestion'"
+      v-if="chat.pendingControlRequest && chat.pendingControlRequest.tool_name !== 'AskUserQuestion' && chat.pendingControlRequest.tool_name !== 'ExitPlanMode'"
       class="shrink-0 px-4 py-2.5 flex items-center gap-3"
       style="background:var(--amber-glow); border-top:1px solid var(--amber); border-color:var(--amber); --tw-border-opacity:0.25"
     >
@@ -732,6 +791,45 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAut
         <div class="flex items-center justify-end gap-2">
           <button @click="skipQuestions" class="text-xs px-3 py-1.5 rounded transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-muted)' }">{{ $t('chat.skip') }}</button>
           <button @click="submitAnswers" class="px-4 py-1.5 rounded text-xs font-medium transition-colors" :style="{ background: 'var(--accent)', color: 'var(--bg-root)' }">{{ $t('chat.submit') }}</button>
+        </div>
+      </template>
+    </ModalShell>
+
+    <!-- ExitPlanMode 计划审核弹窗 -->
+    <ModalShell :open="chat.pendingControlRequest?.tool_name === 'ExitPlanMode'" size="xl" position="top" @close="rejectPlan('Plan review cancelled')">
+      <template #header>
+        <div class="flex items-center gap-2">
+          <span class="text-sm font-semibold" :style="{ color: 'var(--text-bright)' }">{{ $t('chat.planReview') }}</span>
+          <span class="text-[10px] font-mono opacity-50" :style="{ color: 'var(--text-muted)' }">{{ getPlan().planFilePath }}</span>
+        </div>
+      </template>
+      <!-- 计划内容 -->
+      <div class="max-h-[55vh] overflow-y-auto">
+        <MarkdownRenderer v-if="getPlan().plan" :content="getPlan().plan" />
+        <div v-else class="text-xs py-8 text-center" :style="{ color: 'var(--text-muted)' }">{{ $t('chat.noPlanContent') }}</div>
+      </div>
+      <!-- 反馈输入 -->
+      <div class="mt-3">
+        <input
+          v-model="planFeedback"
+          :placeholder="$t('chat.planFeedbackPlaceholder')"
+          class="w-full rounded-lg px-3 py-2 text-xs outline-none"
+          :style="{ background: 'var(--bg-elevated)', border: '1px solid var(--border-dim)', color: 'var(--text-primary)', caretColor: 'var(--accent)' }"
+          @keydown.enter="rejectPlan(planFeedback)"
+        />
+      </div>
+      <template #footer>
+        <div class="flex items-center gap-2 flex-wrap">
+          <button @click="approvePlan()" class="px-3 py-1.5 rounded text-xs font-medium transition-colors" :style="{ background: 'var(--accent)', color: 'var(--bg-root)' }">✅ {{ $t('chat.planExecute') }}</button>
+          <button @click="rejectPlan('继续优化计划设计')" class="px-3 py-1.5 rounded text-xs font-medium transition-colors" :style="{ background: 'var(--accent-glow)', color: 'var(--accent)' }">✏️ {{ $t('chat.planContinueDesign') }}</button>
+          <button @click="rejectPlan('停止计划')" class="px-3 py-1.5 rounded text-xs font-medium transition-colors" :style="{ background: 'var(--coral-glow)', color: 'var(--coral)' }">⏹ {{ $t('chat.planStop') }}</button>
+          <button @click="exportPlan()" class="px-3 py-1.5 rounded text-xs font-medium transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-muted)' }">📤 {{ $t('chat.planExport') }}</button>
+          <button
+            v-if="planFeedback"
+            @click="rejectPlan(planFeedback)"
+            class="px-3 py-1.5 rounded text-xs font-medium transition-colors hover:bg-[var(--bg-hover)] ml-auto"
+            :style="{ color: 'var(--text-secondary)' }"
+          >💬 {{ $t('chat.planOther') }}</button>
         </div>
       </template>
     </ModalShell>
