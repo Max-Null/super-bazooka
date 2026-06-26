@@ -826,16 +826,16 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAut
         />
       </div>
       <template #footer>
-        <div class="flex items-center gap-2 flex-wrap">
-          <button @click="approvePlan()" class="px-3 py-1.5 rounded text-xs font-medium transition-colors" :style="{ background: 'var(--accent)', color: 'var(--bg-root)' }">✅ {{ $t('chat.planExecute') }}</button>
-          <button @click="rejectPlan('继续优化计划设计')" class="px-3 py-1.5 rounded text-xs font-medium transition-colors" :style="{ background: 'var(--accent-glow)', color: 'var(--accent)' }">✏️ {{ $t('chat.planContinueDesign') }}</button>
-          <button @click="rejectPlan('停止计划')" class="px-3 py-1.5 rounded text-xs font-medium transition-colors" :style="{ background: 'var(--coral-glow)', color: 'var(--coral)' }">⏹ {{ $t('chat.planStop') }}</button>
-          <button @click="exportPlan()" class="px-3 py-1.5 rounded text-xs font-medium transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-muted)' }">📤 {{ $t('chat.planExport') }}</button>
+        <div class="flex items-center gap-1.5 flex-wrap">
+          <button @click="approvePlan()" class="px-3 py-1.5 rounded text-xs font-medium transition-colors hover:brightness-110" :style="{ background: 'var(--accent)', color: 'var(--bg-root)' }">✅ {{ $t('chat.planExecute') }}</button>
+          <button @click="rejectPlan('继续优化计划设计')" class="px-3 py-1.5 rounded text-xs font-medium transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-secondary)', border: '1px solid var(--border-dim)' }">✏️ {{ $t('chat.planContinueDesign') }}</button>
+          <button @click="rejectPlan('停止计划')" class="px-3 py-1.5 rounded text-xs font-medium transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-secondary)', border: '1px solid var(--border-dim)' }">⏹ {{ $t('chat.planStop') }}</button>
+          <button @click="exportPlan()" class="px-3 py-1.5 rounded text-xs font-medium transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-muted)', border: '1px dashed var(--border-dim)' }">📤 {{ $t('chat.planExport') }}</button>
           <button
             v-if="planFeedback"
             @click="rejectPlan(planFeedback)"
             class="px-3 py-1.5 rounded text-xs font-medium transition-colors hover:bg-[var(--bg-hover)] ml-auto"
-            :style="{ color: 'var(--text-secondary)' }"
+            :style="{ color: 'var(--text-secondary)', border: '1px solid var(--border-dim)' }"
           >💬 {{ $t('chat.planOther') }}</button>
         </div>
       </template>
