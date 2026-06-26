@@ -258,6 +258,7 @@ function onScrollThrottled() {
 
 async function handleSend(text: string) {
   debugLog.clear();
+  savedPlan.value = { plan: "", planFilePath: "" };  // 新消息清除旧计划
   let sid = session.activeSessionId;
   if (!sid) sid = await session.createSession(settings.model);
 
@@ -435,18 +436,32 @@ function skipQuestions() {
 
 // ── ExitPlanMode 计划审核 ──
 const planFeedback = ref("");
+// 保存最近一次计划，关闭弹窗后可重新打开查看
+const savedPlan = ref<{ plan: string; planFilePath: string }>({ plan: "", planFilePath: "" });
+const showPlanModal = ref(false);
 
 function getPlan(): { plan: string; planFilePath: string } {
   const input = chat.pendingControlRequest?.tool_input as Record<string, unknown> | undefined;
-  return {
-    plan: (input?.plan as string) || "",
-    planFilePath: (input?.planFilePath as string) || "",
-  };
+  // 优先取当前审批中的计划，否则取已保存的
+  if (input?.plan) return { plan: input.plan as string, planFilePath: (input.planFilePath as string) || "" };
+  return savedPlan.value;
+}
+
+function savePlan() {
+  const input = chat.pendingControlRequest?.tool_input as Record<string, unknown> | undefined;
+  if (input?.plan) {
+    savedPlan.value = { plan: input.plan as string, planFilePath: (input.planFilePath as string) || "" };
+  }
+}
+
+function isPlanPending() {
+  return chat.pendingControlRequest?.tool_name === "ExitPlanMode";
 }
 
 async function approvePlan() {
   const cr = chat.pendingControlRequest; if (!cr) return;
   const sid = session.activeSessionId;
+  savePlan();
   // 批准 ExitPlanMode
   await sendStdin(sid, JSON.stringify({
     type: "control_response",
@@ -462,7 +477,6 @@ async function approvePlan() {
     request_id: `setmode_${Date.now()}`,
     request: { subtype: "set_permission_mode", mode: "acceptEdits" },
   }));
-  // 同步前端的权限模式状态
   settings.planMode = false;
   settings.permissionMode = "acceptEdits";
   planFeedback.value = "";
@@ -471,15 +485,13 @@ async function approvePlan() {
 
 async function rejectPlan(message: string) {
   const cr = chat.pendingControlRequest; if (!cr) return;
+  savePlan();
   const payload = {
     type: "control_response",
     response: {
       subtype: "success",
       request_id: cr.request_id || "",
-      response: {
-        behavior: "deny",
-        message: message || "Plan rejected",
-      },
+      response: { behavior: "deny", message: message || "Plan rejected" },
     },
   };
   await sendStdin(session.activeSessionId, JSON.stringify(payload));
@@ -705,6 +717,13 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAut
       @send-slash="(t: string) => handleSend(t)"
     />
 
+    <!-- 已保存的计划快捷入口 -->
+    <div v-if="savedPlan.plan && !isPlanPending()" class="max-w-3xl mx-auto px-4 pb-1">
+      <button @click="showPlanModal = true" class="text-[11px] px-2 py-1 rounded transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-muted)', border: '1px dashed var(--border-dim)' }">
+        📋 {{ $t('chat.viewPlan') }}
+      </button>
+    </div>
+
     <!-- Attached files chips -->
     <div v-if="attachedFiles.length > 0" class="max-w-3xl mx-auto px-1 pb-1.5 flex flex-wrap gap-1.5">
       <div
@@ -802,8 +821,8 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAut
       </template>
     </ModalShell>
 
-    <!-- ExitPlanMode 计划审核弹窗 -->
-    <ModalShell :open="chat.pendingControlRequest?.tool_name === 'ExitPlanMode'" size="xl" position="top" @close="rejectPlan('Plan review cancelled')">
+    <!-- ExitPlanMode 计划审核弹窗（审批中或已保存重新打开）-->
+    <ModalShell :open="isPlanPending() || showPlanModal" size="xl" position="top" @close="isPlanPending() ? rejectPlan('Plan review cancelled') : (showPlanModal = false)">
       <template #header>
         <div class="flex items-center gap-2">
           <span class="text-sm font-semibold" :style="{ color: 'var(--text-bright)' }">{{ $t('chat.planReview') }}</span>
