@@ -202,6 +202,60 @@ npm run test:quick        # 快速测试（vitest + rust，跳过 e2e）
 | 新增 UI 不参考已有同类界面 | Grep 搜索同类组件 → 复制其模板结构和 class 模式 |
 | 修改 ModalShell 默认行为（如加 `bodyScroll` prop） | 优先用插槽解决问题，不要为单个使用场景加全局 prop |
 
+### UI 样式速查（写 UI 直接套，不要发明新样式）
+
+#### 按钮
+
+| 语义 | 模板 | 颜色 |
+|------|------|------|
+| **主操作**（提交/保存/确认） | `px-3 py-1.5 rounded text-xs font-medium transition-colors` | `bg:var(--accent)` `c:var(--bg-root)` |
+| **次操作**（取消/返回/跳过） | `px-3 py-1.5 rounded text-xs transition-colors hover:bg-[var(--bg-hover)]` | `c:var(--text-muted)` |
+| **危险**（拒绝） | 同上 + `border:1px solid var(--coral)` | `c:var(--coral)` |
+| **图标按钮**（工具栏/消息行） | `w-7 h-7 flex items-center justify-center rounded-md transition-colors hover:bg-[var(--bg-hover)]` | `c:var(--text-secondary)` |
+
+#### 输入框
+
+| 场景 | 模板 |
+|------|------|
+| **设置页** | `settings-input w-full rounded-lg px-3.5 py-2 text-sm outline-none` |
+| **弹窗/搜索** | `w-full rounded-lg px-3 py-2 text-xs outline-none` + `bg:var(--bg-elevated)` `border:1px solid var(--border-dim)` `caret:var(--accent)` |
+
+#### 面板/卡片
+
+| 场景 | 背景 | 边框 |
+|------|------|------|
+| **下拉菜单** | `var(--bg-elevated)` | `1px solid var(--border-default)` + `box-shadow: 0 8px 24px rgba(0,0,0,0.35)` |
+| **工具卡片** | `var(--bg-root)` | `1px solid var(--border-dim)` |
+| **附件芯片** | `var(--bg-elevated)` | `1px solid var(--border-dim)` |
+| **分隔线** | — | `border-top: 1px solid var(--border-dim)` |
+
+#### 状态消息
+
+| 语义 | 背景 | 颜色 |
+|------|------|------|
+| **成功/信息** | `var(--accent-glow)` | `var(--accent)` |
+| **错误/警告** | `var(--coral-glow)` | `var(--coral)` |
+
+#### 字号
+
+| Tailwind | px | 场景 |
+|----------|----|------|
+| `text-[10px]` | 10 | section 标题、辅助文字 |
+| `text-[11px]` | 11 | 元数据、操作提示 |
+| `text-xs` | 12 | 标签、描述、下拉选项 |
+| `text-sm` | 14 | 正文、输入值 |
+
+#### 动画
+
+| 场景 | 实现 |
+|------|------|
+| **hover 高亮** | `transition-colors hover:bg-[var(--bg-hover)]` — 全项目统一 |
+| **hover 浮现** | `opacity-0 group-hover:opacity-100 transition-opacity` |
+| **下拉展开** | `drop-enter-active: transition-all 120ms ease-out` / `drop-leave-active: 100ms ease-in` / `from: opacity-0 translateY(4px) scale(0.96)` |
+| **脉冲指示** | `w-1.5 h-1.5 rounded-full animate-pulse bg:var(--accent)` |
+
+> **规则：写任何 UI 前，先查此表匹配现有模式。表里没有的才需要从同类组件复制模板。** 
+
 ---
 
 ## 工程规范
