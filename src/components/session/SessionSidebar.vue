@@ -53,9 +53,12 @@ async function finishRename(id: string) {
 }
 function cancelRename() { editingId.value = null; }
 async function handleDelete(id: string) {
+  const wasActive = sessionStore.activeSessionId === id;
   await sessionStore.deleteSession(id);
-  if (sessionStore.activeSessionId === id) {
-    sessionStore.sessions.length > 0 ? handleSelect(sessionStore.sessions[0].id) : handleNew();
+  // 删除当前会话 → 清空消息，回到首页
+  if (wasActive) {
+    chatStore.clearMessages();
+    router.push("/chat");
   }
 }
 </script>
