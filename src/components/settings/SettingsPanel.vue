@@ -4,6 +4,8 @@ import { useRouter } from "vue-router";
 import { useSettingsStore, type PonytailMode } from "@/stores/settings";
 import { useI18n } from "vue-i18n";
 import { connectLLM, readFileContent, writeFile, getClaudeDir } from "@/lib/tauri-bridge";
+
+const appVersion = __APP_VERSION__;
 import { translateError } from "@/lib/utils";
 import ErrorBoundary from "@/components/shared/ErrorBoundary.vue";
 import ModalShell from "@/components/shared/ModalShell.vue";
@@ -522,7 +524,7 @@ async function saveSettingsJson() {
       <footer class="mt-8 pt-4" style="border-top:1px solid var(--border-dim)">
         <div class="flex items-center justify-between text-[10px]" :style="{ color: 'var(--text-muted)' }">
           <span>{{ $t('settings.aboutDesc') }}</span>
-          <span class="font-mono">v{{ __APP_VERSION__ }}</span>
+          <span class="font-mono">v{{ appVersion }}</span>
         </div>
       </footer>
     </div>
