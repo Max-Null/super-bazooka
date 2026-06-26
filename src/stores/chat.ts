@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { ref } from "vue";
+import { ref, computed } from "vue";
 
 export interface AttachedFile {
   name: string;
@@ -51,7 +51,12 @@ export const useChatStore = defineStore("chat", () => {
   const messages = ref<Message[]>([]);
   const currentAssistantMsg = ref<Message | null>(null);
   const isProcessing = ref(false);
-  const pendingControlRequest = ref<ControlRequest | null>(null);
+  // 审批队列：防止子 agent 并发 control_request 互相覆盖
+  const pendingControlRequests = ref<ControlRequest[]>([]);
+  // 兼容旧引用：队列头即当前待审批项
+  const pendingControlRequest = computed(() =>
+    pendingControlRequests.value.length > 0 ? pendingControlRequests.value[0] : null
+  );
 
   function addUserMessage(content: string, attachments?: AttachedFile[]): string {
     const id = genId();
@@ -130,14 +135,14 @@ export const useChatStore = defineStore("chat", () => {
   }
 
   function addControlRequest(cr: ControlRequest) {
-    pendingControlRequest.value = cr;
+    pendingControlRequests.value = [...pendingControlRequests.value, cr];
   }
 
   function resolveControlRequest(resolution: string) {
-    if (pendingControlRequest.value) {
-      pendingControlRequest.value.resolution = resolution;
+    if (pendingControlRequests.value.length > 0) {
+      pendingControlRequests.value[0].resolution = resolution;
+      pendingControlRequests.value = pendingControlRequests.value.slice(1);
     }
-    pendingControlRequest.value = null;
   }
 
   /** 当前会话中使用过的 agent 类型（如 "pr-review-toolkit:code-simplifier"） */
@@ -147,7 +152,7 @@ export const useChatStore = defineStore("chat", () => {
     messages.value = [];
     currentAssistantMsg.value = null;
     isProcessing.value = false;
-    pendingControlRequest.value = null;
+    pendingControlRequests.value = [];
     usedAgents.value = new Set();
   }
 
@@ -286,6 +291,7 @@ export const useChatStore = defineStore("chat", () => {
     currentAssistantMsg,
     isProcessing,
     pendingControlRequest,
+    pendingControlRequests,
     addUserMessage,
     startAssistantMessage,
     appendText,
