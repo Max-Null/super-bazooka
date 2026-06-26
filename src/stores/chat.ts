@@ -19,6 +19,8 @@ export interface Message {
   outputTokens?: number;
   costUSD?: number;
   attachments?: AttachedFile[];
+  /** 用户手动停止（非自然结束） */
+  wasStopped?: boolean;
 }
 
 export interface ToolUse {
@@ -106,6 +108,12 @@ export const useChatStore = defineStore("chat", () => {
         next.add(agentType);
         usedAgents.value = next;
       }
+    }
+  }
+
+  function markStopped() {
+    if (currentAssistantMsg.value) {
+      currentAssistantMsg.value.wasStopped = true;
     }
   }
 
@@ -285,6 +293,7 @@ export const useChatStore = defineStore("chat", () => {
     addToolUse,
     addControlRequest,
     resolveControlRequest,
+    markStopped,
     finishAssistantMessage,
     usedAgents,
     clearMessages,

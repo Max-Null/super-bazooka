@@ -7,6 +7,7 @@
     "stop": "停止",
     "thinking": "思考中...",
     "thinkingDone": "思考过程",
+    "stopped": "已停止",
     "loading": "加载中...",
     "export": "导出",
     "exportTitle": "导出会话为 Markdown",

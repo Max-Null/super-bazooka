@@ -294,7 +294,8 @@ function formatJSON(obj: unknown): string {
           <span class="inline-flex items-center gap-1.5">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
             {{ message.isStreaming ? $t('chat.thinking') : $t('chat.thinkingDone') }}
-            <span v-if="elapsedSeconds" class="text-[10px] tabular-nums" style="font-variant-numeric: tabular-nums">· {{ elapsedLabel }}</span>
+            <span v-if="message.wasStopped" class="text-[10px] ml-0.5" :style="{ color: 'var(--coral)' }">· {{ $t('chat.stopped') }}</span>
+            <span v-if="elapsedSeconds && !message.wasStopped" class="text-[10px] tabular-nums" style="font-variant-numeric: tabular-nums">· {{ elapsedLabel }}</span>
             <span v-if="!message.isStreaming && tokenLabel" class="text-[10px] tabular-nums opacity-70">· {{ tokenLabel }}</span>
             <span v-if="!message.isStreaming && message.costUSD !== undefined" class="text-[10px] tabular-nums opacity-70">· ${{ message.costUSD.toFixed(3) }}</span>
             <span v-if="message.isStreaming" class="w-1.5 h-1.5 rounded-full animate-pulse ml-1" style="background:var(--accent)"></span>
@@ -311,7 +312,8 @@ function formatJSON(obj: unknown): string {
         class="flex items-center gap-2 text-[11px] px-0.5"
         style="color: var(--text-muted)"
       >
-        <span v-if="elapsedLabel" class="font-mono tabular-nums">⏱ {{ elapsedLabel }}</span>
+        <span v-if="elapsedLabel && !message.wasStopped" class="font-mono tabular-nums">⏱ {{ elapsedLabel }}</span>
+        <span v-if="message.wasStopped" class="font-mono tabular-nums" :style="{ color: 'var(--coral)' }">⏹ {{ $t('chat.stopped') }}</span>
         <span v-if="message.isStreaming" class="w-1.5 h-1.5 rounded-full animate-pulse" style="background:var(--accent)"></span>
         <template v-if="!message.isStreaming">
           <span v-if="tokenLabel">⏐ {{ tokenLabel }}</span>

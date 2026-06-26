@@ -448,6 +448,7 @@ async function handleStop() {
   // 等待 3 秒让 CC 优雅退出，超时再强杀
   await new Promise(r => setTimeout(r, 3000));
   try { await stopSession(sid); } catch {}
+  chat.markStopped();
   chat.finishAssistantMessage();
 }
 
