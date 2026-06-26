@@ -446,18 +446,25 @@ function getPlan(): { plan: string; planFilePath: string } {
 
 async function approvePlan() {
   const cr = chat.pendingControlRequest; if (!cr) return;
-  const payload = {
+  const sid = session.activeSessionId;
+  // 批准 ExitPlanMode
+  await sendStdin(sid, JSON.stringify({
     type: "control_response",
     response: {
       subtype: "success",
       request_id: cr.request_id || "",
-      response: {
-        behavior: "allow",
-        updatedInput: cr.tool_input,
-      },
+      response: { behavior: "allow", updatedInput: cr.tool_input },
     },
-  };
-  await sendStdin(session.activeSessionId, JSON.stringify(payload));
+  }));
+  // 切换到 acceptEdits 模式执行计划（绕过 CC SDK 已知 bug：plan→acceptEdits 无限循环）
+  await sendStdin(sid, JSON.stringify({
+    type: "control_request",
+    request_id: `setmode_${Date.now()}`,
+    request: { subtype: "set_permission_mode", mode: "acceptEdits" },
+  }));
+  // 同步前端的权限模式状态
+  settings.planMode = false;
+  settings.permissionMode = "acceptEdits";
   planFeedback.value = "";
   chat.resolveControlRequest("allow");
 }
