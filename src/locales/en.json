@@ -34,7 +34,6 @@
     "welcomeSend": "send",
     "welcomeNewline": "newline",
     "aboutTitle": "About cc-gui",
-    "aboutVersion": "v0.1.0",
     "aboutTech": "Tauri 2 + Vue 3 + TypeScript · Rust · SQLite · DeepSeek API",
     "aboutCopyright": "© 2026 cc-gui contributors · MIT"
   },

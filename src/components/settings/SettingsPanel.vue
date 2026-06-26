@@ -522,7 +522,7 @@ async function saveSettingsJson() {
       <footer class="mt-8 pt-4" style="border-top:1px solid var(--border-dim)">
         <div class="flex items-center justify-between text-[10px]" :style="{ color: 'var(--text-muted)' }">
           <span>{{ $t('settings.aboutDesc') }}</span>
-          <span class="font-mono">{{ $t('chat.aboutVersion') }}</span>
+          <span class="font-mono">v{{ __APP_VERSION__ }}</span>
         </div>
       </footer>
     </div>

@@ -34,7 +34,6 @@
     "welcomeSend": "发送",
     "welcomeNewline": "换行",
     "aboutTitle": "关于 cc-gui",
-    "aboutVersion": "v0.1.0",
     "aboutTech": "Tauri 2 + Vue 3 + TypeScript · Rust · SQLite · DeepSeek API",
     "aboutCopyright": "© 2026 cc-gui contributors · MIT"
   },
