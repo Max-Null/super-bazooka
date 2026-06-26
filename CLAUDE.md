@@ -226,6 +226,23 @@ npm run test:quick        # 快速测试（vitest + rust，跳过 e2e）
 
 > 用户不需要每次打字提醒。这是自动执行的流程。
 
+### 版本号管理
+
+项目版本号**以 `package.json` 为准**，通过 Vite `define` 注入 `__APP_VERSION__` 到 UI（设置页 about 显示）。
+
+**发版时需同步更新三处**（保持三者一致）：
+
+| 文件 | 字段 | 说明 |
+|------|------|------|
+| `package.json` | `version` | **源头** — Vite 构建时注入 UI |
+| `src-tauri/tauri.conf.json` | `version` | 安装包版本号（MSI/NSIS） |
+| `src-tauri/Cargo.toml` | `version` | Rust 二进制版本号 |
+
+```bash
+# 发版前执行
+grep '"version"' package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml
+```
+
 ### 1. Vue 3 组件规范
 - **单文件组件**: 每个 `.vue` 文件只负责一件事，超过 300 行考虑拆分
 - **Props down, Events up**: 数据单向流动，子组件不修改 props
