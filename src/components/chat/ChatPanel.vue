@@ -717,13 +717,15 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAut
       @send-slash="(t: string) => handleSend(t)"
     />
 
-    <!-- 已保存的计划快捷入口 -->
-    <div v-if="savedPlan.plan && !isPlanPending()" class="max-w-3xl mx-auto px-4 pb-1">
-      <button @click="showPlanModal = true" class="text-[11px] px-2 py-1 rounded transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-muted)', border: '1px dashed var(--border-dim)' }">
-        📋 {{ $t('chat.viewPlan') }}
-      </button>
+    <!-- 已保存计划的快捷入口 + 附件 chips -->
+    <div class="max-w-3xl mx-auto px-1 pb-1.5 flex flex-wrap gap-1.5">
+      <button
+        v-if="savedPlan.plan && !isPlanPending()"
+        @click="showPlanModal = true"
+        class="flex items-center gap-1 pl-2 pr-1 py-1 rounded-md text-[11px] shrink-0 transition-colors hover:bg-[var(--bg-hover)]"
+        :style="{ color: 'var(--text-muted)', border: '1px dashed var(--border-dim)' }"
+      >📋 {{ $t('chat.viewPlan') }}</button>
     </div>
-
     <!-- Attached files chips -->
     <div v-if="attachedFiles.length > 0" class="max-w-3xl mx-auto px-1 pb-1.5 flex flex-wrap gap-1.5">
       <div
@@ -845,7 +847,7 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAut
         />
       </div>
       <template #footer>
-        <div class="flex items-center gap-1.5 flex-wrap">
+        <div v-if="isPlanPending()" class="flex items-center gap-1.5 flex-wrap">
           <button @click="approvePlan()" class="px-3 py-1.5 rounded text-xs font-medium transition-colors hover:brightness-110" :style="{ background: 'var(--accent)', color: 'var(--bg-root)' }">✅ {{ $t('chat.planExecute') }}</button>
           <button @click="rejectPlan('继续优化计划设计')" class="px-3 py-1.5 rounded text-xs font-medium transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-secondary)', border: '1px solid var(--border-dim)' }">✏️ {{ $t('chat.planContinueDesign') }}</button>
           <button @click="rejectPlan('停止计划')" class="px-3 py-1.5 rounded text-xs font-medium transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-secondary)', border: '1px solid var(--border-dim)' }">⏹ {{ $t('chat.planStop') }}</button>
@@ -856,6 +858,10 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAut
             class="px-3 py-1.5 rounded text-xs font-medium transition-colors hover:bg-[var(--bg-hover)] ml-auto"
             :style="{ color: 'var(--text-secondary)', border: '1px solid var(--border-dim)' }"
           >💬 {{ $t('chat.planOther') }}</button>
+        </div>
+        <div v-else class="flex items-center justify-end">
+          <button @click="exportPlan()" class="px-3 py-1.5 rounded text-xs font-medium transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-muted)', border: '1px dashed var(--border-dim)' }">📤 {{ $t('chat.planExport') }}</button>
+          <button @click="showPlanModal = false" class="px-3 py-1.5 rounded text-xs transition-colors hover:bg-[var(--bg-hover)] ml-2" :style="{ color: 'var(--text-muted)' }">{{ $t('chat.close') }}</button>
         </div>
       </template>
     </ModalShell>

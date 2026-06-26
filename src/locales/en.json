@@ -14,6 +14,7 @@
     "scrollToBottom": "Scroll to bottom",
     "allow": "Allow",
     "deny": "Deny",
+    "close": "Close",
     "allowTool": "Allow {tool}?",
     "askUserQuestion": "Claude needs more information",
     "skip": "Skip",
