@@ -49,6 +49,17 @@
     "aboutCopyright": "© 2026 cc-gui contributors · MIT"
   },
 
+  "provider": {
+    "anthropic": "Anthropic",
+    "deepseek": "DeepSeek",
+    "openrouter": "OpenRouter",
+    "siliconflow": "SiliconFlow",
+    "zhipu": "Zhipu GLM",
+    "kimi": "Kimi",
+    "minimax": "MiniMax",
+    "custom": "Custom"
+  },
+
   "tools": {
     "Bash": "Bash",
     "PowerShell": "PowerShell",

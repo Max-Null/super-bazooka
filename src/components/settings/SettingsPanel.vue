@@ -121,23 +121,40 @@ async function handleTest() {
 }
 
 // ── Provider 选择 ──
-interface ProviderOption { id: string; icon: string; label: string }
+interface ProviderOption { id: string; label: string }
 const providerOptions: ProviderOption[] = [
-  { id: "anthropic", icon: "🔵", label: "Anthropic 官方" },
-  { id: "deepseek", icon: "🟢", label: "DeepSeek" },
-  { id: "openrouter", icon: "🟣", label: "OpenRouter" },
-  { id: "siliconflow", icon: "🔷", label: "硅基流动" },
-  { id: "zhipu", icon: "🔶", label: "智谱 GLM" },
-  { id: "kimi", icon: "🟠", label: "Kimi" },
-  { id: "minimax", icon: "🟡", label: "MiniMax" },
-  { id: "custom", icon: "⚙️", label: "自定义" },
+  { id: "anthropic", label: "" },
+  { id: "deepseek", label: "" },
+  { id: "openrouter", label: "" },
+  { id: "siliconflow", label: "" },
+  { id: "zhipu", label: "" },
+  { id: "kimi", label: "" },
+  { id: "minimax", label: "" },
+  { id: "custom", label: "" },
 ];
+// label 由 i18n 动态提供
+function providerLabel(id: string): string {
+  return t(`provider.${id}`) || id;
+}
 const currentProvider = computed(() => providerOptions.find(o => o.id === settings.providerId)!);
+
+// 前端 provider 模型列表镜像（与 Rust provider.rs 同步）
+const PROVIDER_MODELS: Record<string, string[]> = {
+  anthropic: ["claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5-20251001", "claude-fable-5"],
+  deepseek: ["deepseek-v4-pro[1M]", "deepseek-v4-flash", "deepseek-v4"],
+  openrouter: ["anthropic/claude-sonnet-4-6", "anthropic/claude-opus-4-8", "anthropic/claude-haiku-4-5-20251001"],
+  siliconflow: ["deepseek-ai/DeepSeek-V3", "deepseek-ai/DeepSeek-R1", "Pro/zai-org/GLM-5", "Qwen/Qwen3-235B-A22B"],
+  zhipu: ["glm-5", "glm-5.1", "glm-4.7"],
+  kimi: ["kimi-k2.5", "kimi-k2.6"],
+  minimax: ["minimax-m2.7"],
+  custom: [],
+};
 
 function switchProvider(id: string) {
   settings.providerId = id;
-  // 切换到预设的第一个模型
-  if (settings.models.length > 0) settings.model = settings.models[0];
+  const newModels = PROVIDER_MODELS[id] || [];
+  settings.models = newModels;
+  settings.model = newModels[0] || "";
 }
 
 const modelPresets = computed(() => settings.models);
@@ -212,8 +229,7 @@ async function saveSettingsJson() {
               }"
               @click.stop="toggleDropdown('provider' as DropdownKind)"
             >
-              <span class="text-[13px]">{{ currentProvider.icon }}</span>
-              <span class="font-medium truncate flex-1">{{ currentProvider.label }}</span>
+              <span class="font-medium truncate flex-1">{{ providerLabel(currentProvider.id) }}</span>
               <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
                 :style="{ opacity: 0.4, transition: 'transform 150ms', transform: openDropdown === 'provider' ? 'rotate(180deg)' : '' }">
                 <polyline points="6 9 12 15 18 9"/>
@@ -231,8 +247,7 @@ async function saveSettingsJson() {
                     class="w-full text-left px-3 py-2 text-sm transition-colors hover:bg-[var(--bg-hover)]"
                     :style="{ background: settings.providerId === o.id ? 'var(--accent-glow)' : 'transparent', color: settings.providerId === o.id ? 'var(--accent)' : 'var(--text-primary)' }"
                   >
-                    <span class="text-[13px]">{{ o.icon }}</span>
-                    <span class="ml-1.5">{{ o.label }}</span>
+                    <span>{{ providerLabel(o.id) }}</span>
                   </button>
                 </div>
               </Transition>
