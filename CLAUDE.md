@@ -51,8 +51,10 @@ Settings: 前端 watcher → `set_claude_settings`(lib.rs) → 写入 `~/.claude
 - 返回 `Result<T, String>`
 - 禁止 `unsafe`
 
-### 写 UI 前
-Grep 同类组件 → 复制其模板结构和 class 模式。颜色用 CSS 变量（`var(--accent)` 等），禁止硬编码色值。
+### 动手前必做
+1. Grep 已有实现，检查 composables/lib/同类组件
+2. **修改 `src-tauri/` 下任何 .rs 文件前** → `Read docs/知识/设计决策参考.md`（31 条决策，改核心流程时逐条对照）
+3. 写 UI 前 → Grep 同类组件，复制其模板和 class 模式。颜色用 CSS 变量，禁止硬编码色值
 
 ## 构建与测试
 
