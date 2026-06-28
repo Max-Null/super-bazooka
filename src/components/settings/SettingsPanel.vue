@@ -120,21 +120,23 @@ async function handleTest() {
   finally { isTesting.value = false; }
 }
 
-// ── Provider 选择 ──
-interface ProviderOption { id: string; label: string }
+// ── Provider 选择（logo 来自 lobe-icons CDN）──
+interface ProviderOption { id: string; logoUrl: string }
 const providerOptions: ProviderOption[] = [
-  { id: "anthropic", label: "" },
-  { id: "deepseek", label: "" },
-  { id: "openrouter", label: "" },
-  { id: "siliconflow", label: "" },
-  { id: "zhipu", label: "" },
-  { id: "kimi", label: "" },
-  { id: "minimax", label: "" },
-  { id: "custom", label: "" },
+  { id: "anthropic", logoUrl: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/anthropic-color.svg" },
+  { id: "deepseek", logoUrl: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/deepseek-color.svg" },
+  { id: "openrouter", logoUrl: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/openrouter-color.svg" },
+  { id: "siliconflow", logoUrl: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/siliconcloud-color.svg" },
+  { id: "zhipu", logoUrl: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/zhipu-color.svg" },
+  { id: "kimi", logoUrl: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/kimi-color.svg" },
+  { id: "minimax", logoUrl: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/minimax-color.svg" },
+  { id: "custom", logoUrl: "" },
 ];
-// label 由 i18n 动态提供
 function providerLabel(id: string): string {
   return t(`provider.${id}`) || id;
+}
+function providerLogo(id: string): string {
+  return providerOptions.find(o => o.id === id)?.logoUrl || "";
 }
 const currentProvider = computed(() => providerOptions.find(o => o.id === settings.providerId)!);
 
@@ -229,7 +231,8 @@ async function saveSettingsJson() {
               }"
               @click.stop="toggleDropdown('provider' as DropdownKind)"
             >
-              <span class="font-medium truncate flex-1">{{ providerLabel(currentProvider.id) }}</span>
+              <img v-if="providerLogo(settings.providerId)" :src="providerLogo(settings.providerId)" class="w-4 h-4 shrink-0" />
+              <span class="font-medium truncate flex-1">{{ providerLabel(settings.providerId) }}</span>
               <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
                 :style="{ opacity: 0.4, transition: 'transform 150ms', transform: openDropdown === 'provider' ? 'rotate(180deg)' : '' }">
                 <polyline points="6 9 12 15 18 9"/>
@@ -247,7 +250,8 @@ async function saveSettingsJson() {
                     class="w-full text-left px-3 py-2 text-sm transition-colors hover:bg-[var(--bg-hover)]"
                     :style="{ background: settings.providerId === o.id ? 'var(--accent-glow)' : 'transparent', color: settings.providerId === o.id ? 'var(--accent)' : 'var(--text-primary)' }"
                   >
-                    <span>{{ providerLabel(o.id) }}</span>
+                    <img v-if="o.logoUrl" :src="o.logoUrl" class="w-4 h-4 shrink-0 inline-block align-middle" />
+                    <span class="ml-1.5">{{ providerLabel(o.id) }}</span>
                   </button>
                 </div>
               </Transition>
