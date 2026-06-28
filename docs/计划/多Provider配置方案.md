@@ -109,17 +109,19 @@ interface ProviderPreset {
   "name": "OpenRouter",
   "envTemplate": {
     "ANTHROPIC_AUTH_TOKEN": "",
-    "ANTHROPIC_BASE_URL": "https://openrouter.ai/api/anthropic",
+    "ANTHROPIC_API_KEY": "",
+    "ANTHROPIC_BASE_URL": "https://openrouter.ai/api",
     "ANTHROPIC_MODEL": "anthropic/claude-sonnet-4-6",
     "ANTHROPIC_DEFAULT_OPUS_MODEL": "anthropic/claude-opus-4-8",
     "ANTHROPIC_DEFAULT_SONNET_MODEL": "anthropic/claude-sonnet-4-6",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL": "anthropic/claude-haiku-4-5-20251001",
-    "CLAUDE_CODE_SUBAGENT_MODEL": "anthropic/claude-haiku-4-5-20251001",
-    "OPENROUTER_REFERRER": "cc-gui"
+    "CLAUDE_CODE_SUBAGENT_MODEL": "anthropic/claude-haiku-4-5-20251001"
   },
   "models": ["anthropic/claude-sonnet-4-6", "anthropic/claude-opus-4-8", "anthropic/claude-haiku-4-5-20251001"]
 }
 ```
+
+> **注意**：`ANTHROPIC_API_KEY` 必须显式设为空字符串 `""`（不能省略），否则 CC CLI 会优先用 `ANTHROPIC_API_KEY` 调 Anthropic 原生 API。Base URL 是 `https://openrouter.ai/api`（**不带** `/anthropic` 后缀）。不需要 `OPENROUTER_REFERRER` env var（官方文档未提及此变量）。
 
 #### 自定义
 
@@ -280,20 +282,23 @@ Anthropic 原生调 `/v1/messages`，DeepSeek/OpenRouter 调 `/v1/chat/completio
 | 1 | Rust 定义 `ProviderPreset` 结构 + 3 个内置预设 | `src-tauri/src/provider.rs`（新文件） |
 | 2 | 改 `get_claude_settings` 返回 provider_id | `src-tauri/src/lib.rs` |
 | 3 | 改 `set_claude_settings` 接受 provider_id + env map | `src-tauri/src/lib.rs` |
-| 4 | 改 `connect_llm` 根据 provider 选测试端点 | `src-tauri/src/lib.rs` |
+| 4 | 改 `connect_llm`：OpenAI 格式（DeepSeek/OpenRouter）vs Anthropic Messages API 格式（Anthropic 原生）两条路径 | `src-tauri/src/lib.rs` |
 | 5 | 前端 `settings.ts` store 加 providerId 字段 | `src/stores/settings.ts` |
 | 6 | 前端 `SettingsPanel.vue` 加 provider 下拉 + 动态模型列表 | `src/components/settings/SettingsPanel.vue` |
 | 7 | 前端 `tauri-bridge.ts` 更新接口 | `src/lib/tauri-bridge.ts` |
 | 8 | i18n provider 名称 | `src/locales/` |
 
-## 九、已知不确定项（实施前需验证）
+## 九、联网验证结果
 
-| 项 | 风险 | 验证方法 |
-|----|------|---------|
-| Anthropic 原生真的不需要 `ANTHROPIC_BASE_URL` 吗？ | CC CLI 可能默认 `api.anthropic.com`，但如有代理需求需要自定义 | 不设 `ANTHROPIC_BASE_URL` 时启动 CC，看日志确认端点 |
-| OpenRouter 的 `OPENROUTER_REFERRER` 是否被 CC CLI 识别？ | CC CLI 可能不读此 env，Referer header 缺失导致 OpenRouter 拒绝 | 切到 OpenRouter 后发一条简单消息测试 |
-| DeepSeek `[1M]` 后缀在 stream-json 模式下是否正常？ | `[1M]` 是 CC 客户端语法，可能被 CC 内部剥离后传给 API | 已实测通过 |
-| 连接测试 Anthropic 端点格式是否兼容现有 `connect_llm` 代码？ | 当前 `connect_llm` 用 OpenAI `/v1/chat/completions` 格式，Anthropic 用 Messages API 格式完全不同 | 需要为 Anthropic 写单独的测试逻辑，或测试项标记为"仅 DeepSeek/OpenRouter 可用" |
+| 项 | 验证结论 | 来源 |
+|----|---------|------|
+| Anthropic 原生需要 `ANTHROPIC_BASE_URL` 吗？ | **不需要**。默认 `https://api.anthropic.com`，不设即可。仅当路由到第三方 endpoint 时才设。设为 `""` 可清除旧值 | [GitHub Issue #216](https://github.com/anthropics/claude-code/issues/216) |
+| OpenRouter 的 Base URL 是什么？ | `https://openrouter.ai/api`（**不是** `/anthropic` 后缀！）| [OpenRouter 官方指南](https://openrouter.ai/blog/tutorials/claude-code-openrouter/) |
+| OpenRouter 需要 `OPENROUTER_REFERRER` 吗？ | **不需要**。此 env var 不存在于 CC CLI 或 OpenRouter 官方文档 | 同上 |
+| OpenRouter 的特殊要求？ | **`ANTHROPIC_API_KEY` 必须显式设为 `""`**，否则 CC CLI 会优先用它调 Anthropic 原生 | 同上 |
+| DeepSeek `[1M]` 后缀？ | **实测通过**。CC CLI 内部剥离后再发请求 | cc-gui 实测 |
+| 连接测试 Anthropic 格式兼容吗？ | **不兼容**。当前 `connect_llm` 用 OpenAI 格式（`/v1/chat/completions` + `Authorization: Bearer`），Anthropic 用 Messages API（`x-api-key` + `anthropic-version` header）。需拆分为**两个独立测试函数**或标记 Anthropic 为"测试不可用" | [Anthropic API 文档](https://platform.claude.com/docs/en/build-with-claude/working-with-messages) |
+| Anthropic 健康检查端点？ | `GET /v1/models` + `x-api-key` header，零 token 消耗 | [GitHub PR #263](https://github.com/dhyansraj/mcp-mesh/pull/263) |
 
 ## 十、不做的事
 
