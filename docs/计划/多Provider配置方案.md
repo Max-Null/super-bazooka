@@ -40,12 +40,14 @@ interface ProviderPreset {
   name: string;                  // 显示名
   /** 写入 settings.json env 的键值对 */
   envTemplate: {
-    ANTHROPIC_AUTH_TOKEN?: "";  // 占位，值来自用户填的 API Key
+    ANTHROPIC_AUTH_TOKEN?: "";    // 占位，值来自用户填的 API Key
     ANTHROPIC_API_KEY?: "";
-    ANTHROPIC_BASE_URL: string;
+    ANTHROPIC_BASE_URL?: string;  // Anthropic 原生不设，DeepSeek/OpenRouter 必设
     ANTHROPIC_MODEL?: string;
     ANTHROPIC_DEFAULT_OPUS_MODEL?: string;
+    ANTHROPIC_DEFAULT_OPUS_MODEL_NAME?: string;  // 显示用（不带 [1M]）
     ANTHROPIC_DEFAULT_SONNET_MODEL?: string;
+    ANTHROPIC_DEFAULT_SONNET_MODEL_NAME?: string;
     ANTHROPIC_DEFAULT_HAIKU_MODEL?: string;
     CLAUDE_CODE_SUBAGENT_MODEL?: string;
   };
@@ -66,6 +68,7 @@ interface ProviderPreset {
   "name": "Anthropic",
   "envTemplate": {
     "ANTHROPIC_API_KEY": "",
+    "ANTHROPIC_BASE_URL": "",   // 显式清空（DeepSeek→Anthropic 切换时清除旧 URL）
     "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-4-8",
     "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-4-6",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-haiku-4-5-20251001",
@@ -89,6 +92,8 @@ interface ProviderPreset {
     "ANTHROPIC_DEFAULT_OPUS_MODEL": "deepseek-v4-pro[1M]",
     "ANTHROPIC_DEFAULT_SONNET_MODEL": "deepseek-v4-pro[1M]",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL": "deepseek-v4-flash",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL_NAME": "deepseek-v4-pro",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME": "deepseek-v4-pro",
     "CLAUDE_CODE_SUBAGENT_MODEL": "deepseek-v4-flash"
   },
   "testEndpoint": "https://api.deepseek.com/v1/chat/completions",
@@ -155,8 +160,12 @@ settings.json env 块
 
 ### 4.3 关键规则
 
-- **写 env 时只替换预设定义的 key**，不清除用户自定义的其他 env var（如 `HTTPS_PROXY`）
-- **读 env 时 provider 识别是启发式的**——看 env 块中是否有 `ANTHROPIC_API_KEY`（Anthropic）、`ANTHROPIC_BASE_URL` 含 `deepseek`（DeepSeek）等
+- **切换 provider 时，先清除旧 provider 独有的 key，再写入新 provider 的 key**。
+  例如 DeepSeek → Anthropic：必须清除 `ANTHROPIC_BASE_URL`、`ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_MODEL`，
+  否则 CLI 读到残留的 `ANTHROPIC_BASE_URL=https://api.deepseek.com` 会把 Anthropic 请求发到 DeepSeek。
+  清除规则：新 provider 的 `envTemplate` 中不存在的 key，且该 key 在旧 provider 中存在 → 从 settings.json 删除。
+- **用户自定义的 key 永远不清除**（如 `HTTPS_PROXY`、`ENABLE_TOOL_SEARCH` 等不在任何 provider 预设中的 key）
+- **读 env 时 provider 识别是启发式的**——看 env 块中是否有 `ANTHROPIC_API_KEY`（Anthropic）、`ANTHROPIC_BASE_URL` 含 `deepseek`（DeepSeek）等。**启发式可能误判，允许用户手动选择 provider 覆盖自动识别**
 - **自定义 provider 保留所有 env 值不变**，用户手动编辑
 
 ## 五、前端 UI 变更
@@ -277,7 +286,16 @@ Anthropic 原生调 `/v1/messages`，DeepSeek/OpenRouter 调 `/v1/chat/completio
 | 7 | 前端 `tauri-bridge.ts` 更新接口 | `src/lib/tauri-bridge.ts` |
 | 8 | i18n provider 名称 | `src/locales/` |
 
-## 九、不做的事
+## 九、已知不确定项（实施前需验证）
+
+| 项 | 风险 | 验证方法 |
+|----|------|---------|
+| Anthropic 原生真的不需要 `ANTHROPIC_BASE_URL` 吗？ | CC CLI 可能默认 `api.anthropic.com`，但如有代理需求需要自定义 | 不设 `ANTHROPIC_BASE_URL` 时启动 CC，看日志确认端点 |
+| OpenRouter 的 `OPENROUTER_REFERRER` 是否被 CC CLI 识别？ | CC CLI 可能不读此 env，Referer header 缺失导致 OpenRouter 拒绝 | 切到 OpenRouter 后发一条简单消息测试 |
+| DeepSeek `[1M]` 后缀在 stream-json 模式下是否正常？ | `[1M]` 是 CC 客户端语法，可能被 CC 内部剥离后传给 API | 已实测通过 |
+| 连接测试 Anthropic 端点格式是否兼容现有 `connect_llm` 代码？ | 当前 `connect_llm` 用 OpenAI `/v1/chat/completions` 格式，Anthropic 用 Messages API 格式完全不同 | 需要为 Anthropic 写单独的测试逻辑，或测试项标记为"仅 DeepSeek/OpenRouter 可用" |
+
+## 十、不做的事
 
 - ❌ 本地代理/网关（CCSwitch 的代理模式）—— CC CLI 直接调 Anthropic 兼容端点即可
 - ❌ 模型映射/别名—— CC CLI 自身处理
