@@ -37,7 +37,7 @@ interface ProviderConfig {
 /** 各 provider 默认 base URL（用户面值，首次切换无已保存配置时使用） */
 const PROVIDER_BASE_URLS: Record<string, string> = {
   anthropic: "",
-  deepseek: "https://api.deepseek.com",
+  deepseek: "https://api.deepseek.com/anthropic",
   openrouter: "https://openrouter.ai/api",
   siliconflow: "https://api.siliconflow.cn/",
   zhipu: "https://open.bigmodel.cn/api/anthropic",
