@@ -123,9 +123,9 @@ async function handleTest() {
 // ── Provider 选择（logo 来自 lobe-icons CDN）──
 interface ProviderOption { id: string; logoUrl: string }
 const providerOptions: ProviderOption[] = [
-  { id: "anthropic", logoUrl: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/anthropic-color.svg" },
+  { id: "anthropic", logoUrl: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/anthropic.svg" },
   { id: "deepseek", logoUrl: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/deepseek-color.svg" },
-  { id: "openrouter", logoUrl: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/openrouter-color.svg" },
+  { id: "openrouter", logoUrl: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/openrouter.svg" },
   { id: "siliconflow", logoUrl: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/siliconcloud-color.svg" },
   { id: "zhipu", logoUrl: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/zhipu-color.svg" },
   { id: "kimi", logoUrl: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/kimi-color.svg" },
@@ -153,10 +153,18 @@ const PROVIDER_MODELS: Record<string, string[]> = {
 };
 
 function switchProvider(id: string) {
+  // 1. 保存当前 provider 配置到 SQLite（providerId 仍是旧值）
+  settings.saveCurrentConfig();
+  // 2. 先恢复目标 provider 的 apiKey/baseUrl/model（同步从内存读取，无记录则用默认值）
+  settings.restoreConfig(id);
+  // 3. 最后切 providerId（watcher 拿到完整正确值，不会出现旧 apiKey+新 providerId 的中间态）
   settings.providerId = id;
   const newModels = PROVIDER_MODELS[id] || [];
   settings.models = newModels;
-  settings.model = newModels[0] || "";
+  // 4. 校验恢复的 model 在目标列表中，不在则 fallback 第一个
+  if (!newModels.includes(settings.model) && newModels.length > 0) {
+    settings.model = newModels[0];
+  }
 }
 
 const modelPresets = computed(() => settings.models);
@@ -222,7 +230,7 @@ async function saveSettingsJson() {
           </div>
           <!-- Provider 选择 -->
           <div>
-            <label class="block text-xs font-medium mb-1.5" style="color:var(--text-muted)">Provider</label>
+            <label class="block text-xs font-medium mb-1.5" style="color:var(--text-muted)">{{ $t('settings.provider') }}</label>
             <div
               class="settings-dropdown relative cursor-pointer rounded-lg px-3.5 py-2 text-sm flex items-center gap-1.5 select-none transition-colors"
               :style="{
@@ -246,7 +254,7 @@ async function saveSettingsJson() {
                   <button
                     v-for="o in providerOptions"
                     :key="o.id"
-                    @click="switchProvider(o.id); closeDropdowns()"
+                    @click.stop="switchProvider(o.id); closeDropdowns()"
                     class="w-full text-left px-3 py-2 text-sm transition-colors hover:bg-[var(--bg-hover)]"
                     :style="{ background: settings.providerId === o.id ? 'var(--accent-glow)' : 'transparent', color: settings.providerId === o.id ? 'var(--accent)' : 'var(--text-primary)' }"
                   >

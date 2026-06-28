@@ -95,6 +95,7 @@
     "defaultEffort": "思考深度",
     "ccConfig": "CC 配置",
     "ccGuiSettings": "cc-gui 设置",
+    "provider": "服务商",
     "quickPresets": "快速预设",
     "deepseekPreset": "api.deepseek.com",
     "themeDark": "深色",

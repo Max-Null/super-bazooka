@@ -4,6 +4,7 @@ pub mod protocol;
 pub mod provider;
 pub mod session;
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use db::Db;
@@ -691,6 +692,61 @@ fn clear_mcp_descriptions(state: State<'_, AppState>) -> Result<(), String> {
     Ok(())
 }
 
+/// 保存单个 provider 的配置到 SQLite settings 表（切换前调用）
+#[tauri::command]
+fn save_provider_config(
+    state: State<'_, AppState>,
+    provider_id: String,
+    api_key: String,
+    base_url: String,
+    model: String,
+) -> Result<(), String> {
+    let db = state.db.conn.lock().map_err(|e| format!("DB lock: {}", e))?;
+    let key = format!("provider_config:{}", provider_id);
+    let value = serde_json::json!({
+        "apiKey": api_key,
+        "baseUrl": base_url,
+        "model": model,
+    })
+    .to_string();
+    db.execute(
+        "INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)",
+        rusqlite::params![key, value],
+    )
+    .map_err(|e| format!("Failed to save provider config: {}", e))?;
+    Ok(())
+}
+
+/// 加载所有已保存的 provider 配置
+#[tauri::command]
+fn load_provider_configs(
+    state: State<'_, AppState>,
+) -> Result<HashMap<String, serde_json::Value>, String> {
+    let db = state.db.conn.lock().map_err(|e| format!("DB lock: {}", e))?;
+    let mut stmt = db
+        .prepare("SELECT key, value FROM settings WHERE key LIKE 'provider_config:%'")
+        .map_err(|e| format!("Failed to query provider configs: {}", e))?;
+    let rows = stmt
+        .query_map([], |row| {
+            let key: String = row.get(0)?;
+            let value: String = row.get(1)?;
+            Ok((key, value))
+        })
+        .map_err(|e| format!("Failed to iterate provider configs: {}", e))?;
+    let mut configs = HashMap::new();
+    for row in rows {
+        let (key, value) = row.map_err(|e| format!("Failed to read row: {}", e))?;
+        let id = key.strip_prefix("provider_config:").unwrap_or(&key).to_string();
+        if id.is_empty() {
+            continue;
+        }
+        if let Ok(cfg) = serde_json::from_str::<serde_json::Value>(&value) {
+            configs.insert(id, cfg);
+        }
+    }
+    Ok(configs)
+}
+
 /// 从 ~/.claude/settings.json 读取 ANTHROPIC_AUTH_TOKEN（内部翻译用）
 fn read_claude_api_key() -> Option<String> {
     let home = dirs::home_dir()?;
@@ -975,6 +1031,8 @@ pub fn run() {
             resolve_claude_path,
             get_claude_settings,
             set_claude_settings,
+            save_provider_config,
+            load_provider_configs,
             ensure_item_descriptions,
             generate_mcp_descriptions,
             clear_item_descriptions,

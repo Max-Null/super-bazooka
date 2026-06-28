@@ -1,6 +1,6 @@
 import { defineStore } from "pinia";
 import { ref, watch } from "vue";
-import { getClaudeSettings, setClaudeSettings, resolveClaudePath } from "@/lib/tauri-bridge";
+import { getClaudeSettings, setClaudeSettings, resolveClaudePath, saveProviderConfig, loadProviderConfigs } from "@/lib/tauri-bridge";
 
 const STORAGE_KEY = "cc-gui-ui-settings";
 
@@ -25,6 +25,26 @@ interface UiSettings {
   fontSize: "small" | "medium" | "large";
   claudePath: string;
 }
+
+// ── Provider 配置持久化 ──
+
+interface ProviderConfig {
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+}
+
+/** 各 provider 默认 base URL（用户面值，首次切换无已保存配置时使用） */
+const PROVIDER_BASE_URLS: Record<string, string> = {
+  anthropic: "",
+  deepseek: "https://api.deepseek.com",
+  openrouter: "https://openrouter.ai/api",
+  siliconflow: "https://api.siliconflow.cn/",
+  zhipu: "https://open.bigmodel.cn/api/anthropic",
+  kimi: "https://api.moonshot.cn/anthropic",
+  minimax: "https://api.minimaxi.com/anthropic",
+  custom: "",
+};
 
 function getUiDefaults(): UiSettings {
   return {
@@ -56,6 +76,33 @@ export const useSettingsStore = defineStore("settings", () => {
   const providerId = ref("deepseek");
   const models = ref<string[]>(["deepseek-v4-pro[1M]", "deepseek-v4-flash", "deepseek-v4"]);
 
+  // ── Provider 配置持久化 — SQLite ──
+  const providerConfigs = ref<Record<string, ProviderConfig>>({});
+  // 启动时异步加载
+  loadProviderConfigs().then(cfgs => { providerConfigs.value = cfgs || {}; }).catch(() => {});
+
+  /** 保存当前 provider 的配置到 SQLite */
+  async function saveCurrentConfig() {
+    const id = providerId.value;
+    if (!id) return;
+    providerConfigs.value[id] = { apiKey: apiKey.value, baseUrl: baseUrl.value, model: model.value };
+    try { await saveProviderConfig(id, apiKey.value, baseUrl.value, model.value); } catch { /* 后台静默 */ }
+  }
+
+  /** 恢复目标 provider 的配置；无记录则用 PROVIDER_BASE_URLS 默认值 */
+  function restoreConfig(id: string) {
+    const saved = providerConfigs.value[id];
+    if (saved) {
+      apiKey.value = saved.apiKey;
+      baseUrl.value = saved.baseUrl;
+      model.value = saved.model;
+    } else {
+      apiKey.value = "";
+      baseUrl.value = PROVIDER_BASE_URLS[id] ?? "";
+      // model 由 switchProvider 设置，此处不覆盖
+    }
+  }
+
   // ── UI 偏好 — localStorage ──
   const ui = loadUiSettings();
   const planMode = ref(ui.planMode);
@@ -79,6 +126,11 @@ export const useSettingsStore = defineStore("settings", () => {
     model.value = s.model;
     providerId.value = s.provider_id;
     if (s.models && s.models.length > 0) models.value = s.models;
+    // 启动时将当前配置写入 providerConfigs（若尚未保存），供后续切换时恢复
+    if (s.provider_id && s.api_key && !providerConfigs.value[s.provider_id]) {
+      providerConfigs.value[s.provider_id] = { apiKey: s.api_key, baseUrl: s.base_url, model: s.model };
+      saveProviderConfig(s.provider_id, s.api_key, s.base_url, s.model).catch(() => {});
+    }
     // effort 只在 cc-gui 没设置过时从 settings.json 取
     if (!ui.effort || ui.effort === getUiDefaults().effort) {
       const eff = s.effort as Effort;
@@ -114,6 +166,11 @@ export const useSettingsStore = defineStore("settings", () => {
     { deep: true },
   );
 
+  // Provider 配置编辑 → 自动写 SQLite
+  watch([apiKey, baseUrl, model], () => {
+    saveCurrentConfig();
+  });
+
   // UI 偏好变更 → 写 localStorage
   watch([planMode, autoMode, permissionMode, effort, ponytailMode, theme, locale, fontSize, claudePath], () => {
     const s: UiSettings = {
@@ -130,5 +187,5 @@ export const useSettingsStore = defineStore("settings", () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
   }, { deep: true });
 
-  return { apiKey, baseUrl, model, providerId, models, planMode, autoMode, permissionMode, effort, ponytailMode, theme, locale, fontSize, claudePath, resolvedClaudePath };
+  return { apiKey, baseUrl, model, providerId, models, planMode, autoMode, permissionMode, effort, ponytailMode, theme, locale, fontSize, claudePath, resolvedClaudePath, saveCurrentConfig, restoreConfig };
 });

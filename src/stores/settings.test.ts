@@ -92,4 +92,37 @@ describe("settings store", () => {
     settings.theme = "dark";
     expect(settings.theme).toBe("dark");
   });
+
+  it("saves current config and restores per-provider config", async () => {
+    const settings = useSettingsStore();
+
+    // 模拟在 DeepSeek provider 上的配置
+    settings.providerId = "deepseek";
+    settings.apiKey = "sk-ds-test";
+    settings.baseUrl = "https://api.deepseek.com";
+    settings.model = "deepseek-v4-pro[1M]";
+    await settings.saveCurrentConfig();
+
+    // 模拟切换到 Anthropic（switchProvider 的正确顺序）
+    settings.saveCurrentConfig(); // 先保存旧值（deepseek）
+    settings.restoreConfig("anthropic"); // 恢复目标值（无记录，用默认）
+    settings.providerId = "anthropic"; // 最后切 providerId
+    // anthropic 无已保存配置，apiKey 应清空，baseUrl 用默认
+    expect(settings.apiKey).toBe("");
+    expect(settings.baseUrl).toBe("");
+
+    // 填 Anthropic key
+    settings.apiKey = "sk-ant-test";
+    settings.model = "claude-sonnet-4-6";
+    await settings.saveCurrentConfig();
+
+    // 切回 DeepSeek
+    settings.saveCurrentConfig();
+    settings.restoreConfig("deepseek");
+    settings.providerId = "deepseek";
+    // 应恢复之前保存的 DeepSeek 值
+    expect(settings.apiKey).toBe("sk-ds-test");
+    expect(settings.baseUrl).toBe("https://api.deepseek.com");
+    expect(settings.model).toBe("deepseek-v4-pro[1M]");
+  });
 });

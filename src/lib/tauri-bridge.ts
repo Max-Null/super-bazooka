@@ -242,6 +242,18 @@ export async function setClaudeSettings(
   return invoke("set_claude_settings", { apiKey, baseUrl, model, effort, permissionMode, providerId });
 }
 
+/** 保存单个 provider 配置到 SQLite，切换前调用 */
+export async function saveProviderConfig(
+  providerId: string, apiKey: string, baseUrl: string, model: string,
+): Promise<void> {
+  return invoke("save_provider_config", { providerId, apiKey, baseUrl, model });
+}
+
+/** 加载所有已保存的 provider 配置 */
+export async function loadProviderConfigs(): Promise<Record<string, { apiKey: string; baseUrl: string; model: string }>> {
+  return invoke("load_provider_configs");
+}
+
 // ── 项目描述（翻译 + 缓存）──
 
 export interface DescriptionItem {

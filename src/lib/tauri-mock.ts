@@ -82,6 +82,8 @@ if (typeof window !== "undefined") {
     permission_mode: "default",
   }));
   mockInvokeHandlers.set("set_claude_settings", () => undefined);
+  mockInvokeHandlers.set("save_provider_config", () => undefined);
+  mockInvokeHandlers.set("load_provider_configs", () => ({}));
   mockInvokeHandlers.set("clear_item_descriptions", () => undefined);
   mockInvokeHandlers.set("ensure_item_descriptions", (args: any) => {
     // Return items unchanged (no translation in mock)

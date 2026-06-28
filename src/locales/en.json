@@ -95,6 +95,7 @@
     "defaultEffort": "Effort Level",
     "ccConfig": "CC Configuration",
     "ccGuiSettings": "cc-gui Settings",
+    "provider": "Provider",
     "quickPresets": "Quick Presets",
     "deepseekPreset": "api.deepseek.com",
     "themeDark": "Dark",

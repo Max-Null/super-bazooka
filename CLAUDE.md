@@ -364,3 +364,4 @@ grep '"version"' package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml
 28. **interrupt 优雅停止**: 用户点击停止→先发 `control_request(subtype:"interrupt")` 到 stdin，等 3 秒让 CC 优雅退出，超时才 `pm.kill()`。
 29. **思考计时分段**: 每段 tool_use 前独立计时（`thinkingDurationMs`），总耗时 = 各段求和。去掉了实时 `setInterval` 计时器，不受审批暂停影响。
 30. **工具名 i18n**: `tools.Bash`→`命令行`、`tools.Write`→`写入文件` 等，`zh.json`/`en.json` 双份。`ChatPanel.vue` 和 `MessageBubble.vue` 共用 `toolLabel()` 映射。
+31. **Provider 配置持久化**: 每次切换 provider 时，apiKey/baseUrl/model 自动保存到 SQLite `settings` 表（key=`provider_config:{id}`，value=JSON）。切换回时自动恢复。Rust 端 2 个新命令（`save_provider_config`/`load_provider_configs`），前端 `switchProvider` 顺序：`saveCurrentConfig()` → `restoreConfig(id)` → `providerId = id`（必须先恢复值再切 providerId，防止 watcher 中间态错误写入 settings.json）。编辑时 `watch([apiKey,baseUrl,model])` 自动持久化。`PROVIDER_BASE_URLS` 常量供首次切换无记录时兜底。
