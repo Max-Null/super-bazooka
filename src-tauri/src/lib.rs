@@ -1,6 +1,7 @@
 pub mod db;
 pub mod process;
 pub mod protocol;
+pub mod provider;
 pub mod session;
 
 use std::sync::Arc;
@@ -167,12 +168,19 @@ async fn connect_llm(
     api_key: String,
     base_url: String,
     model: String,
+    provider_id: String,
 ) -> Result<String, String> {
+    let uses_anthropic = provider::find_provider(&provider_id)
+        .map(|p| p.test_uses_anthropic_format)
+        .unwrap_or(false);
+
     let session = state.session_manager.lock().await;
-    session
-        .test_connection(&api_key, &base_url, &model)
-        .await
-        .map_err(|e| format!("Connection failed: {}", e))
+    let result = if uses_anthropic {
+        session.test_connection_anthropic(&api_key).await
+    } else {
+        session.test_connection(&api_key, &base_url, &model).await
+    };
+    result.map_err(|e| format!("Connection failed: {}", e))
 }
 
 #[tauri::command]
@@ -525,8 +533,11 @@ struct ClaudeSettings {
     base_url: String,
     model: String,
     effort: String,
-    /// permissions.defaultMode: auto | plan | default | acceptEdits | bypassPermissions | dontAsk
     permission_mode: String,
+    /// 识别的 provider id（"deepseek"/"anthropic"/"openrouter"/.../"custom"）
+    provider_id: String,
+    /// 当前 provider 支持的模型列表
+    models: Vec<String>,
 }
 
 #[tauri::command]
@@ -539,23 +550,38 @@ fn get_claude_settings() -> Result<ClaudeSettings, String> {
         .map_err(|e| format!("解析 settings.json 失败: {}", e))?;
 
     let env = &json["env"];
+    // 读取 API key：同时检查 ANTHROPIC_API_KEY 和 ANTHROPIC_AUTH_TOKEN
+    let api_key = env["ANTHROPIC_API_KEY"].as_str()
+        .or(env["ANTHROPIC_AUTH_TOKEN"].as_str())
+        .unwrap_or("")
+        .to_string();
+    // 检测当前 provider
+    let provider_id = provider::detect_provider(env).to_string();
+    // 模型列表
+    let models: Vec<String> = provider::find_provider(&provider_id)
+        .map(|p| p.models.iter().map(|s| s.to_string()).collect())
+        .unwrap_or_default();
+
     Ok(ClaudeSettings {
-        api_key: env["ANTHROPIC_AUTH_TOKEN"].as_str().unwrap_or("").to_string(),
-        base_url: env["ANTHROPIC_BASE_URL"].as_str().unwrap_or("https://api.deepseek.com").to_string(),
+        api_key,
+        base_url: env["ANTHROPIC_BASE_URL"].as_str().unwrap_or("").to_string(),
         model: env["ANTHROPIC_MODEL"]
             .as_str()
             .or(env["ANTHROPIC_DEFAULT_OPUS_MODEL"].as_str())
-            .unwrap_or("deepseek-v4-pro[1M]")
+            .unwrap_or("")
             .to_string(),
         effort: json["effortLevel"].as_str().unwrap_or("high").to_string(),
         permission_mode: json["permissions"]["defaultMode"]
             .as_str()
             .unwrap_or("default")
             .to_string(),
+        provider_id,
+        models,
     })
 }
 
 /// 将 cc-gui 配置写入 ~/.claude/settings.json
+/// provider_id 用于写入正确的 env var 组合，切换时清除旧 provider 独有的 key
 #[tauri::command]
 fn set_claude_settings(
     api_key: String,
@@ -563,6 +589,7 @@ fn set_claude_settings(
     model: String,
     effort: String,
     permission_mode: String,
+    provider_id: String,
 ) -> Result<(), String> {
     let home = dirs::home_dir().ok_or("无法获取用户目录")?;
     let path = home.join(".claude").join("settings.json");
@@ -579,9 +606,62 @@ fn set_claude_settings(
         json["permissions"] = serde_json::Value::Object(serde_json::Map::new());
     }
 
-    json["env"]["ANTHROPIC_AUTH_TOKEN"] = serde_json::Value::String(api_key);
-    json["env"]["ANTHROPIC_BASE_URL"] = serde_json::Value::String(base_url);
-    json["env"]["ANTHROPIC_MODEL"] = serde_json::Value::String(model);
+    // 检测旧 provider，切换时清除只属于旧 provider 的 key
+    let old_provider = provider::detect_provider(&json["env"]);
+    let new_provider = provider_id.as_str();
+
+    // 收集新 provider 定义的 key 集合
+    let new_keys: std::collections::BTreeSet<&str> = provider::find_provider(new_provider)
+        .map(|p| p.env_template.iter().map(|(k, _)| *k).collect())
+        .unwrap_or_default();
+
+    // 收集所有 provider 预设中定义的 key（这些是"受管理"的 key）
+    let all_managed_keys: std::collections::BTreeSet<&str> = provider::PROVIDERS
+        .iter()
+        .flat_map(|p| p.env_template.iter().map(|(k, _)| *k))
+        .collect();
+
+    // 清除旧 provider 的受管理 key（但新 provider 也定义的 key 保留，会被下文覆盖）
+    if old_provider != new_provider && old_provider != "custom" {
+        if let Some(old_preset) = provider::find_provider(old_provider) {
+            let obj = json["env"].as_object_mut().unwrap();
+            for (key, _) in old_preset.env_template {
+                // 只清除不被新 provider 使用的 key，且该 key 不是用户自定义的
+                if !new_keys.contains(key) && all_managed_keys.contains(key) {
+                    obj.remove(*key);
+                }
+            }
+        }
+    }
+
+    // 写入新 provider 的 env 模板（占位 "" 用 api_key 填充）
+    if let Some(preset) = provider::find_provider(new_provider) {
+        for (key, default_val) in preset.env_template {
+            let val = if *default_val == "" {
+                // 空字符串占位 → 用用户填的 API key 或 model
+                if *key == "ANTHROPIC_AUTH_TOKEN" || *key == "ANTHROPIC_API_KEY" {
+                    &api_key
+                } else if *key == "ANTHROPIC_MODEL" {
+                    &model
+                } else {
+                    "" // 保持空（如 ANTHROPIC_BASE_URL="" 用于 Anthropic）
+                }
+            } else {
+                default_val
+            };
+            if val.is_empty() {
+                json["env"][*key] = serde_json::Value::String(String::new());
+            } else {
+                json["env"][*key] = serde_json::Value::String(val.to_string());
+            }
+        }
+    } else {
+        // 自定义模式：保留现有 env，只更新 api_key/base_url/model
+        json["env"]["ANTHROPIC_AUTH_TOKEN"] = serde_json::Value::String(api_key);
+        json["env"]["ANTHROPIC_BASE_URL"] = serde_json::Value::String(base_url);
+        json["env"]["ANTHROPIC_MODEL"] = serde_json::Value::String(model);
+    }
+
     json["effortLevel"] = serde_json::Value::String(effort);
     json["permissions"]["defaultMode"] = serde_json::Value::String(permission_mode);
 

@@ -37,7 +37,7 @@ const activeMode = computed({
 });
 
 // ── 自定义下拉 ──
-type DropdownKind = "lang" | "theme" | "font" | "ponytail" | "perm" | "effort" | "model";
+type DropdownKind = "lang" | "theme" | "font" | "ponytail" | "perm" | "effort" | "model" | "provider";
 const openDropdown = ref<DropdownKind | null>(null);
 function toggleDropdown(k: DropdownKind) {
   openDropdown.value = openDropdown.value === k ? null : k;
@@ -115,16 +115,32 @@ async function handleTest() {
   testResult.value = null; testError.value = null; isTesting.value = true;
   // 去掉 [1M] 等上下文窗口标注，API 不接受
   const model = settings.model.replace(/\[.*\]/, '').trim();
-  try { testResult.value = await connectLLM(settings.apiKey, settings.baseUrl, model); }
+  try { testResult.value = await connectLLM(settings.apiKey, settings.baseUrl, model, settings.providerId); }
   catch (err) { testError.value = String(err); }  /* ponytail: translateError applied in template display */
   finally { isTesting.value = false; }
 }
 
-const modelPresets = [
-  "deepseek-v4-pro[1M]",
-  "deepseek-v4-flash",
-  "deepseek-v4",
+// ── Provider 选择 ──
+interface ProviderOption { id: string; icon: string; label: string }
+const providerOptions: ProviderOption[] = [
+  { id: "anthropic", icon: "🔵", label: "Anthropic 官方" },
+  { id: "deepseek", icon: "🟢", label: "DeepSeek" },
+  { id: "openrouter", icon: "🟣", label: "OpenRouter" },
+  { id: "siliconflow", icon: "🔷", label: "硅基流动" },
+  { id: "zhipu", icon: "🔶", label: "智谱 GLM" },
+  { id: "kimi", icon: "🟠", label: "Kimi" },
+  { id: "minimax", icon: "🟡", label: "MiniMax" },
+  { id: "custom", icon: "⚙️", label: "自定义" },
 ];
+const currentProvider = computed(() => providerOptions.find(o => o.id === settings.providerId)!);
+
+function switchProvider(id: string) {
+  settings.providerId = id;
+  // 切换到预设的第一个模型
+  if (settings.models.length > 0) settings.model = settings.models[0];
+}
+
+const modelPresets = computed(() => settings.models);
 
 // ── settings.json 编辑器弹窗 ──
 const showJsonEditor = ref(false);
@@ -184,6 +200,43 @@ async function saveSettingsJson() {
           <div class="flex items-center gap-2 mb-1">
             <h3 class="text-[10px] font-semibold uppercase tracking-widest" :style="{ color: 'var(--text-muted)' }">{{ $t('settings.ccConfig') }}</h3>
             <button @click="openSettingsJson" class="text-[9px] px-1.5 py-0.5 rounded-full font-medium transition-colors hover:underline" :style="{ background: 'var(--accent-glow)', color: 'var(--accent)', cursor: 'pointer' }">{{ $t('settings.fromSettingsJson') }} ↗</button>
+          </div>
+          <!-- Provider 选择 -->
+          <div>
+            <label class="block text-xs font-medium mb-1.5" style="color:var(--text-muted)">Provider</label>
+            <div
+              class="settings-dropdown relative cursor-pointer rounded-lg px-3.5 py-2 text-sm flex items-center gap-1.5 select-none transition-colors"
+              :style="{
+                background: 'var(--bg-elevated)',
+                border: openDropdown === 'provider' ? '1px solid var(--accent)' : '1px solid var(--border-default)'
+              }"
+              @click.stop="toggleDropdown('provider' as DropdownKind)"
+            >
+              <span class="text-[13px]">{{ currentProvider.icon }}</span>
+              <span class="font-medium truncate flex-1">{{ currentProvider.label }}</span>
+              <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
+                :style="{ opacity: 0.4, transition: 'transform 150ms', transform: openDropdown === 'provider' ? 'rotate(180deg)' : '' }">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+              <Transition name="drop-settings">
+                <div
+                  v-if="openDropdown === 'provider'"
+                  class="absolute right-0 top-full mt-1 py-1 rounded-lg z-30 w-full"
+                  style="background: var(--bg-elevated); border: 1px solid var(--border-default); box-shadow: 0 8px 24px rgba(0,0,0,0.35)"
+                >
+                  <button
+                    v-for="o in providerOptions"
+                    :key="o.id"
+                    @click="switchProvider(o.id); closeDropdowns()"
+                    class="w-full text-left px-3 py-2 text-sm transition-colors hover:bg-[var(--bg-hover)]"
+                    :style="{ background: settings.providerId === o.id ? 'var(--accent-glow)' : 'transparent', color: settings.providerId === o.id ? 'var(--accent)' : 'var(--text-primary)' }"
+                  >
+                    <span class="text-[13px]">{{ o.icon }}</span>
+                    <span class="ml-1.5">{{ o.label }}</span>
+                  </button>
+                </div>
+              </Transition>
+            </div>
           </div>
           <div>
             <label class="block text-xs font-medium mb-1.5" style="color:var(--text-muted)">{{ $t('settings.baseUrl') }}</label>

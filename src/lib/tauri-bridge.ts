@@ -144,9 +144,10 @@ export async function listMessages(sessionId: string): Promise<MessageData[]> {
 export async function connectLLM(
   apiKey: string,
   baseUrl: string,
-  model: string
+  model: string,
+  providerId: string,
 ): Promise<string> {
-  return invoke("connect_llm", { apiKey, baseUrl, model });
+  return invoke("connect_llm", { apiKey, baseUrl, model, providerId });
 }
 
 // ── Approved Scenarios ──
@@ -228,6 +229,7 @@ export async function resolveClaudePath(): Promise<string> {
 /** 从 ~/.claude/settings.json 读取配置 */
 export async function getClaudeSettings(): Promise<{
   api_key: string; base_url: string; model: string; effort: string; permission_mode: string;
+  provider_id: string; models: string[];
 }> {
   return invoke("get_claude_settings");
 }
@@ -235,8 +237,9 @@ export async function getClaudeSettings(): Promise<{
 /** 将配置写入 ~/.claude/settings.json */
 export async function setClaudeSettings(
   apiKey: string, baseUrl: string, model: string, effort: string, permissionMode: string,
+  providerId: string,
 ): Promise<void> {
-  return invoke("set_claude_settings", { apiKey, baseUrl, model, effort, permissionMode });
+  return invoke("set_claude_settings", { apiKey, baseUrl, model, effort, permissionMode, providerId });
 }
 
 // ── 项目描述（翻译 + 缓存）──

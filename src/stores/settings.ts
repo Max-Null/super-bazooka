@@ -53,6 +53,8 @@ export const useSettingsStore = defineStore("settings", () => {
   const apiKey = ref("");
   const baseUrl = ref("https://api.deepseek.com");
   const model = ref("deepseek-v4-pro[1M]");
+  const providerId = ref("deepseek");
+  const models = ref<string[]>(["deepseek-v4-pro[1M]", "deepseek-v4-flash", "deepseek-v4"]);
 
   // ── UI 偏好 — localStorage ──
   const ui = loadUiSettings();
@@ -75,6 +77,8 @@ export const useSettingsStore = defineStore("settings", () => {
     apiKey.value = s.api_key;
     baseUrl.value = s.base_url;
     model.value = s.model;
+    providerId.value = s.provider_id;
+    if (s.models && s.models.length > 0) models.value = s.models;
     // effort 只在 cc-gui 没设置过时从 settings.json 取
     if (!ui.effort || ui.effort === getUiDefaults().effort) {
       const eff = s.effort as Effort;
@@ -103,9 +107,9 @@ export const useSettingsStore = defineStore("settings", () => {
 
   // 配置变更 → 写回 ~/.claude/settings.json
   watch(
-    [apiKey, baseUrl, model, effort, planMode, autoMode, permissionMode],
+    [apiKey, baseUrl, model, effort, planMode, autoMode, permissionMode, providerId],
     ([k, u, m, e]) => {
-      setClaudeSettings(k, u, m, e, resolvePermissionMode()).catch(() => {});
+      setClaudeSettings(k, u, m, e, resolvePermissionMode(), providerId.value).catch(() => {});
     },
     { deep: true },
   );
@@ -126,5 +130,5 @@ export const useSettingsStore = defineStore("settings", () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
   }, { deep: true });
 
-  return { apiKey, baseUrl, model, planMode, autoMode, permissionMode, effort, ponytailMode, theme, locale, fontSize, claudePath, resolvedClaudePath };
+  return { apiKey, baseUrl, model, providerId, models, planMode, autoMode, permissionMode, effort, ponytailMode, theme, locale, fontSize, claudePath, resolvedClaudePath };
 });

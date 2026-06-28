@@ -383,6 +383,26 @@ impl SessionManager {
         }
     }
 
+    /// Test connection to Anthropic Messages API (GET /v1/models, zero token cost).
+    pub async fn test_connection_anthropic(&self, api_key: &str) -> Result<String, String> {
+        let client = reqwest::Client::new();
+        let resp = client
+            .get("https://api.anthropic.com/v1/models")
+            .header("x-api-key", api_key)
+            .header("anthropic-version", "2023-06-01")
+            .send()
+            .await
+            .map_err(|e| format!("HTTP request failed: {}", e))?;
+
+        let status = resp.status();
+        if status.is_success() {
+            Ok(format!("Connected to Anthropic! Status: {}", status))
+        } else {
+            let body = resp.text().await.unwrap_or_default();
+            Err(format!("API error {}: {}", status, body))
+        }
+    }
+
     // ── Approved Scenarios ──
 
     pub fn add_approved_scenario(&self, tool_name: &str, pattern: &str) -> Result<(), String> {
