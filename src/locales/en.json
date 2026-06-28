@@ -183,7 +183,8 @@
     "attachTitle": "Attach file",
     "commands": "Commands",
     "commandsTitle": "Commands (Ctrl+K)",
-    "ponytailTitle": "Ponytail: Lazy mode"
+    "ponytailTitle": "Ponytail: Lazy mode",
+    "ponytailInstall": "Install Ponytail"
   },
 
   "status": {

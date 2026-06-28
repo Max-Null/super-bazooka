@@ -1,11 +1,28 @@
 ﻿<script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useI18n } from "vue-i18n";
 import { useSettingsStore } from "@/stores/settings";
+import { getClaudeDir, readFileContent } from "@/lib/tauri-bridge";
 import ContextIndicator from "./ContextIndicator.vue";
 import type { Effort } from "@/stores/settings";
 
 const { t } = useI18n();
+
+// ── Ponytail 插件检测 ──
+const hasPonytail = ref(false);
+// ponytail: 启动时读 enabledPlugins 检测，未安装则显示安装按钮。Tauri 不可用时静默跳过
+onMounted(async () => {
+  try {
+    const dir = await getClaudeDir();
+    const raw = await readFileContent(`${dir}/settings.json`);
+    const plugins: Record<string, boolean> = JSON.parse(raw).enabledPlugins || {};
+    hasPonytail.value = Object.keys(plugins).some(k => k.startsWith("ponytail@"));
+  } catch { /* 未安装或 Tauri 不可用，保持 false */ }
+});
+
+function installPonytail() {
+  emit("sendSlash", "请帮我安装 Ponytail 插件（ponytail@claude-plugins-official）");
+}
 
 const emit = defineEmits<{
   attachFile: [];
@@ -86,7 +103,6 @@ function closeMenus() {
 }
 
 // Click outside listener
-import { onMounted, onUnmounted } from "vue";
 function onBodyClick(e: MouseEvent) {
   if (!(e.target as HTMLElement).closest(".toolbar-dropdown")) {
     closeMenus();
@@ -211,8 +227,9 @@ const currentEffortLabel = computed(() => {
       </Transition>
     </div>
 
-    <!-- Ponytail dropdown -->
+    <!-- Ponytail: 已安装 → 下拉；未安装 → 安装按钮 -->
     <div
+      v-if="hasPonytail"
       class="toolbar-dropdown toolbar-pill flex items-center gap-1.5 text-[0.65rem] shrink-0 rounded-lg relative cursor-pointer"
       @click.stop="toggleMenu('ponytail')"
       :title="$t('toolbar.ponytailTitle')"
@@ -239,6 +256,15 @@ const currentEffortLabel = computed(() => {
         </div>
       </Transition>
     </div>
+    <button
+      v-else
+      @click="installPonytail"
+      class="toolbar-pill flex items-center gap-1 text-[0.6rem] shrink-0 rounded-lg"
+      :title="$t('toolbar.ponytailInstall')"
+    >
+      <span class="opacity-60">⬇</span>
+      <span class="font-medium">{{ $t('toolbar.ponytailInstall') }}</span>
+    </button>
 
     <!-- Mini divider -->
     <div class="w-px h-4 shrink-0" style="background: var(--border-dim)"></div>

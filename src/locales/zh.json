@@ -183,7 +183,8 @@
     "attachTitle": "附加文件",
     "commands": "指令",
     "commandsTitle": "指令 (Ctrl+K)",
-    "ponytailTitle": "Ponytail 精简模式"
+    "ponytailTitle": "Ponytail 精简模式",
+    "ponytailInstall": "安装 Ponytail"
   },
 
   "status": {
