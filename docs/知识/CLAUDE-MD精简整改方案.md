@@ -167,6 +167,70 @@ echo "/compact" | claude
 | 把每个设计决策都写进去 | 压缩时一条都活不下来，不如只留核心 5 条 |
 | 三层格式、彩色标记、emoji 分组 | 压缩时格式丢失，标记白做。格式不如内容精简重要 |
 | CLAUDE.md 和全局 CLAUDE.md 重复 | 全局放语言规范，项目级放项目特定规则 |
+| **把参考文档搬出 CLAUDE.md 但不建立查找机制** | 压缩后模型不知道文件存在，也不知道什么时候该看它——见下方「关键问题」 |
+
+---
+
+## 关键问题：搬出 CLAUDE.md 的文档怎么被找到？
+
+精简 CLAUDE.md 的本质是把内容"搬出去"（docs/、Memory、Hook）。但压缩后怎么办？模型不知道 `docs/知识/设计决策参考.md` 存在。
+
+### 三层防线
+
+建立冗余的查找触发机制，确保至少一层在压缩后存活：
+
+```
+压缩前                            压缩后
+═══════════                       ═══════════
+CLAUDE.md 触发规则                CLAUDE.md 指针（概率存活）
+"改 .rs 前 Read 设计决策参考"
+
+SessionStart Hook（不受影响）       SessionStart Hook（重新注入）
+→ behavioral-rules.md              → behavioral-rules.md
+
+Memory 前 200 行（不受影响）        Memory 前 200 行（重新加载）
+→ "改核心模块前查阅设计决策"          → "改核心模块前查阅设计决策"
+```
+
+### 具体做法
+
+**1. CLAUDE.md 加触发规则**
+
+不是在 CLAUDE.md 里列文档路径，而是写"什么情况下必须去看什么文档"：
+
+```markdown
+### 动手前必做
+1. Grep 已有实现
+2. **修改 src-tauri/ 下 .rs 文件前** → Read docs/知识/设计决策参考.md
+3. 写 UI 前 → Grep 同类组件模板
+```
+
+触发规则 > 文档索引。模型不需要记住所有文档，只需要记住"改 Rust 前该干什么"。
+
+**2. Memory 写冗余指针**
+
+每一份搬出 CLAUDE.md 的重要参考文档，在 Memory 里对应一条：
+
+```markdown
+---
+name: design-decisions-reference
+description: 修改 Rust 核心模块前必须查阅设计决策参考文档
+type: reference
+---
+
+修改 src-tauri/ 下任何 .rs 文件前，必须先 Read docs/知识/设计决策参考.md。
+Why: CLAUDE.md 精简到 86 行只保留 top 5 决策。压缩后如果触发规则丢失，这条 Memory 是最后防线。
+```
+
+Memory 每次会话重新加载，不受压缩影响。这是最稳的防线。
+
+**3. 避免沉没**
+
+以下情况需要两条 Memory 而不是一条：
+- 改了核心模块 → 指向设计决策参考
+- 改了 MCP 相关 → 指向 MCP 多源扫描规则（如果这条被移出 CLAUDE.md）
+
+每条 Memory 只做一件事：一个触发条件 → 一个文档路径。
 
 ---
 
@@ -174,12 +238,14 @@ echo "/compact" | claude
 
 | 指标 | 整改前 | 整改后 |
 |------|--------|--------|
-| cc-gui CLAUDE.md | 367 行 | ~55 行 |
+| cc-gui CLAUDE.md | 367 行 | 86 行（-76%） |
 | 全局 CLAUDE.md | 95 行 | 不变 |
 | behavioral-rules.md | 80 行 | 不变（Hook 注入） |
-| 完整设计决策 | CLAUDE.md 31 条 | docs/知识/设计决策参考.md 31 条 |
+| Memory 条目 | 6 条活跃 | +1 条（design-decisions-reference） |
+| 完整设计决策 | CLAUDE.md 31 条 | CLAUDE.md 5 条 + docs/知识/设计决策参考.md 31 条 |
 | UI 速查表 | CLAUDE.md 52 行 | 已删除（grep 同类组件替代） |
 | 功能索引表 | CLAUDE.md 18 行 | 已删除（grep 替代） |
+| 触发规则 | 无 | CLAUDE.md + Memory 双份 |
 
 ### 搬出的内容
 
