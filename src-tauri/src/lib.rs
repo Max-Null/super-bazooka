@@ -648,7 +648,12 @@ fn set_claude_settings(
                     "" // 保持空（如 ANTHROPIC_BASE_URL="" 用于 Anthropic）
                 }
             } else {
-                default_val
+                // 非空默认值 → 优先用用户输入（允许自定义代理 URL），空则回退预设默认值
+                if *key == "ANTHROPIC_BASE_URL" && !base_url.is_empty() {
+                    &base_url
+                } else {
+                    *default_val
+                }
             };
             if val.is_empty() {
                 json["env"][*key] = serde_json::Value::String(String::new());

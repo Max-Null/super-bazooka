@@ -153,9 +153,15 @@ pub fn detect_provider(env: &serde_json::Value) -> &'static str {
     // Heuristic: check distinctive env vars for each provider
     let base_url = env["ANTHROPIC_BASE_URL"].as_str().unwrap_or("");
 
-    if env.get("ANTHROPIC_API_KEY").and_then(|v| v.as_str()).map_or(false, |s| !s.is_empty())
-        && (base_url.is_empty() || base_url.contains("api.anthropic.com"))
-    {
+    // Anthropic: ANTHROPIC_API_KEY present (even empty) AND no ANTHROPIC_AUTH_TOKEN
+    // 兜底空 key 场景——切到 Anthropic 但还没填 key 时，ANTHROPIC_API_KEY 字段存在为 ""
+    // 此时必须仍识别为 Anthropic，否则切回其他 provider 时 scrubbing 逻辑会跳过清理
+    let has_api_key_field = env.get("ANTHROPIC_API_KEY").is_some();
+    let has_auth_token = env.get("ANTHROPIC_AUTH_TOKEN")
+        .and_then(|v| v.as_str())
+        .map_or(false, |s| !s.is_empty());
+    let base_url_ok = base_url.is_empty() || base_url.contains("api.anthropic.com");
+    if has_api_key_field && !has_auth_token && base_url_ok {
         return "anthropic";
     }
     if base_url.contains("deepseek") { return "deepseek"; }
