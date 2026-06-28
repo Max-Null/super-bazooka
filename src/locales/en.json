@@ -117,6 +117,7 @@
     "ponytailUltra": "Ultra — YAGNI extremist",
     "about": "About cc-gui",
     "aboutDesc": "Tauri 2 + Vue 3 + TypeScript · Rust · SQLite · DeepSeek API",
+    "changelog": "Changelog",
     "fromSettingsJson": "settings.json",
     "editSettingsJson": "Edit settings.json",
     "settingsJsonReadError": "Failed to read settings.json"

@@ -10,6 +10,8 @@ import { translateError } from "@/lib/utils";
 import ErrorBoundary from "@/components/shared/ErrorBoundary.vue";
 import ModalShell from "@/components/shared/ModalShell.vue";
 import ManagePanel from "@/components/shared/ManagePanel.vue";
+import MarkdownRenderer from "@/components/shared/MarkdownRenderer.vue";
+import changelogRaw from "../../../docs/变更记录.md?raw";
 
 const router = useRouter();
 const { t } = useI18n();
@@ -171,6 +173,7 @@ const modelPresets = computed(() => settings.models);
 
 // ── settings.json 编辑器弹窗 ──
 const showJsonEditor = ref(false);
+const showChangelog = ref(false);
 const showManagePanel = ref(false);
 const manageInitialTab = ref("");
 
@@ -604,7 +607,13 @@ async function saveSettingsJson() {
       <footer class="mt-8 pt-4" style="border-top:1px solid var(--border-dim)">
         <div class="flex items-center justify-between text-[10px]" :style="{ color: 'var(--text-muted)' }">
           <span>{{ $t('settings.aboutDesc') }}</span>
-          <span class="font-mono">v{{ appVersion }}</span>
+          <div class="flex items-center gap-3">
+            <button
+              class="hover:underline transition-colors"
+              @click="showChangelog = true"
+            >{{ $t('settings.changelog') }}</button>
+            <span class="font-mono">v{{ appVersion }}</span>
+          </div>
         </div>
       </footer>
     </div>
@@ -628,6 +637,15 @@ async function saveSettingsJson() {
         class="px-4 py-1.5 rounded text-xs font-medium transition-colors"
         :style="{ background: jsonEditorSaved ? 'var(--accent-dim)' : 'var(--accent)', color: 'var(--bg-root)' }"
       >{{ jsonEditorSaved ? $t('manage.saved') : $t('manage.save') }}</button>
+    </div>
+  </ModalShell>
+  <!-- 更新日志弹窗 -->
+  <ModalShell :open="showChangelog" size="lg" position="top" @close="showChangelog = false">
+    <template #header>
+      <span class="text-sm font-semibold" :style="{ color: 'var(--text-bright)' }">{{ $t('settings.changelog') }}</span>
+    </template>
+    <div class="changelog-content">
+      <MarkdownRenderer :content="changelogRaw" />
     </div>
   </ModalShell>
   <ManagePanel :open="showManagePanel" :initial-tab="manageInitialTab" @close="showManagePanel = false; manageInitialTab = ''" />
