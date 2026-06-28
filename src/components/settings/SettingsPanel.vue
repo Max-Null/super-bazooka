@@ -644,9 +644,7 @@ async function saveSettingsJson() {
     <template #header>
       <span class="text-sm font-semibold" :style="{ color: 'var(--text-bright)' }">{{ $t('settings.changelog') }}</span>
     </template>
-    <div class="changelog-content">
-      <MarkdownRenderer :content="changelogRaw" />
-    </div>
+    <MarkdownRenderer :content="changelogRaw" />
   </ModalShell>
   <ManagePanel :open="showManagePanel" :initial-tab="manageInitialTab" @close="showManagePanel = false; manageInitialTab = ''" />
   </ErrorBoundary>
