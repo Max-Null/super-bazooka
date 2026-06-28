@@ -9,15 +9,15 @@ import type { Effort } from "@/stores/settings";
 const { t } = useI18n();
 
 // ── Ponytail 插件检测 ──
-const hasPonytail = ref(false);
-// ponytail: 启动时读 enabledPlugins 检测，未安装则显示安装按钮。Tauri 不可用时静默跳过
+// null=检测中（不渲染），true=已安装（下拉），false=未安装（安装按钮）
+const hasPonytail = ref<boolean | null>(null);
 onMounted(async () => {
   try {
     const dir = await getClaudeDir();
     const raw = await readFileContent(`${dir}/settings.json`);
     const plugins: Record<string, boolean> = JSON.parse(raw).enabledPlugins || {};
     hasPonytail.value = Object.keys(plugins).some(k => k.startsWith("ponytail@"));
-  } catch { /* 未安装或 Tauri 不可用，保持 false */ }
+  } catch { hasPonytail.value = false; }
 });
 
 function installPonytail() {
@@ -227,9 +227,9 @@ const currentEffortLabel = computed(() => {
       </Transition>
     </div>
 
-    <!-- Ponytail: 已安装 → 下拉；未安装 → 安装按钮 -->
+    <!-- Ponytail: 检测中不渲染，已安装 → 下拉，未安装 → 安装按钮 -->
     <div
-      v-if="hasPonytail"
+      v-if="hasPonytail === true"
       class="toolbar-dropdown toolbar-pill flex items-center gap-1.5 text-[0.65rem] shrink-0 rounded-lg relative cursor-pointer"
       @click.stop="toggleMenu('ponytail')"
       :title="$t('toolbar.ponytailTitle')"
@@ -257,7 +257,7 @@ const currentEffortLabel = computed(() => {
       </Transition>
     </div>
     <button
-      v-else
+      v-else-if="hasPonytail === false"
       @click="installPonytail"
       class="toolbar-pill flex items-center gap-1 text-[0.6rem] shrink-0 rounded-lg"
       :title="$t('toolbar.ponytailInstall')"
