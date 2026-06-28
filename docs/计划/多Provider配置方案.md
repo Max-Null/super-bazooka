@@ -123,6 +123,89 @@ interface ProviderPreset {
 
 > **注意**：`ANTHROPIC_API_KEY` 必须显式设为空字符串 `""`（不能省略），否则 CC CLI 会优先用 `ANTHROPIC_API_KEY` 调 Anthropic 原生 API。Base URL 是 `https://openrouter.ai/api`（**不带** `/anthropic` 后缀）。不需要 `OPENROUTER_REFERRER` env var（官方文档未提及此变量）。
 
+#### 硅基流动（SiliconFlow）
+
+多 provider 网关，托管 DeepSeek、GLM、Qwen、Kimi 等模型。
+
+```json
+{
+  "id": "siliconflow",
+  "name": "硅基流动",
+  "envTemplate": {
+    "ANTHROPIC_AUTH_TOKEN": "",
+    "ANTHROPIC_BASE_URL": "https://api.siliconflow.cn/",
+    "ANTHROPIC_MODEL": "deepseek-ai/DeepSeek-V3",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "deepseek-ai/DeepSeek-V3",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "deepseek-ai/DeepSeek-V3",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "deepseek-ai/DeepSeek-V3",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "deepseek-ai/DeepSeek-V3"
+  },
+  "models": ["deepseek-ai/DeepSeek-V3", "deepseek-ai/DeepSeek-R1", "Pro/zai-org/GLM-5", "Qwen/Qwen3-235B-A22B"]
+}
+```
+
+> ⚠️ 注意：不支持 thinking 模式变体。
+
+#### 智谱 GLM
+
+```json
+{
+  "id": "zhipu",
+  "name": "智谱 GLM",
+  "envTemplate": {
+    "ANTHROPIC_AUTH_TOKEN": "",
+    "ANTHROPIC_BASE_URL": "https://open.bigmodel.cn/api/anthropic",
+    "ANTHROPIC_MODEL": "glm-5",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "glm-5",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "glm-5",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "glm-5",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "glm-5"
+  },
+  "models": ["glm-5", "glm-5.1", "glm-4.7"]
+}
+```
+
+#### Kimi（月之暗面）
+
+```json
+{
+  "id": "kimi",
+  "name": "Kimi",
+  "envTemplate": {
+    "ANTHROPIC_AUTH_TOKEN": "",
+    "ANTHROPIC_BASE_URL": "https://api.moonshot.cn/anthropic",
+    "ANTHROPIC_MODEL": "kimi-k2.5",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "kimi-k2.5",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "kimi-k2.5",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "kimi-k2.5",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "kimi-k2.5",
+    "ENABLE_TOOL_SEARCH": "false"
+  },
+  "models": ["kimi-k2.5", "kimi-k2.6"]
+}
+```
+
+> ⚠️ 注意：需设置 `ENABLE_TOOL_SEARCH: false` 避免循环中消耗过多 token。
+
+#### MiniMax
+
+```json
+{
+  "id": "minimax",
+  "name": "MiniMax",
+  "envTemplate": {
+    "ANTHROPIC_AUTH_TOKEN": "",
+    "ANTHROPIC_BASE_URL": "https://api.minimaxi.com/anthropic",
+    "ANTHROPIC_MODEL": "minimax-m2.7",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "minimax-m2.7",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "minimax-m2.7",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "minimax-m2.7",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "minimax-m2.7"
+  },
+  "models": ["minimax-m2.7"]
+}
+```
+
 #### 自定义
 
 ```json
@@ -195,14 +278,15 @@ settings.json env 块
 
 ```html
 <div class="settings-dropdown">
-  <!-- 选中项显示 provider 图标 + 名称 -->
-  <span>🔵 Anthropic</span>  <!-- 或 🟢 DeepSeek / 🟣 OpenRouter / ⚙️ 自定义 -->
-  
-  <!-- 下拉选项 -->
+  <span>🟢 DeepSeek</span>
   <div>
-    <button>🔵 Anthropic</button>
+    <button>🔵 Anthropic 官方</button>
     <button>🟢 DeepSeek</button>
     <button>🟣 OpenRouter</button>
+    <button>🔷 硅基流动</button>
+    <button>🔶 智谱 GLM</button>
+    <button>🟠 Kimi</button>
+    <button>🟡 MiniMax</button>
     <button>⚙️ 自定义</button>
   </div>
 </div>
@@ -235,11 +319,15 @@ struct ClaudeSettings {
 ### 6.2 内置预设
 
 ```rust
-// 用 const 定义，编译期内嵌
+// 8 个内置预设（全部有原生 Anthropic 兼容端点，无需代理）
 const PROVIDERS: &[ProviderPreset] = &[
     ProviderPreset { id: "anthropic", name: "Anthropic", ... },
     ProviderPreset { id: "deepseek", name: "DeepSeek", ... },
     ProviderPreset { id: "openrouter", name: "OpenRouter", ... },
+    ProviderPreset { id: "siliconflow", name: "硅基流动", ... },
+    ProviderPreset { id: "zhipu", name: "智谱 GLM", ... },
+    ProviderPreset { id: "kimi", name: "Kimi", ... },
+    ProviderPreset { id: "minimax", name: "MiniMax", ... },
 ];
 ```
 
