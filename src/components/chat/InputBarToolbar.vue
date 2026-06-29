@@ -67,7 +67,7 @@ const currentPonytail = computed(() => ponytailOptions.find(o => o.value === set
 function selectPonytail(value: "off" | "lite" | "full" | "ultra") {
   settings.ponytailMode = value;
   openMenu.value = null;
-  emit("sendSlash", `/ponytail ${value}`);
+  // /ponytail 命令由 ChatPanel 的 settings.ponytailMode watcher 统一发送
 }
 
 // ── Custom dropdowns ──
@@ -140,6 +140,9 @@ const currentEffortLabel = computed(() => {
 
 <template>
   <div class="toolbar flex items-center gap-1.5 max-w-3xl mx-auto pb-1 select-none">
+    <!-- 外部注入按钮（debug/LLM 切换等），左对齐 -->
+    <slot name="left" />
+
     <!-- 📎 Attach File -->
     <button
       @click="emit('attachFile')"

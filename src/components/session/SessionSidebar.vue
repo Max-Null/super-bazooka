@@ -4,7 +4,7 @@ import { useRouter } from "vue-router";
 
 import { useSessionStore } from "@/stores/session";
 import { useChatStore } from "@/stores/chat";
-import { useDebugLog } from "@/composables/useDebugLog";
+
 import { useNewSession } from "@/composables/useNewSession";
 import { listMessages } from "@/lib/tauri-bridge";
 import { formatTokenCount } from "@/lib/utils";
@@ -13,7 +13,7 @@ const router = useRouter();
 
 const sessionStore = useSessionStore();
 const chatStore = useChatStore();
-const debugLog = useDebugLog();
+
 const { handleNew } = useNewSession();
 
 const searchQuery = ref("");
@@ -30,7 +30,7 @@ onMounted(async () => { await sessionStore.loadSessions(); });
 
 async function handleSelect(id: string) {
   sessionStore.setActiveSession(id);
-  debugLog.clear();
+  // ponytail: clear 移到 handleSend / handleNew，此处查看历史不清理
   try {
     const msgs = await listMessages(id);
     chatStore.loadMessages(msgs.map(m => ({

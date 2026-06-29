@@ -203,6 +203,24 @@ impl StreamLine {
                             StreamFrontendEvent::empty(event_type, session_id)
                         }
                     }
+                    // message_delta 携带该轮 assistant 的最终 token 使用量
+                    Some("message_delta") => {
+                        let usage = &ev["usage"];
+                        StreamFrontendEvent {
+                            event_type: "token_usage".to_string(),
+                            session_id: session_id.to_string(),
+                            text: String::new(),
+                            thinking: String::new(),
+                            tool_use: None,
+                            control_request: None,
+                            is_final: false,
+                            error: None,
+                            duration_ms: None,
+                            input_tokens: usage["input_tokens"].as_u64().map(|v| v as u32),
+                            output_tokens: usage["output_tokens"].as_u64().map(|v| v as u32),
+                            cost_usd: None,
+                        }
+                    }
                     _ => StreamFrontendEvent::empty(event_type, session_id),
                 }
             }
@@ -261,9 +279,10 @@ impl StreamLine {
                     is_final: false,
                     error: None,
                     duration_ms: None,
-                    input_tokens: None,
-                    output_tokens: None,
-                    cost_usd: None,
+                    // assistant 事件携带 message.usage，DeepSeek 等后端 result 事件可能不含 usage
+                    input_tokens: self.inner["message"]["usage"]["input_tokens"].as_u64().map(|v| v as u32),
+                    output_tokens: self.inner["message"]["usage"]["output_tokens"].as_u64().map(|v| v as u32),
+                    cost_usd: self.inner["total_cost_usd"].as_f64(),
                 }
             }
             "result" => {

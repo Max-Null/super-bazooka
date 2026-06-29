@@ -458,6 +458,39 @@ impl SessionManager {
         }
         Ok(list)
     }
+
+    /// 保存会话的 debug 日志行（JSON 数组）
+    pub fn save_debug_log(&self, session_id: &str, lines_json: &str) -> Result<(), String> {
+        let conn = self.db.conn.lock().map_err(|e| format!("DB lock: {}", e))?;
+        conn.execute(
+            "UPDATE sessions SET debug_log = ?1 WHERE id = ?2",
+            params![lines_json, session_id],
+        )
+        .map_err(|e| format!("DB save debug_log: {}", e))?;
+        Ok(())
+    }
+
+    /// 保存会话的 stderr 日志行（JSON 数组）
+    pub fn save_stderr_log(&self, session_id: &str, lines_json: &str) -> Result<(), String> {
+        let conn = self.db.conn.lock().map_err(|e| format!("DB lock: {}", e))?;
+        conn.execute(
+            "UPDATE sessions SET stderr_log = ?1 WHERE id = ?2",
+            params![lines_json, session_id],
+        )
+        .map_err(|e| format!("DB save stderr_log: {}", e))?;
+        Ok(())
+    }
+
+    /// 加载会话的 debug/stderr 日志行（返回 JSON 字符串或 None）
+    pub fn load_session_logs(&self, session_id: &str) -> Result<(Option<String>, Option<String>), String> {
+        let conn = self.db.conn.lock().map_err(|e| format!("DB lock: {}", e))?;
+        conn.query_row(
+            "SELECT debug_log, stderr_log FROM sessions WHERE id = ?1",
+            params![session_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(|e| format!("DB load session logs: {}", e))
+    }
 }
 
 // ── Helpers ──

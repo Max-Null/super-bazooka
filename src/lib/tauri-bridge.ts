@@ -114,8 +114,8 @@ export interface MessageData {
   created_at: string;
 }
 
-export async function createSession(model?: string): Promise<SessionData> {
-  return invoke("create_session", { model: model ?? null });
+export async function createSession(model?: string, cwd?: string): Promise<SessionData> {
+  return invoke("create_session", { model: model ?? null, cwd: cwd ?? null });
 }
 
 export async function listSessions(): Promise<SessionData[]> {
@@ -309,6 +309,21 @@ export async function getAutoModeStatus(): Promise<boolean> {
 /** Read a file as base64-encoded string (for image thumbnails) */
 export async function readFileBase64(path: string): Promise<string> {
   return invoke("read_file_base64", { path });
+}
+
+/** 持久化会话 debug 日志 */
+export async function saveSessionDebugLog(sessionId: string, linesJson: string): Promise<void> {
+  return invoke("save_session_debug_log", { sessionId, linesJson });
+}
+
+/** 持久化会话 stderr 日志 */
+export async function saveSessionStderrLog(sessionId: string, linesJson: string): Promise<void> {
+  return invoke("save_session_stderr_log", { sessionId, linesJson });
+}
+
+/** 加载会话日志（返回 [debugJson, stderrJson] 或 null） */
+export async function loadSessionLogs(sessionId: string): Promise<[string | null, string | null]> {
+  return invoke("load_session_logs", { sessionId });
 }
 
 /**

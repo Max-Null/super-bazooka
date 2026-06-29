@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Message } from "@/stores/chat";
-import { ref, computed, nextTick } from "vue";
+import { ref, computed, nextTick, onMounted, onUnmounted } from "vue";
 import { useI18n } from "vue-i18n";
 
 import { isImageFile, useFilePreview } from "@/composables/useFilePreview";
@@ -16,6 +16,12 @@ function toolLabel(name: string): string {
   return translated !== key ? translated : name;
 }
 
+
+// 每秒 tick，驱动流式期间的工具执行计时实时更新
+const now = ref(Date.now());
+let nowTimer: ReturnType<typeof setInterval> | null = null;
+onMounted(() => { nowTimer = setInterval(() => now.value = Date.now(), 1000); });
+onUnmounted(() => { if (nowTimer) clearInterval(nowTimer); });
 
 const props = defineProps<{ message: Message }>();
 const emit = defineEmits<{
@@ -67,16 +73,16 @@ function onEditKeydown(e: KeyboardEvent) {
 function totalThinkingMs(): number {
   return props.message.toolUses.reduce((sum, tu) => sum + (tu.thinkingDurationMs || 0), 0);
 }
-// ── Elapsed display ──
+// ── Elapsed display（思考时间，不含工具执行）──
 const elapsedSeconds = computed(() => {
-  // 结束后用 CC 报告的精确耗时
-  if (props.message.durationMs) {
-    return (props.message.durationMs / 1000).toFixed(1);
-  }
-  // 流式期间：各段 tool_use 前思考时间求和
+  // 各段 tool_use 前思考时间求和（精确，流式和结束后统一）
   const thinking = totalThinkingMs();
   if (thinking > 0) {
     return (thinking / 1000).toFixed(1);
+  }
+  // 纯文本回复（无工具调用）fallback 到 CC 报告的耗时
+  if (props.message.durationMs) {
+    return (props.message.durationMs / 1000).toFixed(1);
   }
   return null;
 });
@@ -186,6 +192,9 @@ function formatJSON(obj: unknown): string {
           <summary class="px-2.5 py-1.5 cursor-pointer select-none transition-colors hover:bg-[var(--bg-hover)]" style="color:var(--text-secondary)">
             <span class="font-medium" style="color:var(--violet)">{{ toolLabel(tu.name) }}</span>
             <span v-if="tu.thinkingDurationMs" class="ml-1" style="color:var(--text-muted)">🧠{{ (tu.thinkingDurationMs / 1000).toFixed(1) }}s</span>
+            <span v-if="tu.executionDurationMs" class="ml-1" :style="{ color: tu.executionDurationMs > 5000 ? 'var(--coral)' : 'var(--text-muted)' }">⚡{{ (tu.executionDurationMs / 1000).toFixed(1) }}s</span>
+            <!-- 流式期间最后一个工具无 executionDurationMs → 显示实时执行计时 -->
+            <span v-if="!tu.executionDurationMs && tu.startedAt && message.isStreaming && tu === message.toolUses[message.toolUses.length-1]" class="ml-1 animate-pulse" style="color:var(--accent)">⚡{{ ((now - tu.startedAt) / 1000).toFixed(1) }}s</span>
             <span class="ml-2" style="color:var(--text-muted)">
               {{ summarizeInput(tu.input) }}
             </span>
@@ -272,23 +281,7 @@ function formatJSON(obj: unknown): string {
         </div>
       </div>
 
-      <!-- Token + Time stats (only for finished assistant messages) -->
-      <div
-        v-if="message.role === 'assistant' && !message.isStreaming && (message.durationMs || message.inputTokens)"
-        class="flex items-center gap-3 mt-1.5 text-[10px]"
-        :style="{ color: 'var(--text-muted)' }"
-      >
-        <span v-if="message.durationMs">⏱ {{ (message.durationMs / 1000).toFixed(1) }}s</span>
-        <span v-if="message.inputTokens">↑{{ message.inputTokens }}</span>
-        <span v-if="message.outputTokens">↓{{ message.outputTokens }}</span>
-        <span
-          v-if="message.costUSD"
-          class="font-mono"
-          :style="{ color: 'var(--accent)' }"
-        >${{ message.costUSD.toFixed(4) }}</span>
-      </div>
-
-      <!-- Thinking (collapsed by default) — timer + tokens integrated in summary -->
+      <!-- Thinking (collapsed by default) — 思考摘要行已包含时间/token/cost，无需额外统计条 -->
       <details v-if="message.thinking" class="group" :open="message.isStreaming && !message.content">
         <summary class="text-xs cursor-pointer select-none px-2.5 py-1.5 rounded-md transition-colors hover:bg-[var(--bg-elevated)]" style="color:var(--amber-dim)">
           <span class="inline-flex items-center gap-1.5">

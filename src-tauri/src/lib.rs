@@ -120,9 +120,28 @@ async fn send_message(
         let _ = session.auto_title_from_first_message(&session_id, &title_text);
     }
 
-    // Spawn claude using the three-thread model
     // Use frontend-provided model if given, otherwise fall back to session's stored model
     let spawn_model = model.filter(|m| !m.is_empty()).unwrap_or(session_model);
+
+    // 如果 CC 进程已在运行 → 通过 stdin 发送排队消息（不打断当前回合）
+    {
+        let pm = state.process_manager.lock().await;
+        if pm.get(&session_id).is_some() {
+            let full_message = build_user_message(&message, &file_paths);
+            let user_msg = serde_json::json!({
+                "type": "user",
+                "message": { "role": "user", "content": full_message }
+            });
+            let mut msg_json = serde_json::to_string(&user_msg)
+                .map_err(|e| format!("序列化失败: {}", e))?;
+            msg_json.push('\n');
+            let mut stdin_mgr = state.stdin_manager.lock().await;
+            stdin_mgr.send(&session_id, &msg_json).await?;
+            return Ok(session_id);
+        }
+    }
+
+    // 无运行进程 → 新 spawn
     let params = SpawnParams {
         session_id: session_id.clone(),
         message,
@@ -144,7 +163,6 @@ async fn send_message(
         .await
         .map_err(|e| format!("Failed: {}", e))?;
 
-    // Register in process manager for future kill/lifecycle
     {
         let mut pm = state.process_manager.lock().await;
         pm.register(session_id.clone(), managed);
@@ -203,9 +221,21 @@ async fn stop_session(
 async fn create_session(
     state: State<'_, AppState>,
     model: Option<String>,
+    cwd: Option<String>,
 ) -> Result<session::Session, String> {
     let session = state.session_manager.lock().await;
-    let cwd = detect_project_root();
+    let cwd = match cwd.filter(|p| !p.is_empty()) {
+        Some(p) => {
+            // 校验：canonicalize 解析符号链接 + 验证是目录
+            let canonical = std::fs::canonicalize(&p)
+                .map_err(|e| format!("无效的工作区路径 '{}': {}", p, e))?;
+            if !canonical.is_dir() {
+                return Err(format!("路径不是目录: {}", p));
+            }
+            canonical.to_string_lossy().to_string()
+        }
+        None => detect_project_root(),
+    };
     session.create_session(&cwd, &model.unwrap_or_default())
 }
 
@@ -641,7 +671,13 @@ fn set_claude_settings(
             let val = if *default_val == "" {
                 // 空字符串占位 → 用用户填的 API key 或 model
                 if *key == "ANTHROPIC_AUTH_TOKEN" || *key == "ANTHROPIC_API_KEY" {
-                    &api_key
+                    // 前端传空 api_key 时，保留 settings.json 中已有的非空值，防止误清空
+                    if api_key.is_empty() {
+                        let existing = json["env"][*key].as_str().unwrap_or("");
+                        if !existing.is_empty() { existing } else { "" }
+                    } else {
+                        &api_key
+                    }
                 } else if *key == "ANTHROPIC_MODEL" {
                     &model
                 } else {
@@ -752,13 +788,16 @@ fn load_provider_configs(
     Ok(configs)
 }
 
-/// 从 ~/.claude/settings.json 读取 ANTHROPIC_AUTH_TOKEN（内部翻译用）
+/// 从 ~/.claude/settings.json 读取 API key（内部翻译用）
+/// ANTHROPIC_API_KEY 优先级高于 ANTHROPIC_AUTH_TOKEN，与 CC CLI 行为一致
 fn read_claude_api_key() -> Option<String> {
     let home = dirs::home_dir()?;
     let path = home.join(".claude").join("settings.json");
     let raw = std::fs::read_to_string(&path).ok()?;
     let json: serde_json::Value = serde_json::from_str(&raw).ok()?;
-    json["env"]["ANTHROPIC_AUTH_TOKEN"].as_str().map(|s| s.to_string())
+    json["env"]["ANTHROPIC_API_KEY"].as_str()
+        .or(json["env"]["ANTHROPIC_AUTH_TOKEN"].as_str())
+        .map(|s| s.to_string())
 }
 
 /// 读取 CLAUDE_CODE_SUBAGENT_MODEL，fallback 到 deepseek-chat
@@ -957,6 +996,39 @@ async fn generate_mcp_descriptions(
     Ok(cached)
 }
 
+/// 持久化会话 debug 日志（JSON 字符串数组）
+#[tauri::command]
+async fn save_session_debug_log(
+    state: State<'_, AppState>,
+    session_id: String,
+    lines_json: String,
+) -> Result<(), String> {
+    let session = state.session_manager.lock().await;
+    session.save_debug_log(&session_id, &lines_json)
+}
+
+/// 持久化会话 stderr 日志
+#[tauri::command]
+async fn save_session_stderr_log(
+    state: State<'_, AppState>,
+    session_id: String,
+    lines_json: String,
+) -> Result<(), String> {
+    let session = state.session_manager.lock().await;
+    session.save_stderr_log(&session_id, &lines_json)
+}
+
+/// 加载会话的 debug/stderr 日志（返回 [debug_json, stderr_json]）
+#[tauri::command]
+async fn load_session_logs(
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<Vec<Option<String>>, String> {
+    let session = state.session_manager.lock().await;
+    let (debug, stderr) = session.load_session_logs(&session_id)?;
+    Ok(vec![debug, stderr])
+}
+
 #[tauri::command]
 async fn reveal_in_explorer(path: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
@@ -1042,9 +1114,30 @@ pub fn run() {
             generate_mcp_descriptions,
             clear_item_descriptions,
             clear_mcp_descriptions,
+            save_session_debug_log,
+            save_session_stderr_log,
+            load_session_logs,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// 构建含附件路径的用户消息文本，process.rs 复用以避免重复
+pub(crate) fn build_user_message(text: &str, file_paths: &[String]) -> String {
+    if file_paths.is_empty() {
+        return text.to_string();
+    }
+    let mut msg = text.to_string();
+    msg.push_str("\n\n[📎 附件文件:");
+    for (i, p) in file_paths.iter().enumerate() {
+        let name = std::path::Path::new(p)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(p);
+        msg.push_str(&format!("\n{}. {} — {}", i + 1, name, p));
+    }
+    msg.push(']');
+    msg
 }
 
 fn chrono_now() -> String {

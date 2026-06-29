@@ -3,6 +3,7 @@ import { ref, nextTick, watch, onMounted } from "vue";
 import { useChatStore } from "@/stores/chat";
 import { useSessionStore } from "@/stores/session";
 import { useDebugLog } from "@/composables/useDebugLog";
+import { useStderrLog } from "@/composables/useStderrLog";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import {
   sendMessage,
@@ -11,8 +12,7 @@ import {
   stopSession,
   listMessages,
   writeFile,
-  updateMessageContent,
-  deleteMessagesAfter,
+  loadSessionLogs,
 } from "@/lib/tauri-bridge";
 import { useFilePreview } from "@/composables/useFilePreview";
 import { useSettingsStore } from "@/stores/settings";
@@ -36,6 +36,7 @@ const chat = useChatStore();
 const session = useSessionStore();
 const settings = useSettingsStore();
 const debugLog = useDebugLog();
+const stderrLog = useStderrLog();
 const scrollContainer = ref<HTMLElement | null>(null);
 const isNearBottom = ref(true);
 const autoScroll = ref(true);
@@ -53,6 +54,17 @@ function toolLabel(name: string): string {
 // 复制 debug 日志
 function copyDebugLog() {
   const text = debugLog.lines.value.join('\n');
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand('copy');
+  document.body.removeChild(ta);
+}
+
+// 复制 LLM stderr 日志
+function copyStderrLog() {
+  const text = stderrLog.lines.value.join('\n');
   const ta = document.createElement('textarea');
   ta.value = text;
   document.body.appendChild(ta);
@@ -135,6 +147,28 @@ onMounted(async () => {
 
 // Sync on store change
 watch(() => settings.autoMode, (v) => { autoModeActive.value = v; });
+// Ponytail 模式变更（设置面板或工具栏）→ 发送 /ponytail 命令给 CC
+let ponytailInit = true;
+watch(() => settings.ponytailMode, (v) => {
+  if (ponytailInit) { ponytailInit = false; return; }  // 跳过初始值
+  handleSend(`/ponytail ${v}`).catch(() => {});
+});
+// 会话切换时同步 debug 日志到当前会话
+watch(() => session.activeSessionId, async (sid) => {
+  if (!sid) return;
+  debugLog.setSession(sid);
+  stderrLog.setSession(sid);
+  // 从 DB 恢复持久化的日志
+  try {
+    const [debugJson, stderrJson] = await loadSessionLogs(sid);
+    if (debugJson) {
+      try { debugLog.importLines(sid, JSON.parse(debugJson)); } catch {}
+    }
+    if (stderrJson) {
+      try { stderrLog.importLines(sid, JSON.parse(stderrJson)); } catch {}
+    }
+  } catch { /* 静默，DB 加载失败不影响功能 */ }
+}, { immediate: true });
 
 // ── 命令面板聊天命令监听 ──
 const { chatCommand } = useChatCommandBus();
@@ -180,6 +214,23 @@ watch(() => chatCommand.value.ts, (ts) => {
       break;
     }
     case "slash-clear": handleSend("/clear"); break;
+    case "install-ponytail": handleSend("请帮我安装 Ponytail 插件（ponytail@claude-plugins-official）"); break;
+    default:
+      if (action.startsWith("switch-workspace:")) {
+        const newPath = action.slice("switch-workspace:".length);
+        if (session.activeSessionId && chat.isProcessing) {
+          stopSession(session.activeSessionId).catch(() => {});
+        }
+        chat.clearMessages();
+        isNearBottom.value = true;
+        autoScroll.value = true;
+        session.createSession(settings.model, newPath).then(() => {
+          showStatus(t('status.workspaceSwitched', { path: newPath }));
+        }).catch(() => {
+          showStatus(t('status.sessionCreateFailed'));
+        });
+      }
+      break;
     case "export-session":
       if (!session.activeSessionId || chat.messages.length === 0) {
         showStatus(t('status.exportEmpty'));
@@ -258,6 +309,7 @@ function onScrollThrottled() {
 
 async function handleSend(text: string) {
   debugLog.clear();
+  stderrLog.clear();
   savedPlan.value = { plan: "", planFilePath: "" };  // 新消息清除旧计划
   let sid = session.activeSessionId;
   if (!sid) sid = await session.createSession(settings.model);
@@ -271,7 +323,10 @@ async function handleSend(text: string) {
 
   // 用户消息由 Rust 后端在 send_message 中统一保存，
   // 前端不再重复保存，避免历史回显时出现双份用户消息。
-  chat.startAssistantMessage();
+  const isMidProcessing = chat.isProcessing;
+  if (!isMidProcessing) {
+    chat.startAssistantMessage();
+  }
   chat.isProcessing = true;
   autoScroll.value = true;
   isNearBottom.value = true;
@@ -287,7 +342,7 @@ async function handleSend(text: string) {
       filePaths: filePaths.length > 0 ? filePaths : undefined,
       claudePath: settings.claudePath || undefined,
     });
-    session.loadSessions().catch(() => {});
+    // 侧栏统计在 useStreamProcessor result 事件后刷新（token 已入库）
   } catch (err) {
     debugLog.add(`>>> Error: ${err}`);
     debugLog.visible.value = true;
@@ -334,28 +389,11 @@ async function handleDeny() {
   chat.resolveControlRequest("deny");
 }
 
-// ── Edit + Resend: truncate subsequent messages, update content, resend ──
+// ── Edit + Resend: 保留原消息不动，新消息追加到末尾 ──
 async function handleEditSave(id: string, newContent: string) {
   const originalMsg = chat.messages.find(m => m.id === id);
-  const sid = session.activeSessionId;
-  if (!sid) return;
 
-  chat.updateMessage(id, newContent);
-
-  const persistContent = originalMsg?.attachments?.length
-    ? JSON.stringify({ text: newContent, attachments: originalMsg.attachments })
-    : newContent;
-
-  try {
-    await updateMessageContent(id, sid, persistContent);
-    await deleteMessagesAfter(id, sid);
-  } catch (e) {
-    console.error("Failed to persist edit:", e);
-  }
-
-  chat.truncateAfterMessage(id);
-
-  // 恢复原始附件到文件列表，使 CLI 重新获得 --add-dir 权限
+  // 恢复原始附件
   if (originalMsg?.attachments?.length) {
     attachedFiles.value = originalMsg.attachments.map(a => ({
       name: a.name,
@@ -367,7 +405,14 @@ async function handleEditSave(id: string, newContent: string) {
 }
 
 async function handleResend(id: string, content: string) {
-  // Resend the same message text
+  const originalMsg = chat.messages.find(m => m.id === id);
+  // 恢复原始附件
+  if (originalMsg?.attachments?.length) {
+    attachedFiles.value = originalMsg.attachments.map(a => ({
+      name: a.name,
+      path: a.path,
+    }));
+  }
   await handleSend(content);
 }
 
@@ -603,12 +648,12 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAut
           </p>
           <div class="flex items-center justify-center gap-2 text-[11px]" style="color:var(--text-muted)">
             <kbd class="px-1.5 py-0.5 rounded text-[10px]" style="background:var(--bg-elevated); border:1px solid var(--border-dim)">Enter</kbd>
-            <span>send</span>
+            <span>{{ $t('chat.welcomeSend') }}</span>
             <span style="color:var(--border-default)">·</span>
             <kbd class="px-1.5 py-0.5 rounded text-[10px]" style="background:var(--bg-elevated); border:1px solid var(--border-dim)">Shift</kbd>
             <span>+</span>
             <kbd class="px-1.5 py-0.5 rounded text-[10px]" style="background:var(--bg-elevated); border:1px solid var(--border-dim)">Enter</kbd>
-            <span>newline</span>
+            <span>{{ $t('chat.welcomeNewline') }}</span>
           </div>
         </div>
       </div>
@@ -644,30 +689,31 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAut
           :start-timestamp="chat.currentAssistantMsg?.timestamp"
         />
       </div>
-
-      <!-- Debug -->
-      <!-- Debug（鼠标移入显示复制图标）-->
-      <div v-if="debugLog.lines.value.length > 0" class="max-w-3xl mx-auto px-4 pb-4 group">
-        <div class="flex items-center gap-2">
-          <button @click="debugLog.toggle()" class="text-[11px] transition-colors hover:text-[var(--text-secondary)]" style="color:var(--text-muted)">
-            {{ debugLog.visible.value ? '▾' : '▸' }} Debug ({{ debugLog.lines.value.length }})
-          </button>
-          <button
-            @click="copyDebugLog()"
-            class="w-4 h-4 flex items-center justify-center rounded opacity-0 group-hover:opacity-100 transition-opacity hover:bg-[var(--bg-hover)]"
-            :style="{ color: 'var(--text-muted)' }"
-            :title="$t('chat.copy')"
-          >
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-          </button>
-        </div>
-        <pre
-          v-if="debugLog.visible.value"
-          class="mt-2 p-3 rounded-lg text-[11px] font-mono leading-relaxed whitespace-pre-wrap break-all max-h-48 overflow-y-auto"
-          style="background:var(--bg-root); border:1px solid var(--border-dim); color:var(--text-muted)"
-        >{{ debugLog.lines.value.join('\n') }}</pre>
-      </div>
     </div>
+
+    <!-- Debug / LLM 展开内容：绝对定位弹出 + 点击外部关闭 -->
+    <Teleport to="body">
+      <div
+        v-if="debugLog.visible.value || stderrLog.visible.value"
+        class="fixed inset-0 z-40"
+        @click="debugLog.visible.value = false; stderrLog.visible.value = false"
+      >
+        <div
+          @click.stop
+          class="absolute bottom-[160px] left-4 right-4 max-w-3xl mx-auto flex flex-col gap-1.5"
+        >
+          <div class="flex items-center gap-4 self-start px-3 py-1 rounded-md" style="background: var(--bg-surface); border: 1px solid var(--border-dim); box-shadow: 0 2px 6px rgba(0,0,0,0.15)">
+            <span v-if="debugLog.visible.value" class="text-[11px]" :style="{ color: 'var(--text-bright)' }">{{ $t('chat.debugLabel') }} ({{ debugLog.lines.value.length }})</span>
+            <span v-if="stderrLog.visible.value" class="text-[11px]" :style="{ color: 'var(--accent)' }">📤 {{ $t('chat.llmRequestLabel') }} ({{ stderrLog.lines.value.length }})</span>
+            <button @click="debugLog.visible.value ? copyDebugLog() : copyStderrLog()" class="cursor-pointer w-4 h-4 flex items-center justify-center rounded hover:bg-[var(--bg-hover)] transition-colors" :style="{ color: 'var(--text-muted)' }" :title="$t('chat.copy')">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            </button>
+          </div>
+          <pre v-if="debugLog.visible.value" class="p-3 rounded-lg text-[11px] font-mono leading-relaxed whitespace-pre-wrap break-all max-h-48 overflow-y-auto" style="background:var(--bg-elevated); border:1px solid var(--border-dim); color:var(--text-muted); box-shadow: 0 4px 12px rgba(0,0,0,0.4)">{{ debugLog.lines.value.join('\n') }}</pre>
+          <pre v-if="stderrLog.visible.value" class="p-3 rounded-lg text-[11px] font-mono leading-relaxed whitespace-pre-wrap break-all max-h-96 overflow-y-auto" style="background:var(--bg-elevated); border:1px solid var(--accent-glow); color:var(--text-muted); box-shadow: 0 4px 12px rgba(0,0,0,0.4)">{{ stderrLog.lines.value.join('\n') }}</pre>
+        </div>
+      </div>
+    </Teleport>
 
     <!-- Permission bar（AskUserQuestion 走独立问答弹窗）-->
     <div
@@ -710,12 +756,36 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAut
       </div>
     </Transition>
 
-    <!-- Toolbar (attach, command menu, mode, effort) -->
+    <!-- Toolbar（左：debug/LLM 切换按钮，右：模式/effort 等） -->
     <InputBarToolbar
       @attach-file="handleAttachFile"
       @open-command-menu="commandBus.open()"
       @send-slash="(t: string) => handleSend(t)"
-    />
+    >
+      <template #left>
+        <template v-if="debugLog.lines.value.length > 0 || stderrLog.lines.value.length > 0">
+          <button
+            v-if="debugLog.lines.value.length > 0"
+            @click="debugLog.toggle(); if (debugLog.visible.value) stderrLog.visible.value = false"
+            class="cursor-pointer text-[11px] transition-colors hover:text-[var(--text-secondary)] flex items-center gap-1"
+            :style="{ color: debugLog.visible.value ? 'var(--text-bright)' : 'var(--text-muted)' }"
+          >
+            <span>{{ debugLog.visible.value ? '▾' : '▸' }}</span>
+            <span>{{ $t('chat.debugLabel') }} ({{ debugLog.lines.value.length }})</span>
+          </button>
+          <button
+            v-if="stderrLog.lines.value.length > 0"
+            @click="stderrLog.toggle(); if (stderrLog.visible.value) debugLog.visible.value = false"
+            class="cursor-pointer text-[11px] transition-colors hover:text-[var(--text-secondary)] flex items-center gap-1"
+            :style="{ color: stderrLog.visible.value ? 'var(--accent)' : 'var(--text-muted)' }"
+          >
+            <span>{{ stderrLog.visible.value ? '▾' : '▸' }}</span>
+            <span>📤 {{ $t('chat.llmRequestLabel') }} ({{ stderrLog.lines.value.length }})</span>
+          </button>
+          <div class="w-px h-4 shrink-0" style="background: var(--border-dim)"></div>
+        </template>
+      </template>
+    </InputBarToolbar>
 
     <!-- 已保存计划的快捷入口 + 附件 chips -->
     <div class="max-w-3xl mx-auto px-1 pb-1.5 flex flex-wrap gap-1.5">

@@ -18,6 +18,7 @@ const rootPath = ref("");
 const workspaceRoot = ref("");
 const files = ref<FileEntry[]>([]);
 const selectedFile = ref<string | null>(null);
+const selectedFilePath = ref("");  // 完整路径，openModalPreview 从子目录选中文件时使用
 const previewContent = ref("");
 const previewFile = ref<{ name: string; path: string } | null>(null);
 
@@ -57,9 +58,18 @@ watch(() => props.navCounter, async () => {
   try { files.value = await listDir(path); } catch {}
 });
 watch(() => props.forceClose, () => { collapsed.value = true; });
+// 打开面板时自动刷新目录（CC 可能已修改文件）
+watch(collapsed, async (v) => {
+  if (!v && rootPath.value) { try { files.value = await listDir(rootPath.value); } catch {} }
+});
 
 function goRoot() {
   navigateTo(workspaceRoot.value);
+}
+
+/** 刷新当前目录列表 */
+async function refreshDir() {
+  try { files.value = await listDir(rootPath.value); } catch {}
 }
 
 async function navigateTo(path: string) {
@@ -70,6 +80,7 @@ async function navigateTo(path: string) {
 async function openFile(entry: FileEntry) {
   if (entry.is_dir) { navigateTo(entry.path); return; }
   selectedFile.value = entry.name;
+  selectedFilePath.value = entry.path;  // 完整路径，供 openModalPreview 使用
   try { previewContent.value = await readFileContent(entry.path); }
   catch (e) {
     const { key, params } = translateError(e);
@@ -78,10 +89,8 @@ async function openFile(entry: FileEntry) {
 }
 
 function openModalPreview() {
-  if (selectedFile.value) {
-    // Use the full path from the current directory
-    const fullPath = rootPath.value.replace(/[\\/]$/, "") + "\\" + selectedFile.value;
-    previewFile.value = { name: selectedFile.value, path: fullPath };
+  if (selectedFile.value && selectedFilePath.value) {
+    previewFile.value = { name: selectedFile.value, path: selectedFilePath.value };
   }
 }
 
@@ -148,10 +157,13 @@ function goUp() {
     >
       <div v-if="!collapsed" class="flex flex-col h-full">
         <!-- Breadcrumb -->
-        <div class="flex items-center gap-0.5 px-2 py-1.5 text-[11px] shrink-0 overflow-x-auto"
+        <div class="flex items-center gap-0.5 px-2 py-1.5 text-[11px] shrink-0 overflow-hidden"
           :style="{ color: 'var(--text-muted)', borderBottom: '1px solid var(--border-dim)' }">
           <button @click="goRoot" class="hover:text-[var(--accent)] transition-colors shrink-0 mr-0.5" :title="$t('file.backToRoot')">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          </button>
+          <button @click="refreshDir" class="hover:text-[var(--accent)] transition-colors shrink-0 mr-1.5" :title="$t('file.refresh')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
           </button>
           <template v-for="(seg, i) in pathSegments" :key="seg.fullPath">
             <span class="text-[10px]" :style="{ color: 'var(--border-bright)' }" v-if="i > 0">›</span>
@@ -188,7 +200,7 @@ function goUp() {
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
               </button>
               <button
-                @click="selectedFile = null; previewContent = ''"
+                @click="selectedFile = null; selectedFilePath = ''; previewContent = ''"
                 class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-[var(--bg-hover)] transition-colors text-sm shrink-0"
                 :style="{ color: 'var(--text-muted)' }"
                 :title="$t('file.closePreview')"

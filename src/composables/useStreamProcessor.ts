@@ -4,7 +4,8 @@ import { useI18n } from "vue-i18n";
 import { useChatStore, type ToolUse } from "@/stores/chat";
 import { useSessionStore } from "@/stores/session";
 import { useDebugLog } from "@/composables/useDebugLog";
-import { storeClaudeSession, saveMessage, type StreamEvent, type ProcessExitedEvent } from "@/lib/tauri-bridge";
+import { useStderrLog } from "@/composables/useStderrLog";
+import { storeClaudeSession, saveMessage, saveSessionDebugLog, saveSessionStderrLog, type StreamEvent, type ProcessExitedEvent } from "@/lib/tauri-bridge";
 import { translateError } from "@/lib/utils";
 
 let unlisten: UnlistenFn | null = null;
@@ -43,18 +44,33 @@ export function useStreamProcessor() {
   const chat = useChatStore();
   const session = useSessionStore();
   const debugLog = useDebugLog();
+  const stderrLog = useStderrLog();
   const { t } = useI18n();
 
-  // 分阶段思考计时：每次 tool_use 前独立计时
+  // 分阶段计时：思考 ↔ 工具执行
   let thinkingStart = 0;
+  let toolExecStart = 0;
+  /** 最后一个工具调用的引用，用于回填执行耗时 */
+  let lastToolUse: ToolUse | null = null;
 
   function markThinkingStart() {
     if (!thinkingStart) thinkingStart = Date.now();
+    // 思考开始 = 上一个工具执行结束
+    if (toolExecStart && lastToolUse) {
+      lastToolUse.executionDurationMs = Date.now() - toolExecStart;
+      toolExecStart = 0;
+      lastToolUse = null;
+    }
   }
   function popThinkingDuration(): number {
     const dur = thinkingStart ? Date.now() - thinkingStart : 0;
     thinkingStart = 0;
     return dur;
+  }
+  function markToolExecStart(tool: ToolUse) {
+    toolExecStart = Date.now();
+    tool.startedAt = toolExecStart;  // 供 MessageBubble 显示实时计时
+    lastToolUse = tool;
   }
 
   async function startListening() {
@@ -94,13 +110,21 @@ export function useStreamProcessor() {
             for (const tu of data.tool_use) {
               // 记录该工具调用前的思考耗时，然后重置计时器
               const thinkingDur = popThinkingDuration();
-              chat.addToolUse({
+              const toolUse: ToolUse = {
                 id: tu.id,
                 name: tu.name,
                 input: tu.input,
                 thinkingDurationMs: thinkingDur,
-              });
+              };
+              chat.addToolUse(toolUse);
+              markToolExecStart(toolUse);
             }
+          }
+          // assistant 事件携带 message.usage——实时更新 token 统计（DeepSeek 后端 result 可能不含 usage）
+          if (chat.currentAssistantMsg) {
+            if (data.input_tokens != null) chat.currentAssistantMsg.inputTokens = data.input_tokens;
+            if (data.output_tokens != null) chat.currentAssistantMsg.outputTokens = data.output_tokens;
+            if (data.cost_usd != null) chat.currentAssistantMsg.costUSD = data.cost_usd;
           }
           break;
 
@@ -110,6 +134,14 @@ export function useStreamProcessor() {
             debugLog.add(`  🔐 subtype=${cr.subtype} tool=${cr.tool_name} request_id=${cr.request_id}`);
             debugLog.add(`  🔐 tool_input keys: ${cr.tool_input ? Object.keys(cr.tool_input).join(',') : '(null)'}`);
             chat.addControlRequest(cr);
+          }
+          break;
+
+        // message_delta 携带该轮 assistant 的最终 output_tokens
+        case "token_usage":
+          if (chat.currentAssistantMsg) {
+            if (data.input_tokens != null) chat.currentAssistantMsg.inputTokens = data.input_tokens;
+            if (data.output_tokens != null) chat.currentAssistantMsg.outputTokens = data.output_tokens;
           }
           break;
 
@@ -124,18 +156,40 @@ export function useStreamProcessor() {
               thinking: msg.thinking,
               toolUses: msg.toolUses,
               durationMs: data.duration_ms,
-              inputTokens: data.input_tokens,
-              outputTokens: data.output_tokens,
-              costUSD: data.cost_usd,
+              // event 可能不含 token（如 DeepSeek result），fallback 到 message 对象上的值
+              inputTokens: data.input_tokens ?? msg.inputTokens,
+              outputTokens: data.output_tokens ?? msg.outputTokens,
+              costUSD: data.cost_usd ?? msg.costUSD,
             });
             saveMessage(msg.id, targetSessionId, "assistant", fullContent, "{}").catch(() => {});
           }
+          // 结算最后的思考和执行计时
+          const finalThinking = popThinkingDuration(); // 最后一段思考（无后续 tool_use 触发 pop）
+          if (toolExecStart && lastToolUse) {
+            lastToolUse.executionDurationMs = Date.now() - toolExecStart;
+            // 最终思考时间附加到最后一个工具的 thinkingDurationMs
+            if (finalThinking > 0) lastToolUse.thinkingDurationMs = (lastToolUse.thinkingDurationMs || 0) + finalThinking;
+            toolExecStart = 0;
+            lastToolUse = null;
+          } else if (finalThinking > 0 && msg.toolUses.length > 0) {
+            // 有工具但 toolExecStart 已结算（思考在 result 前就开始了）
+            const last = msg.toolUses[msg.toolUses.length - 1];
+            last.thinkingDurationMs = (last.thinkingDurationMs || 0) + finalThinking;
+          }
           chat.finishAssistantMessage(
             data.duration_ms,
-            data.input_tokens,
-            data.output_tokens,
-            data.cost_usd
+            data.input_tokens ?? msg.inputTokens,
+            data.output_tokens ?? msg.outputTokens,
+            data.cost_usd ?? msg.costUSD,
           );
+          // 持久化 debug/stderr 日志 + 刷新侧栏统计
+          const sid = data.session_id || session.activeSessionId;
+          if (sid) {
+            saveSessionDebugLog(sid, JSON.stringify(debugLog.exportLines(sid))).catch(() => {});
+            saveSessionStderrLog(sid, JSON.stringify(stderrLog.exportLines(sid))).catch(() => {});
+            session.loadSessions().catch(() => {});  // 更新侧栏 token/cost/message_count
+          }
+
           // Desktop notification
           notifyComplete(data.duration_ms, data.input_tokens, data.output_tokens);
           break;
@@ -157,7 +211,8 @@ export function useStreamProcessor() {
     // Debug: raw stdout lines from claude
     unlistenDebug = await listen<string>("stream-debug", (event) => {
       const raw = event.payload;
-      // Try to parse and pretty-print JSON
+      stderrLog.add(raw);  // 完整保留到 stderr 日志
+      // 同时摘要记录到 debug 日志
       try {
         const parsed = JSON.parse(raw);
         debugLog.add(`📤 raw: type=${parsed.type || '?'} keys=${Object.keys(parsed).join(',')}`);
@@ -166,9 +221,11 @@ export function useStreamProcessor() {
       }
     });
 
-    // Stderr output from claude
+    // Stderr output from claude（--verbose 输出 LLM 请求详情）
     unlistenError = await listen<string>("stream-error", (event) => {
-      debugLog.add(`⚠️ stderr: ${event.payload.slice(0, 300)}`);
+      const raw = event.payload;
+      stderrLog.add(`[stderr] ${raw}`);  // 完整保留
+      debugLog.add(`⚠️ stderr: ${raw.slice(0, 300)}`);  // debug 摘要
     });
 
     // Session created: store on both frontend (Pinia) and backend (Rust)
@@ -184,7 +241,8 @@ export function useStreamProcessor() {
     unlistenProcessExit = await listen<ProcessExitedEvent>("process-exited", (event) => {
       const { session_id, exit_code, success } = event.payload;
       debugLog.add(`🏁 process exited: ${session_id} code=${exit_code} ok=${success}`);
-      if (!success && chat.isProcessing) {
+      chat.isProcessing = false;
+      if (!success) {
         chat.finishAssistantMessage();
       }
     });

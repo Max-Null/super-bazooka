@@ -8,8 +8,11 @@ import ManagePanel from "@/components/shared/ManagePanel.vue";
 import { emitChatCommand } from "@/composables/useCommandPalette";
 import { useNewSession } from "@/composables/useNewSession";
 import { getWorkspaceRoot } from "@/lib/tauri-bridge";
+import { open } from "@tauri-apps/plugin-dialog";
 import { useSettingsStore } from "@/stores/settings";
+import { useI18n } from "vue-i18n";
 
+const { t } = useI18n();
 const router = useRouter();
 const route = useRoute();
 const settings = useSettingsStore();
@@ -20,6 +23,41 @@ const zenMode = ref(false);
 const fileNavCounter = ref(0);
 const filePanelForceClose = ref(0);
 const cwd = ref("");
+
+// ── 最近工作区管理 ──
+const RECENT_WORKSPACES_KEY = "cc-gui-recent-workspaces";
+const MAX_RECENT = 10;
+const recentWorkspaces = ref<string[]>([]);
+const showWorkspaceMenu = ref(false);
+
+function loadRecentWorkspaces() {
+  try {
+    const raw = localStorage.getItem(RECENT_WORKSPACES_KEY);
+    recentWorkspaces.value = raw ? JSON.parse(raw) : [];
+  } catch { recentWorkspaces.value = []; }
+}
+loadRecentWorkspaces();
+
+function addRecentWorkspace(path: string) {
+  recentWorkspaces.value = recentWorkspaces.value.filter(p => p !== path);
+  recentWorkspaces.value.unshift(path);
+  if (recentWorkspaces.value.length > MAX_RECENT) recentWorkspaces.value.pop();
+  localStorage.setItem(RECENT_WORKSPACES_KEY, JSON.stringify(recentWorkspaces.value));
+}
+
+function switchToWorkspace(path: string) {
+  cwd.value = path;
+  addRecentWorkspace(path);
+  emitChatCommand(`switch-workspace:${path}`);
+  showWorkspaceMenu.value = false;
+  fileNavCounter.value++;
+}
+
+function onBodyClickForWs(e: MouseEvent) {
+  if (!(e.target as HTMLElement).closest(".workspace-menu")) showWorkspaceMenu.value = false;
+}
+onMounted(() => document.addEventListener("click", onBodyClickForWs));
+onUnmounted(() => document.removeEventListener("click", onBodyClickForWs));
 
 const commandPalette = ref<InstanceType<typeof CommandPalette> | null>(null);
 
@@ -161,6 +199,13 @@ function toggleFullscreen() {
   else document.exitFullscreen();
 }
 
+async function switchWorkspace() {
+  const selected = await open({ directory: true, title: t('header.selectWorkspace') });
+  if (!selected) return;
+  const newPath = Array.isArray(selected) ? selected[0] : selected;
+  switchToWorkspace(newPath);
+}
+
 function openFilePanelTo(path: string) {
   fileNavCounter.value++;
 }
@@ -201,14 +246,52 @@ function openFilePanelTo(path: string) {
 
         <span class="text-[10px] font-medium px-1.5 py-px rounded leading-none" style="background:var(--accent-glow); color:var(--accent-dim)">DEV</span>
 
-        <!-- CWD — clickable, opens file panel to workspace root -->
-        <button
-          v-if="cwd"
-          @click="openFilePanelTo(cwd)"
-          class="text-[10px] font-mono truncate ml-1 px-2 py-0.5 rounded leading-none cursor-pointer transition-colors hover:border-[var(--accent)]"
-          :style="{ background: 'var(--bg-root)', color: 'var(--accent)', border: '1px solid var(--border-dim)' }"
-          :title="cwd + ' — click to browse'"
-        >{{ cwd }}</button>
+        <!-- CWD + 工作区管理 -->
+        <div v-if="cwd" class="workspace-menu flex items-center gap-0 ml-1 relative">
+          <button
+            @click="openFilePanelTo(cwd)"
+            class="text-[10px] font-mono truncate px-2 py-0.5 rounded-l leading-none cursor-pointer transition-colors hover:border-[var(--accent)]"
+            :style="{ background: 'var(--bg-root)', color: 'var(--accent)', border: '1px solid var(--border-dim)', borderRight: 'none' }"
+            :title="cwd + $t('header.cwdTitle')"
+          >{{ cwd }}</button>
+          <button
+            @click.stop="showWorkspaceMenu = !showWorkspaceMenu"
+            class="shrink-0 w-5 py-0.5 rounded-r flex items-center justify-center cursor-pointer transition-colors hover:text-[var(--accent)]"
+            :style="{ background: 'var(--bg-root)', color: 'var(--text-muted)', border: '1px solid var(--border-dim)', lineHeight: 1 }"
+            :title="$t('header.switchWorkspace')"
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+          </button>
+          <!-- 下拉菜单：最近工作区 + 浏览 -->
+          <Transition name="drop">
+            <div
+              v-if="showWorkspaceMenu"
+              class="absolute top-full left-0 mt-1 py-1 rounded-lg z-30 min-w-[280px]"
+              style="background: var(--bg-elevated); border: 1px solid var(--border-default); box-shadow: 0 8px 24px rgba(0,0,0,0.4)"
+            >
+              <div class="px-3 py-1.5 text-[10px] font-medium" style="color: var(--text-muted)">{{ $t('header.recentWorkspaces') }}</div>
+              <button
+                v-for="ws in recentWorkspaces"
+                :key="ws"
+                @click="switchToWorkspace(ws)"
+                class="w-full text-left px-3 py-1.5 text-[11px] font-mono transition-colors hover:bg-[var(--bg-hover)] flex items-center gap-2"
+                :style="{ color: ws === cwd ? 'var(--accent)' : 'var(--text-secondary)' }"
+              >
+                <span class="text-[10px] shrink-0" :style="{ color: ws === cwd ? 'var(--accent)' : 'var(--text-muted)' }">{{ ws === cwd ? '●' : '○' }}</span>
+                <span class="truncate">{{ ws }}</span>
+              </button>
+              <div v-if="recentWorkspaces.length === 0" class="px-3 py-2 text-[11px]" style="color: var(--text-muted); opacity: 0.6">{{ $t('header.noRecentWorkspaces') }}</div>
+              <div class="mx-3 my-1" style="border-top: 1px solid var(--border-dim)"></div>
+              <button
+                @click="switchWorkspace(); showWorkspaceMenu = false"
+                class="w-full text-left px-3 py-1.5 text-[11px] transition-colors hover:bg-[var(--bg-hover)] flex items-center gap-2"
+                style="color: var(--accent)"
+              >
+                <span>📂</span><span>{{ $t('header.browseFolder') }}</span>
+              </button>
+            </div>
+          </Transition>
+        </div>
       </div>
 
       <!-- Actions group -->

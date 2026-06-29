@@ -44,6 +44,8 @@
     "welcome": "Claude Code Desktop GUI",
     "welcomeSend": "send",
     "welcomeNewline": "newline",
+    "debugLabel": "Debug",
+    "llmRequestLabel": "LLM Request",
     "aboutTitle": "About cc-gui",
     "aboutTech": "Tauri 2 + Vue 3 + TypeScript · Rust · SQLite · DeepSeek API",
     "aboutCopyright": "© 2026 cc-gui contributors · MIT"
@@ -115,6 +117,7 @@
     "ponytailLite": "Lite — Suggest leaner path",
     "ponytailFull": "Full — Enforce the ladder",
     "ponytailUltra": "Ultra — YAGNI extremist",
+    "installPonytail": "Install Ponytail Plugin",
     "about": "About cc-gui",
     "aboutDesc": "Tauri 2 + Vue 3 + TypeScript · Rust · SQLite · DeepSeek API",
     "changelog": "Changelog",
@@ -168,7 +171,8 @@
     "copyName": "Copy Name",
     "backToRoot": "Back to workspace root",
     "openPreview": "Open in preview window",
-    "closePreview": "Close preview"
+    "closePreview": "Close preview",
+    "refresh": "Refresh"
   },
 
   "preview": {
@@ -195,7 +199,9 @@
     "renamed": "Renamed to: {title}",
     "sessionDeleted": "Session deleted",
     "conversationCleared": "Conversation cleared",
-    "compactSent": "/compact sent"
+    "compactSent": "/compact sent",
+    "workspaceSwitched": "Workspace switched: {path}",
+    "sessionCreateFailed": "Session creation failed"
   },
 
   "header": {
@@ -209,7 +215,12 @@
     "darkMode": "Dark mode",
     "refresh": "Refresh",
     "settings": "Settings",
-    "cwdTitle": " — click to browse"
+    "cwdTitle": " — click to browse",
+    "selectWorkspace": "Select Workspace",
+    "switchWorkspace": "Switch Workspace",
+    "recentWorkspaces": "Recent",
+    "noRecentWorkspaces": "None",
+    "browseFolder": "Browse folder..."
   },
 
   "manage": {

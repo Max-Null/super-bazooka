@@ -431,12 +431,15 @@ pub async fn spawn_claude_session(
     let stderr = child.stderr.take().ok_or("Failed to capture stderr")?;
     let mut _stdin = child.stdin.take().ok_or("Failed to capture stdin")?;
 
+    // 构建含附件路径的用户消息文本（复用 lib.rs 公共函数，避免重复）
+    let full_message = crate::build_user_message(&params.message, &params.file_paths);
+
     // --input-format stream-json 模式：先通过 stdin 发送用户消息（NDJSON），再注册供后续控制响应使用
     let user_msg = serde_json::json!({
         "type": "user",
         "message": {
             "role": "user",
-            "content": params.message
+            "content": full_message
         }
     });
     let mut msg_json = serde_json::to_string(&user_msg)

@@ -22,6 +22,25 @@ vi.mock("@/composables/useDebugLog", () => ({
     add: vi.fn(),
     clear: vi.fn(),
     visible: { value: false },
+    setSession: vi.fn(),
+    exportLines: vi.fn().mockReturnValue([]),
+  }),
+}));
+
+vi.mock("@/composables/useStderrLog", () => ({
+  useStderrLog: () => ({
+    add: vi.fn(),
+    clear: vi.fn(),
+    lines: { value: [] },
+    visible: { value: false },
+    setSession: vi.fn(),
+    exportLines: vi.fn().mockReturnValue([]),
+  }),
+}));
+
+vi.mock("vue-i18n", () => ({
+  useI18n: () => ({
+    t: (key: string) => key,
   }),
 }));
 
@@ -31,6 +50,9 @@ vi.mock("@/lib/tauri-bridge", async () => {
     ...actual,
     saveMessage: saveMessageMock,
     storeClaudeSession: storeClaudeSessionMock,
+    saveSessionDebugLog: vi.fn().mockResolvedValue(undefined),
+    saveSessionStderrLog: vi.fn().mockResolvedValue(undefined),
+    listSessions: vi.fn().mockResolvedValue([]),
   };
 });
 

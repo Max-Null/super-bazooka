@@ -44,6 +44,8 @@
     "welcome": "Claude Code Desktop GUI",
     "welcomeSend": "发送",
     "welcomeNewline": "换行",
+    "debugLabel": "调试",
+    "llmRequestLabel": "LLM 请求",
     "aboutTitle": "关于 cc-gui",
     "aboutTech": "Tauri 2 + Vue 3 + TypeScript · Rust · SQLite · DeepSeek API",
     "aboutCopyright": "© 2026 cc-gui contributors · MIT"
@@ -115,6 +117,7 @@
     "ponytailLite": "轻量 — 做完提更简方案",
     "ponytailFull": "标准 — 严格执行阶梯",
     "ponytailUltra": "极致 — YAGNI 极端主义",
+    "installPonytail": "安装 Ponytail 插件",
     "about": "关于 cc-gui",
     "aboutDesc": "Tauri 2 + Vue 3 + TypeScript · Rust · SQLite · DeepSeek API",
     "changelog": "更新日志",
@@ -168,7 +171,8 @@
     "copyName": "复制文件名",
     "backToRoot": "回到工作区根目录",
     "openPreview": "在预览窗口中打开",
-    "closePreview": "关闭预览"
+    "closePreview": "关闭预览",
+    "refresh": "刷新"
   },
 
   "preview": {
@@ -195,7 +199,9 @@
     "renamed": "已重命名为: {title}",
     "sessionDeleted": "会话已删除",
     "conversationCleared": "已清空对话",
-    "compactSent": "已发送 /compact"
+    "compactSent": "已发送 /compact",
+    "workspaceSwitched": "已切换工作区: {path}",
+    "sessionCreateFailed": "会话创建失败"
   },
 
   "header": {
@@ -209,7 +215,12 @@
     "darkMode": "暗色模式",
     "refresh": "刷新",
     "settings": "设置",
-    "cwdTitle": " — 点击浏览"
+    "cwdTitle": " — 点击浏览",
+    "selectWorkspace": "选择工作区",
+    "switchWorkspace": "切换工作区",
+    "recentWorkspaces": "最近使用",
+    "noRecentWorkspaces": "暂无",
+    "browseFolder": "浏览其他文件夹..."
   },
 
   "manage": {

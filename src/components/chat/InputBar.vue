@@ -100,7 +100,8 @@ async function autoResize() {
           border: 'none',
           outline: 'none',
           boxShadow: 'none',
-          overflow: 'hidden',
+          maxHeight: '180px',
+          overflowY: 'auto',
           minHeight: '22px'
         }"
       ></textarea>

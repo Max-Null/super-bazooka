@@ -35,10 +35,10 @@ export const useSessionStore = defineStore("session", () => {
     }
   }
 
-  /** Create a new session via backend */
-  async function createSession(model?: string): Promise<string> {
+  /** Create a new session via backend，可指定 CWD */
+  async function createSession(model?: string, cwd?: string): Promise<string> {
     try {
-      const s = await createSessionBackend(model);
+      const s = await createSessionBackend(model, cwd);
       sessions.value.unshift(toLocalSession(s));
       activeSessionId.value = s.id;
       return s.id;

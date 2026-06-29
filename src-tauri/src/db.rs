@@ -50,6 +50,8 @@ fn run_migrations(conn: &Connection) -> SqliteResult<()> {
             cwd TEXT NOT NULL DEFAULT '',
             model TEXT DEFAULT '',
             status TEXT NOT NULL DEFAULT 'idle',
+            debug_log TEXT DEFAULT '',
+            stderr_log TEXT DEFAULT '',
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
@@ -86,6 +88,17 @@ fn run_migrations(conn: &Connection) -> SqliteResult<()> {
         );
         ",
     )?;
+
+    // 兼容已有数据库：添加 debug_log / stderr_log 列（SQLite 不支持 IF NOT EXISTS for ALTER）
+    if let Err(e) = conn.execute_batch(
+        "ALTER TABLE sessions ADD COLUMN debug_log TEXT DEFAULT '';
+         ALTER TABLE sessions ADD COLUMN stderr_log TEXT DEFAULT '';",
+    ) {
+        let msg = e.to_string();
+        if !msg.contains("duplicate column") {
+            return Err(e); // 非"列已存在"的错误才传播
+        }
+    }
 
     // Create indexes (CREATE INDEX IF NOT EXISTS is available in SQLite 3.27+)
     conn.execute_batch(

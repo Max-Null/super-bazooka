@@ -31,6 +31,10 @@ export interface ToolUse {
   isError?: boolean;
   /** 该工具调用前的思考耗时（毫秒） */
   thinkingDurationMs?: number;
+  /** 该工具执行耗时（毫秒），从工具调用到下一个思考/文本开始的间隔 */
+  executionDurationMs?: number;
+  /** 工具开始执行的时间戳（Date.now()），用于流式期间显示实时计时 */
+  startedAt?: number;
 }
 
 export interface ControlRequest {
@@ -90,21 +94,18 @@ export const useChatStore = defineStore("chat", () => {
   }
 
   function appendText(text: string) {
-    if (currentAssistantMsg.value) {
-      currentAssistantMsg.value.content += text;
-    }
+    if (!currentAssistantMsg.value) startAssistantMessage();
+    currentAssistantMsg.value!.content += text;
   }
 
   function appendThinking(thinking: string) {
-    if (currentAssistantMsg.value) {
-      currentAssistantMsg.value.thinking += thinking;
-    }
+    if (!currentAssistantMsg.value) startAssistantMessage();
+    currentAssistantMsg.value!.thinking += thinking;
   }
 
   function addToolUse(tool: ToolUse) {
-    if (currentAssistantMsg.value) {
-      currentAssistantMsg.value.toolUses.push(tool);
-    }
+    if (!currentAssistantMsg.value) startAssistantMessage();
+    currentAssistantMsg.value!.toolUses.push(tool);
     // 追踪 agent 使用：tool name 可能是 Agent 或 Task
     if ((tool.name === "Agent" || tool.name === "Task") && tool.input) {
       const agentType = (tool.input as any).subagent_type || (tool.input as any).agent_type;

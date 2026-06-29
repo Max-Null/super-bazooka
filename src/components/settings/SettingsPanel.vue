@@ -4,9 +4,20 @@ import { useRouter } from "vue-router";
 import { useSettingsStore, type PonytailMode } from "@/stores/settings";
 import { useI18n } from "vue-i18n";
 import { connectLLM, readFileContent, writeFile, getClaudeDir } from "@/lib/tauri-bridge";
+import { emitChatCommand } from "@/composables/useCommandPalette";
 
 const appVersion = __APP_VERSION__;
 import { translateError } from "@/lib/utils";
+// ── Ponytail 插件检测 ──
+const hasPonytail = ref<boolean | null>(null);
+onMounted(async () => {
+  try {
+    const dir = await getClaudeDir();
+    const raw = await readFileContent(`${dir}/settings.json`);
+    const plugins: Record<string, boolean> = JSON.parse(raw).enabledPlugins || {};
+    hasPonytail.value = Object.keys(plugins).some(k => k.startsWith("ponytail@"));
+  } catch { hasPonytail.value = false; }
+});
 import ErrorBoundary from "@/components/shared/ErrorBoundary.vue";
 import ModalShell from "@/components/shared/ModalShell.vue";
 import ManagePanel from "@/components/shared/ManagePanel.vue";
@@ -475,7 +486,16 @@ async function saveSettingsJson() {
           <!-- Ponytail 模式 -->
           <div>
             <label class="block text-xs font-medium mb-1.5" style="color:var(--text-muted)">{{ $t('settings.ponytailMode') }}</label>
+            <!-- 检测中不渲染，未安装 → 安装按钮 -->
+            <button
+              v-if="hasPonytail === false"
+              @click="emitChatCommand('install-ponytail'); router.push('/chat')"
+              class="w-full rounded-lg px-3.5 py-2 text-sm font-medium transition-colors"
+              style="background: var(--accent); color: #09090b"
+            >{{ $t('settings.installPonytail') }}</button>
+            <!-- 已安装 → 模式下拉 -->
             <div
+              v-else-if="hasPonytail === true"
               class="settings-dropdown relative cursor-pointer rounded-lg px-3.5 py-2 text-sm flex items-center gap-1.5 select-none transition-colors"
               :style="{
                 background: 'var(--bg-elevated)',

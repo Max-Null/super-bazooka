@@ -1,24 +1,57 @@
-import { ref } from "vue";
+import { ref, computed } from "vue";
 
-const lines = ref<string[]>([]);
-const visible = ref(false);
+/**
+ * 按会话隔离的日志行存储（工厂函数）。
+ * useDebugLog / useStderrLog 共享同一实现，仅 maxLines 不同。
+ */
+export function createSessionLog(maxLines: number) {
+  const store: Record<string, string[]> = {};
+  const version = ref(0);
+  let currentSessionId = "";
 
-export function useDebugLog() {
-  function add(line: string) {
-    lines.value.push(line);
-    // Keep last 200 lines max
-    if (lines.value.length > 200) {
-      lines.value = lines.value.slice(-200);
+  return function () {
+    const lines = computed(() => {
+      version.value;
+      return [...(store[currentSessionId] || [])];
+    });
+    const visible = ref(false);
+
+    function setSession(id: string) {
+      currentSessionId = id;
+      if (!store[id]) store[id] = [];
+      version.value++;
     }
-  }
 
-  function toggle() {
-    visible.value = !visible.value;
-  }
+    function add(line: string) {
+      if (!currentSessionId) return;
+      if (!store[currentSessionId]) store[currentSessionId] = [];
+      const arr = store[currentSessionId];
+      arr.push(line);
+      if (arr.length > maxLines) {
+        store[currentSessionId] = arr.slice(-maxLines);
+      }
+      version.value++;
+    }
 
-  function clear() {
-    lines.value = [];
-  }
+    function toggle() { visible.value = !visible.value; }
 
-  return { lines, visible, add, toggle, clear };
+    function clear() {
+      if (!currentSessionId) return;
+      store[currentSessionId] = [];
+      version.value++;
+    }
+
+    function exportLines(sid: string): string[] {
+      return [...(store[sid] || [])];
+    }
+
+    function importLines(sid: string, linesArr: string[]) {
+      store[sid] = linesArr.slice(-maxLines);
+      version.value++;
+    }
+
+    return { lines, visible, add, toggle, clear, setSession, exportLines, importLines };
+  };
 }
+
+export const useDebugLog = createSessionLog(200);

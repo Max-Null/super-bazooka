@@ -40,6 +40,7 @@ pub const PROVIDERS: &[ProviderPreset] = &[
         name: "DeepSeek",
         env_template: &[
             ("ANTHROPIC_AUTH_TOKEN", ""),
+            ("ANTHROPIC_API_KEY", ""),           // 显式清空，防止残留 Anthropic key 被 CC 优先使用
             ("ANTHROPIC_BASE_URL", "https://api.deepseek.com/anthropic"),
             ("ANTHROPIC_MODEL", "deepseek-v4-pro[1M]"),
             ("ANTHROPIC_DEFAULT_OPUS_MODEL", "deepseek-v4-pro[1M]"),
@@ -77,6 +78,7 @@ pub const PROVIDERS: &[ProviderPreset] = &[
         name: "硅基流动",
         env_template: &[
             ("ANTHROPIC_AUTH_TOKEN", ""),
+            ("ANTHROPIC_API_KEY", ""),           // 显式清空
             ("ANTHROPIC_BASE_URL", "https://api.siliconflow.cn/"),
             ("ANTHROPIC_MODEL", "deepseek-ai/DeepSeek-V3"),
             ("ANTHROPIC_DEFAULT_OPUS_MODEL", "deepseek-ai/DeepSeek-V3"),
@@ -94,6 +96,7 @@ pub const PROVIDERS: &[ProviderPreset] = &[
         name: "智谱 GLM",
         env_template: &[
             ("ANTHROPIC_AUTH_TOKEN", ""),
+            ("ANTHROPIC_API_KEY", ""),           // 显式清空
             ("ANTHROPIC_BASE_URL", "https://open.bigmodel.cn/api/anthropic"),
             ("ANTHROPIC_MODEL", "glm-5"),
             ("ANTHROPIC_DEFAULT_OPUS_MODEL", "glm-5"),
@@ -111,6 +114,7 @@ pub const PROVIDERS: &[ProviderPreset] = &[
         name: "Kimi",
         env_template: &[
             ("ANTHROPIC_AUTH_TOKEN", ""),
+            ("ANTHROPIC_API_KEY", ""),           // 显式清空
             ("ANTHROPIC_BASE_URL", "https://api.moonshot.cn/anthropic"),
             ("ANTHROPIC_MODEL", "kimi-k2.5"),
             ("ANTHROPIC_DEFAULT_OPUS_MODEL", "kimi-k2.5"),
@@ -129,6 +133,7 @@ pub const PROVIDERS: &[ProviderPreset] = &[
         name: "MiniMax",
         env_template: &[
             ("ANTHROPIC_AUTH_TOKEN", ""),
+            ("ANTHROPIC_API_KEY", ""),           // 显式清空
             ("ANTHROPIC_BASE_URL", "https://api.minimaxi.com/anthropic"),
             ("ANTHROPIC_MODEL", "minimax-m2.7"),
             ("ANTHROPIC_DEFAULT_OPUS_MODEL", "minimax-m2.7"),
