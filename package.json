@@ -1,6 +1,6 @@
 {
   "name": "cc-gui",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Claude Code Desktop GUI — Tauri 2 + Vue 3",
   "type": "module",
   "scripts": {
