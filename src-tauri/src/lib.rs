@@ -1038,6 +1038,7 @@ async fn generate_mcp_descriptions(
     let client = reqwest::Client::new();
     let url = chat_completions_url(optimize_api_url.as_deref(), &base_url)
         .ok_or("未配置聊天 API 地址")?;
+    ensure_https(&url)?;
 
     let name_list = missing
         .iter()

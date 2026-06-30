@@ -91,7 +91,11 @@ watch(() => chat.messages.map(m => m.isStreaming), () => {
     if (m.role === "assistant" && !m.isStreaming && m.content) {
       const match = m.content.match(/https?:\/\/[^\s"'`<>]+/i);
       if (match) {
-        settings.optimizeApiUrl = match[0].replace(/[.,;!?。，；！？)]+$/, '');
+        const url = match[0].replace(/[.,;!?。，；！？)]+$/, '');
+        // 仅接受 https URL，防止 CC 幻觉或响应被篡改时注入危险地址
+        if (url.startsWith("https://")) {
+          settings.optimizeApiUrl = url;
+        }
         isLookingUpUrl.value = false;
         return;
       }
