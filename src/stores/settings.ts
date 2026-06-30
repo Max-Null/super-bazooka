@@ -116,6 +116,10 @@ export const useSettingsStore = defineStore("settings", () => {
   const claudePath = ref(ui.claudePath);
   const resolvedClaudePath = ref("");
 
+  // LLM API 地址：跟随 baseUrl，用户手动编辑过才存 localStorage 覆盖
+  const LLM_API_URL_KEY = "cc-gui-llm-api-url-override";
+  const optimizeApiUrl = ref(localStorage.getItem(LLM_API_URL_KEY) || "");
+
   // 启动时获取自动检测的 claude 路径
   resolveClaudePath().then(p => resolvedClaudePath.value = p).catch(() => {});
 
@@ -171,6 +175,15 @@ export const useSettingsStore = defineStore("settings", () => {
     saveCurrentConfig();
   });
 
+  // LLM API 地址：未手填时跟随 baseUrl，手填后存 localStorage
+  watch(baseUrl, (v) => {
+    if (!optimizeApiUrl.value) optimizeApiUrl.value = v;
+  });
+  watch(optimizeApiUrl, (v) => {
+    if (v) localStorage.setItem(LLM_API_URL_KEY, v);
+    else localStorage.removeItem(LLM_API_URL_KEY);
+  });
+
   // UI 偏好变更 → 写 localStorage
   watch([planMode, autoMode, permissionMode, effort, ponytailMode, theme, locale, fontSize, claudePath], () => {
     const s: UiSettings = {
@@ -187,5 +200,5 @@ export const useSettingsStore = defineStore("settings", () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
   }, { deep: true });
 
-  return { apiKey, baseUrl, model, providerId, models, planMode, autoMode, permissionMode, effort, ponytailMode, theme, locale, fontSize, claudePath, resolvedClaudePath, saveCurrentConfig, restoreConfig };
+  return { apiKey, baseUrl, model, providerId, models, planMode, autoMode, permissionMode, effort, ponytailMode, theme, locale, fontSize, claudePath, optimizeApiUrl, resolvedClaudePath, saveCurrentConfig, restoreConfig };
 });

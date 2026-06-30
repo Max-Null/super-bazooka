@@ -141,13 +141,19 @@ export async function listMessages(sessionId: string): Promise<MessageData[]> {
 /**
  * Test connection to the DeepSeek API
  */
+export interface ConnectionTestResult {
+  cc: string;
+  chat: string | null;
+}
+
 export async function connectLLM(
   apiKey: string,
   baseUrl: string,
   model: string,
   providerId: string,
-): Promise<string> {
-  return invoke("connect_llm", { apiKey, baseUrl, model, providerId });
+  optimizeApiUrl?: string,
+): Promise<ConnectionTestResult> {
+  return invoke("connect_llm", { apiKey, baseUrl, model, providerId, optimizeApiUrl: optimizeApiUrl || null });
 }
 
 // ── Approved Scenarios ──
@@ -225,6 +231,15 @@ export async function getClaudeDir(): Promise<string> {
 export async function resolveClaudePath(): Promise<string> {
   return invoke("resolve_claude_path");
 }
+/** 一键安装 Claude Code CLI，返回退出码（0 成功） */
+export async function installClaudeCode(): Promise<number> {
+  return invoke("install_claude_code");
+}
+
+/** 用 LLM 优化用户输入的提示词 */
+export async function optimizePrompt(apiKey: string, baseUrl: string, prompt: string, optimizeUrl?: string): Promise<string> {
+  return invoke("optimize_prompt", { apiKey, baseUrl, prompt, optimizeUrl: optimizeUrl || null });
+}
 
 /** 从 ~/.claude/settings.json 读取配置 */
 export async function getClaudeSettings(): Promise<{
@@ -285,16 +300,18 @@ export async function generateMcpDescriptions(
   names: string[],
   apiKey: string,
   baseUrl: string,
+  optimizeApiUrl?: string,
 ): Promise<DescriptionItem[]> {
-  return invoke("generate_mcp_descriptions", { names, apiKey, baseUrl });
+  return invoke("generate_mcp_descriptions", { names, apiKey, baseUrl, optimizeApiUrl: optimizeApiUrl || null });
 }
 
 export async function ensureItemDescriptions(
   items: DescriptionItem[],
   apiKey: string,
   baseUrl: string,
+  optimizeApiUrl?: string,
 ): Promise<DescriptionItem[]> {
-  return invoke("ensure_item_descriptions", { items, apiKey, baseUrl });
+  return invoke("ensure_item_descriptions", { items, apiKey, baseUrl, optimizeApiUrl: optimizeApiUrl || null });
 }
 
 export async function revealInExplorer(path: string): Promise<void> {

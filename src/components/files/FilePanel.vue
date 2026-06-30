@@ -131,7 +131,7 @@ function goUp() {
       class="shrink-0 w-7 flex items-center justify-center rounded-l-lg cursor-pointer select-none transition-all duration-200"
       :style="{
         background: collapsed ? 'var(--bg-surface)' : 'var(--bg-elevated)',
-        color: 'var(--text-muted)',
+        color: 'var(--text-secondary)',
         border: collapsed ? '1px solid var(--border-dim)' : 'none',
         borderRight: 'none',
       }"
@@ -158,7 +158,7 @@ function goUp() {
       <div v-if="!collapsed" class="flex flex-col h-full">
         <!-- Breadcrumb -->
         <div class="flex items-center gap-0.5 px-2 py-1.5 text-[11px] shrink-0 overflow-hidden"
-          :style="{ color: 'var(--text-muted)', borderBottom: '1px solid var(--border-dim)' }">
+          :style="{ color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-dim)' }">
           <button @click="goRoot" class="hover:text-[var(--accent)] transition-colors shrink-0 mr-0.5" :title="$t('file.backToRoot')">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
           </button>
@@ -202,7 +202,7 @@ function goUp() {
               <button
                 @click="selectedFile = null; selectedFilePath = ''; previewContent = ''"
                 class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-[var(--bg-hover)] transition-colors text-sm shrink-0"
-                :style="{ color: 'var(--text-muted)' }"
+                :style="{ color: 'var(--text-secondary)' }"
                 :title="$t('file.closePreview')"
               >&times;</button>
             </div>

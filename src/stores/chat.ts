@@ -90,6 +90,7 @@ export const useChatStore = defineStore("chat", () => {
     };
     currentAssistantMsg.value = msg;
     messages.value.push(msg);
+    isProcessing.value = true;  // 中途发送场景：CC 完成上一轮后继续下一轮时恢复 isProcessing
     return id;
   }
 

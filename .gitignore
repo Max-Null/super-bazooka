@@ -17,3 +17,6 @@ scripts/*.png
 
 # Playwright test artifact (generated on each run)
 e2e/fixtures/real-stream-output.png
+cc-installer/install-cc.bat
+cc-installer/install-cc.ps1
+cc-installer/README.md

@@ -229,6 +229,9 @@ watch(() => chatCommand.value.ts, (ts) => {
         }).catch(() => {
           showStatus(t('status.sessionCreateFailed'));
         });
+      } else {
+        // 通用文本 → 作为普通消息发送给 CC
+        handleSend(action);
       }
       break;
     case "export-session":
@@ -308,9 +311,13 @@ function onScrollThrottled() {
 }
 
 async function handleSend(text: string) {
-  debugLog.clear();
-  stderrLog.clear();
-  savedPlan.value = { plan: "", planFilePath: "" };  // 新消息清除旧计划
+  const isMidProcessing = chat.isProcessing;
+  // 新消息（非中途追加）才清日志和计划
+  if (!isMidProcessing) {
+    debugLog.clear();
+    stderrLog.clear();
+    savedPlan.value = { plan: "", planFilePath: "" };
+  }
   let sid = session.activeSessionId;
   if (!sid) sid = await session.createSession(settings.model);
 
@@ -323,7 +330,8 @@ async function handleSend(text: string) {
 
   // 用户消息由 Rust 后端在 send_message 中统一保存，
   // 前端不再重复保存，避免历史回显时出现双份用户消息。
-  const isMidProcessing = chat.isProcessing;
+
+  // isMidProcessing 已在函数开头捕获
   if (!isMidProcessing) {
     chat.startAssistantMessage();
   }
@@ -665,7 +673,7 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAut
           <button
             @click="prepareExport"
             class="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] transition-colors hover:bg-[var(--bg-hover)]"
-            style="color: var(--text-muted)"
+            style="color: var(--text-secondary)"
             :title="$t('chat.exportTitle')"
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -819,7 +827,7 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAut
         <button
           @click.stop="removeAttachedFile(i)"
           class="w-4 h-4 flex items-center justify-center rounded transition-colors hover:bg-[var(--bg-hover)] shrink-0 opacity-50 group-hover:opacity-100"
-          style="color: var(--text-muted)"
+          style="color: var(--text-secondary)"
           :title="$t('chat.remove')"
         >&times;</button>
       </div>
@@ -991,7 +999,7 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAut
     </ModalShell>
 
     <!-- Input -->
-    <InputBar :disabled="chat.isProcessing" :auto-mode="autoModeActive" @send="handleSend" @stop="handleStop" @files="(fs) => { for (const f of fs) { if (!attachedFiles.some(af => af.path === f.path)) attachedFiles.push(f); } }" />
+    <InputBar :disabled="chat.isProcessing" :auto-mode="autoModeActive" :api-key="settings.apiKey" :base-url="settings.baseUrl" @send="handleSend" @stop="handleStop" @files="(fs) => { for (const f of fs) { if (!attachedFiles.some(af => af.path === f.path)) attachedFiles.push(f); } }" />
   </div>
   </ErrorBoundary>
 </template>

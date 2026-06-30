@@ -1,10 +1,12 @@
 ﻿<script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useSettingsStore, type PonytailMode } from "@/stores/settings";
+import { useChatStore } from "@/stores/chat";
 import { useI18n } from "vue-i18n";
-import { connectLLM, readFileContent, writeFile, getClaudeDir } from "@/lib/tauri-bridge";
+import { connectLLM, readFileContent, writeFile, getClaudeDir, installClaudeCode, resolveClaudePath, sendMessage, type ConnectionTestResult } from "@/lib/tauri-bridge";
 import { emitChatCommand } from "@/composables/useCommandPalette";
+import { useSessionStore } from "@/stores/session";
 
 const appVersion = __APP_VERSION__;
 import { translateError } from "@/lib/utils";
@@ -18,6 +20,30 @@ onMounted(async () => {
     hasPonytail.value = Object.keys(plugins).some(k => k.startsWith("ponytail@"));
   } catch { hasPonytail.value = false; }
 });
+
+// ── 一键安装 Claude Code CLI ──
+const isInstallingCC = ref(false);
+const ccInstallResult = ref<"ok" | "fail" | null>(null);
+
+async function handleInstallCC() {
+  isInstallingCC.value = true;
+  ccInstallResult.value = null;
+  try {
+    const exitCode = await installClaudeCode();
+    if (exitCode === 0) {
+      ccInstallResult.value = "ok";
+      // 重新检测 claude 路径
+      try { settings.resolvedClaudePath = await resolveClaudePath(); } catch { /* ignore */ }
+    } else {
+      ccInstallResult.value = "fail";
+    }
+  } catch {
+    ccInstallResult.value = "fail";
+  } finally {
+    isInstallingCC.value = false;
+  }
+}
+
 import ErrorBoundary from "@/components/shared/ErrorBoundary.vue";
 import ModalShell from "@/components/shared/ModalShell.vue";
 import ManagePanel from "@/components/shared/ManagePanel.vue";
@@ -27,6 +53,51 @@ import changelogRaw from "../../../docs/变更记录.md?raw";
 const router = useRouter();
 const { t } = useI18n();
 const settings = useSettingsStore();
+const chat = useChatStore();
+const sessionStore = useSessionStore();
+
+// ── 聊天 API 地址静默查询 ──
+const isLookingUpUrl = ref(false);
+
+async function startLookupUrl() {
+  const prompt = `请联网查询 ${settings.providerId} 服务商的模型 ${settings.model} 的 OpenAI 兼容 chat completions API 完整端点 URL，只输出 URL 不要任何解释`;
+  isLookingUpUrl.value = true;
+  let sid = sessionStore.activeSessionId;
+  if (!sid) sid = await sessionStore.createSession(settings.model);
+  chat.addUserMessage(prompt);
+  // 非中途发送才新建 assistant 消息位
+  if (!chat.isProcessing) chat.startAssistantMessage();
+  chat.isProcessing = true;
+  sendMessage(sid, prompt, {
+    planMode: false,
+    autoMode: false,
+    permissionMode: "bypassPermissions",  // 静默查询不能卡权限弹窗
+    effort: "low",
+    ultracode: false,
+    model: settings.model,
+    claudePath: settings.claudePath || undefined,
+  }).catch((e) => {
+    isLookingUpUrl.value = false;
+    console.error("URL 查询失败:", e);
+  });
+}
+
+// 标志位打开时，监听新完成的 assistant 消息，提取 URL 自动填入
+watch(() => chat.messages.map(m => m.isStreaming), () => {
+  if (!isLookingUpUrl.value) return;
+  const msgs = chat.messages;
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const m = msgs[i];
+    if (m.role === "assistant" && !m.isStreaming && m.content) {
+      const match = m.content.match(/https?:\/\/[^\s"'`<>]+/i);
+      if (match) {
+        settings.optimizeApiUrl = match[0].replace(/[.,;!?。，；！？)]+$/, '');
+        isLookingUpUrl.value = false;
+        return;
+      }
+    }
+  }
+});
 
 // ── 权限模式 computed（与工具栏 activeMode 逻辑一致）──
 const activeMode = computed({
@@ -115,7 +186,7 @@ const ponytailOptions: PonytailOption[] = [
 const currentPonytail = computed(() => ponytailOptions.find(o => o.value === settings.ponytailMode)!);
 
 // ── 连接测试 ──
-const testResult = ref<string | null>(null);
+const testResult = ref<ConnectionTestResult | null>(null);
 const testError = ref<string | null>(null);
 const translatedTestError = computed(() => {
   if (!testError.value) return null;
@@ -128,7 +199,7 @@ async function handleTest() {
   testResult.value = null; testError.value = null; isTesting.value = true;
   // 去掉 [1M] 等上下文窗口标注，API 不接受
   const model = settings.model.replace(/\[.*\]/, '').trim();
-  try { testResult.value = await connectLLM(settings.apiKey, settings.baseUrl, model, settings.providerId); }
+  try { testResult.value = await connectLLM(settings.apiKey, settings.baseUrl, model, settings.providerId, settings.optimizeApiUrl || undefined); }
   catch (err) { testError.value = String(err); }  /* ponytail: translateError applied in template display */
   finally { isTesting.value = false; }
 }
@@ -227,7 +298,7 @@ async function saveSettingsJson() {
     <div style="flex:1;min-height:0;overflow-y:auto;padding:2rem" class="flex flex-col">
       <!-- Header -->
       <div class="flex items-center gap-3 mb-8">
-        <button @click="router.push('/chat')" class="w-7 h-7 flex items-center justify-center rounded-md transition-colors hover:bg-[var(--bg-hover)]" style="color:var(--text-muted)">
+        <button @click="router.push('/chat')" class="w-7 h-7 flex items-center justify-center rounded-md transition-colors hover:bg-[var(--bg-hover)]" style="color:var(--text-secondary)">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m15 18-6-6 6-6"/></svg>
         </button>
         <h2 class="text-lg font-semibold tracking-tight" style="color:var(--text-bright)">{{ $t('settings.title') }}</h2>
@@ -244,7 +315,7 @@ async function saveSettingsJson() {
           </div>
           <!-- Provider 选择 -->
           <div>
-            <label class="block text-xs font-medium mb-1.5" style="color:var(--text-muted)">{{ $t('settings.provider') }}</label>
+            <label class="block text-xs font-medium mb-1.5" style="color:var(--text-secondary)">{{ $t('settings.provider') }}</label>
             <div
               class="settings-dropdown relative cursor-pointer rounded-lg px-3.5 py-2 text-sm flex items-center gap-1.5 select-none transition-colors"
               :style="{
@@ -280,17 +351,17 @@ async function saveSettingsJson() {
             </div>
           </div>
           <div>
-            <label class="block text-xs font-medium mb-1.5" style="color:var(--text-muted)">{{ $t('settings.baseUrl') }}</label>
+            <label class="block text-xs font-medium mb-1.5" style="color:var(--text-secondary)">{{ $t('settings.baseUrl') }}</label>
             <input v-model="settings.baseUrl" type="text" placeholder="https://api.deepseek.com"
               class="settings-input w-full rounded-lg px-3.5 py-2 text-sm outline-none" />
           </div>
           <div>
-            <label class="block text-xs font-medium mb-1.5" style="color:var(--text-muted)">{{ $t('settings.apiKey') }}</label>
+            <label class="block text-xs font-medium mb-1.5" style="color:var(--text-secondary)">{{ $t('settings.apiKey') }}</label>
             <input v-model="settings.apiKey" type="password" placeholder="sk-…"
               class="settings-input w-full rounded-lg px-3.5 py-2 text-sm outline-none" />
           </div>
           <div>
-            <label class="block text-xs font-medium mb-1.5" style="color:var(--text-muted)">{{ $t('settings.model') }}</label>
+            <label class="block text-xs font-medium mb-1.5" style="color:var(--text-secondary)">{{ $t('settings.model') }}</label>
             <div
               class="settings-dropdown relative cursor-pointer rounded-lg px-3.5 py-2 text-sm flex items-center select-none transition-colors"
               :style="{
@@ -321,20 +392,49 @@ async function saveSettingsJson() {
               </Transition>
             </div>
           </div>
+          <div>
+            <div class="flex items-center justify-between mb-1.5">
+              <label class="text-xs font-medium" style="color:var(--text-secondary)">{{ $t('settings.llmApiUrl') }}</label>
+              <button
+                @click="startLookupUrl"
+                :disabled="isLookingUpUrl"
+                class="text-[10px] px-2 py-0.5 rounded-full transition-colors hover:underline"
+                :style="{ color: isLookingUpUrl ? 'var(--text-muted)' : 'var(--accent)' }"
+                :title="$t('settings.llmApiUrlLookup')"
+              >{{ isLookingUpUrl ? '⏳' : '🔍' }} {{ $t('settings.llmApiUrlLookup') }}</button>
+            </div>
+            <input v-model="settings.optimizeApiUrl" type="text" :placeholder="$t('settings.llmApiUrlPlaceholder')"
+              class="settings-input w-full rounded-lg px-3.5 py-2 text-sm outline-none" />
+          </div>
           <button @click="handleTest" :disabled="isTesting || !settings.apiKey"
             class="w-full py-2.5 rounded-lg text-sm font-medium transition-all duration-150"
             :style="{ background: isTesting ? 'var(--bg-elevated)' : 'var(--accent)', color: isTesting ? 'var(--text-muted)' : '#09090b', opacity: (!settings.apiKey) ? 0.3 : 1 }">
             {{ isTesting ? $t('settings.testing') : $t('settings.test') }}
           </button>
-          <div v-if="testResult" class="p-3 rounded-lg text-xs" style="background:var(--accent-glow); color:var(--accent)">✓ {{ testResult }}</div>
+          <div v-if="testResult" class="space-y-1">
+            <div class="p-3 rounded-lg text-xs break-all" :style="{ background: testResult.cc.startsWith('✓') ? 'var(--accent-glow)' : 'var(--coral-glow)', color: testResult.cc.startsWith('✓') ? 'var(--accent)' : 'var(--coral)' }">CC {{ testResult.cc }}</div>
+            <div v-if="testResult.chat" class="p-3 rounded-lg text-xs break-all" :style="{ background: testResult.chat.startsWith('✓') ? 'var(--accent-glow)' : testResult.chat.startsWith('⚠') ? 'var(--amber-glow)' : 'var(--coral-glow)', color: testResult.chat.startsWith('✓') ? 'var(--accent)' : testResult.chat.startsWith('⚠') ? 'var(--amber)' : 'var(--coral)' }">{{ $t('settings.chatApi') }} {{ testResult.chat }}</div>
+          </div>
           <div v-if="translatedTestError" class="p-3 rounded-lg text-xs break-all" style="background:var(--coral-glow); color:var(--coral); border:1px solid var(--coral); --tw-border-opacity:0.3">✕ {{ translatedTestError }}</div>
           <div class="pt-2" style="border-top:1px solid var(--border-dim)">
-            <label class="block text-xs font-medium mb-1.5" style="color:var(--text-muted)">{{ $t('settings.claudePath') }}</label>
+            <label class="block text-xs font-medium mb-1.5" style="color:var(--text-secondary)">{{ $t('settings.claudePath') }}</label>
             <div v-if="settings.resolvedClaudePath && settings.resolvedClaudePath !== 'claude'" class="text-[11px] font-mono py-1.5 truncate" :style="{ color: 'var(--accent)' }" :title="settings.resolvedClaudePath">
               {{ $t('settings.claudePathDetected', { path: settings.resolvedClaudePath }) }}
             </div>
-            <div v-else class="text-[11px] py-1.5" :style="{ color: 'var(--coral)' }">
-              {{ $t('settings.claudePathNotFound') }}
+            <div v-else class="text-[11px] py-1.5 space-y-1.5">
+              <div :style="{ color: 'var(--coral)' }">{{ $t('settings.claudePathNotFound') }}</div>
+              <button
+                @click="handleInstallCC"
+                :disabled="isInstallingCC"
+                class="w-full py-2 rounded-lg text-sm font-medium transition-colors"
+                :style="{
+                  background: isInstallingCC ? 'var(--bg-elevated)' : 'var(--accent)',
+                  color: isInstallingCC ? 'var(--text-muted)' : '#09090b',
+                }"
+              >{{ isInstallingCC ? $t('settings.installingCC') : $t('settings.installCC') }}
+              </button>
+              <div v-if="ccInstallResult === 'ok'" class="text-xs" style="color:var(--accent)">✓ {{ $t('settings.installCCOk') }}</div>
+              <div v-if="ccInstallResult === 'fail'" class="text-xs" style="color:var(--coral)">✕ {{ $t('settings.installCCFail') }}</div>
             </div>
             <div class="text-[10px] mb-1 mt-1" :style="{ color: 'var(--text-muted)' }">{{ $t('settings.claudePathOverride') }}</div>
             <input v-model="settings.claudePath" type="text" :placeholder="$t('settings.claudePathOverridePlaceholder')"
@@ -383,7 +483,7 @@ async function saveSettingsJson() {
 
           <!-- 语言 -->
           <div>
-            <label class="block text-xs font-medium mb-1.5" style="color:var(--text-muted)">{{ $t('settings.language') }}</label>
+            <label class="block text-xs font-medium mb-1.5" style="color:var(--text-secondary)">{{ $t('settings.language') }}</label>
             <div
               class="settings-dropdown relative cursor-pointer rounded-lg px-3.5 py-2 text-sm flex items-center gap-1.5 select-none transition-colors"
               :style="{
@@ -417,7 +517,7 @@ async function saveSettingsJson() {
 
           <!-- 主题 -->
           <div>
-            <label class="block text-xs font-medium mb-1.5" style="color:var(--text-muted)">{{ $t('settings.theme') }}</label>
+            <label class="block text-xs font-medium mb-1.5" style="color:var(--text-secondary)">{{ $t('settings.theme') }}</label>
             <div
               class="settings-dropdown relative cursor-pointer rounded-lg px-3.5 py-2 text-sm flex items-center gap-1.5 select-none transition-colors"
               :style="{
@@ -451,7 +551,7 @@ async function saveSettingsJson() {
 
           <!-- 字号 -->
           <div>
-            <label class="block text-xs font-medium mb-1.5" style="color:var(--text-muted)">{{ $t('settings.fontSize') }}</label>
+            <label class="block text-xs font-medium mb-1.5" style="color:var(--text-secondary)">{{ $t('settings.fontSize') }}</label>
             <div
               class="settings-dropdown relative cursor-pointer rounded-lg px-3.5 py-2 text-sm flex items-center gap-1.5 select-none transition-colors"
               :style="{
@@ -483,9 +583,9 @@ async function saveSettingsJson() {
             </div>
           </div>
 
-          <!-- Ponytail 模式 -->
+
           <div>
-            <label class="block text-xs font-medium mb-1.5" style="color:var(--text-muted)">{{ $t('settings.ponytailMode') }}</label>
+            <label class="block text-xs font-medium mb-1.5" style="color:var(--text-secondary)">{{ $t('settings.ponytailMode') }}</label>
             <!-- 检测中不渲染，未安装 → 安装按钮 -->
             <button
               v-if="hasPonytail === false"
@@ -506,7 +606,7 @@ async function saveSettingsJson() {
             >
               <span class="text-[13px]">{{ currentPonytail.icon }}</span>
               <span class="font-medium truncate flex-1">{{ $t(currentPonytail.labelKey) }}</span>
-              <span class="italic text-[0.6rem] opacity-50 hidden sm:inline" style="color:var(--text-muted)">{{ currentPonytail.cliKey }}</span>
+              <span class="italic text-[0.6rem] opacity-50 hidden sm:inline" style="color:var(--text-secondary)">{{ currentPonytail.cliKey }}</span>
               <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
                 :style="{ opacity: 0.4, transition: 'transform 150ms', transform: openDropdown === 'ponytail' ? 'rotate(180deg)' : '' }">
                 <polyline points="6 9 12 15 18 9"/>
@@ -527,7 +627,7 @@ async function saveSettingsJson() {
                     <div class="flex items-center gap-1.5">
                       <span class="text-[13px]">{{ o.icon }}</span>
                       <span class="text-xs font-medium" :style="{ color: settings.ponytailMode === o.value ? o.color : 'var(--text-primary)' }">{{ $t(o.labelKey) }}</span>
-                      <span class="italic text-[0.6rem] ml-auto" style="color:var(--text-muted)">{{ o.cliKey }}</span>
+                      <span class="italic text-[0.6rem] ml-auto" style="color:var(--text-secondary)">{{ o.cliKey }}</span>
                     </div>
                   </button>
                 </div>
@@ -537,7 +637,7 @@ async function saveSettingsJson() {
 
           <!-- 权限模式 -->
           <div>
-            <label class="block text-xs font-medium mb-1.5" style="color:var(--text-muted)">{{ $t('settings.defaultMode') }} <button @click="openSettingsJson" class="text-[9px] px-1.5 py-0.5 rounded-full font-medium transition-colors hover:underline ml-1" :style="{ background: 'var(--accent-glow)', color: 'var(--accent)', cursor: 'pointer' }">{{ $t('settings.fromSettingsJson') }} ↗</button></label>
+            <label class="block text-xs font-medium mb-1.5" style="color:var(--text-secondary)">{{ $t('settings.defaultMode') }} <button @click="openSettingsJson" class="text-[9px] px-1.5 py-0.5 rounded-full font-medium transition-colors hover:underline ml-1" :style="{ background: 'var(--accent-glow)', color: 'var(--accent)', cursor: 'pointer' }">{{ $t('settings.fromSettingsJson') }} ↗</button></label>
             <div
               class="settings-dropdown relative cursor-pointer rounded-lg px-3.5 py-2 text-sm flex items-center gap-1.5 select-none transition-colors"
               :style="{
@@ -548,7 +648,7 @@ async function saveSettingsJson() {
             >
               <span class="text-[13px]">{{ currentPerm.icon }}</span>
               <span class="font-medium truncate flex-1">{{ $t(currentPerm.labelKey) }}</span>
-              <span class="italic text-[10px] opacity-50 hidden sm:inline" style="color:var(--text-muted)">{{ currentPerm.cliKey }}</span>
+              <span class="italic text-[10px] opacity-50 hidden sm:inline" style="color:var(--text-secondary)">{{ currentPerm.cliKey }}</span>
               <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
                 :style="{ opacity: 0.4, transition: 'transform 150ms', transform: openDropdown === 'perm' ? 'rotate(180deg)' : '' }">
                 <polyline points="6 9 12 15 18 9"/>
@@ -569,9 +669,9 @@ async function saveSettingsJson() {
                     <div class="flex items-center gap-1.5">
                       <span class="text-[13px]">{{ o.icon }}</span>
                       <span class="text-xs font-medium" :style="{ color: activeMode === o.value ? 'var(--accent)' : 'var(--text-primary)' }">{{ $t(o.labelKey) }}</span>
-                      <span class="italic text-[10px] ml-auto" style="color:var(--text-muted)">{{ o.cliKey }}</span>
+                      <span class="italic text-[10px] ml-auto" style="color:var(--text-secondary)">{{ o.cliKey }}</span>
                     </div>
-                    <div class="text-[10px] mt-0.5 ml-5" style="color:var(--text-muted)">{{ $t(o.descKey) }}</div>
+                    <div class="text-[10px] mt-0.5 ml-5" style="color:var(--text-secondary)">{{ $t(o.descKey) }}</div>
                   </button>
                 </div>
               </Transition>
@@ -580,7 +680,7 @@ async function saveSettingsJson() {
 
           <!-- 思考深度 -->
           <div>
-            <label class="block text-xs font-medium mb-1.5" style="color:var(--text-muted)">{{ $t('settings.defaultEffort') }} <button @click="openSettingsJson" class="text-[9px] px-1.5 py-0.5 rounded-full font-medium transition-colors hover:underline ml-1" :style="{ background: 'var(--accent-glow)', color: 'var(--accent)', cursor: 'pointer' }">{{ $t('settings.fromSettingsJson') }} ↗</button></label>
+            <label class="block text-xs font-medium mb-1.5" style="color:var(--text-secondary)">{{ $t('settings.defaultEffort') }} <button @click="openSettingsJson" class="text-[9px] px-1.5 py-0.5 rounded-full font-medium transition-colors hover:underline ml-1" :style="{ background: 'var(--accent-glow)', color: 'var(--accent)', cursor: 'pointer' }">{{ $t('settings.fromSettingsJson') }} ↗</button></label>
             <div
               class="settings-dropdown relative cursor-pointer rounded-lg px-3.5 py-2 text-sm flex items-center gap-1.5 select-none transition-colors"
               :style="{
@@ -592,7 +692,7 @@ async function saveSettingsJson() {
             >
               <span class="text-[13px]">{{ currentEffort.icon }}</span>
               <span class="font-medium truncate flex-1">{{ $t(currentEffort.labelKey) }}</span>
-              <span class="italic text-[10px] opacity-50 hidden sm:inline" style="color:var(--text-muted)">{{ currentEffort.cliKey }}</span>
+              <span class="italic text-[10px] opacity-50 hidden sm:inline" style="color:var(--text-secondary)">{{ currentEffort.cliKey }}</span>
               <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
                 :style="{ opacity: 0.4, transition: 'transform 150ms', transform: openDropdown === 'effort' ? 'rotate(180deg)' : '' }">
                 <polyline points="6 9 12 15 18 9"/>
@@ -613,7 +713,7 @@ async function saveSettingsJson() {
                     <div class="flex items-center gap-1.5">
                       <span class="text-[13px]">{{ o.icon }}</span>
                       <span class="text-xs font-medium" :style="{ color: settings.effort === o.value ? o.color : 'var(--text-primary)' }">{{ $t(o.labelKey) }}</span>
-                      <span class="italic text-[10px] ml-auto" style="color:var(--text-muted)">{{ o.cliKey }}</span>
+                      <span class="italic text-[10px] ml-auto" style="color:var(--text-secondary)">{{ o.cliKey }}</span>
                     </div>
                   </button>
                 </div>

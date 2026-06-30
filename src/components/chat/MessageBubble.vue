@@ -153,7 +153,7 @@ function formatJSON(obj: unknown): string {
           v-if="message.content && !message.isStreaming"
           @click="copyContent"
           class="w-4 h-4 flex items-center justify-center rounded transition-colors hover:bg-[var(--bg-hover)]"
-          :style="{ color: copied ? 'var(--accent)' : 'var(--text-muted)' }"
+          :style="{ color: copied ? 'var(--accent)' : 'var(--text-secondary)' }"
           :title="copied ? $t('chat.copied') : $t('chat.copy')"
         >
           <svg v-if="!copied" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
@@ -164,7 +164,7 @@ function formatJSON(obj: unknown): string {
           v-if="message.role === 'user' && !message.isStreaming && !isEditing"
           @click="startEdit"
           class="w-4 h-4 flex items-center justify-center rounded transition-colors hover:bg-[var(--bg-hover)]"
-          style="color: var(--text-muted)"
+          style="color: var(--text-secondary)"
           :title="$t('chat.edit')"
         >
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
@@ -174,7 +174,7 @@ function formatJSON(obj: unknown): string {
           v-if="message.role === 'user' && !message.isStreaming && !isEditing"
           @click="emit('resend', message.id, message.content)"
           class="w-4 h-4 flex items-center justify-center rounded transition-colors hover:bg-[var(--bg-hover)]"
-          style="color: var(--text-muted)"
+          style="color: var(--text-secondary)"
           :title="$t('chat.resend')"
         >
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
@@ -222,7 +222,7 @@ function formatJSON(obj: unknown): string {
           <button
             @click="cancelEdit"
             class="px-2.5 py-1 rounded-md text-xs transition-colors hover:bg-[var(--bg-hover)]"
-            style="color: var(--text-muted)"
+            style="color: var(--text-secondary)"
           >{{ $t('chat.cancel') }}</button>
           <button
             @click="saveAndResend"
@@ -230,7 +230,7 @@ function formatJSON(obj: unknown): string {
             class="px-3 py-1 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5"
             :style="{
               background: editText.trim() ? 'var(--accent)' : 'var(--bg-elevated)',
-              color: editText.trim() ? 'var(--bg-root)' : 'var(--text-muted)',
+              color: editText.trim() ? 'var(--bg-root)' : 'var(--text-secondary)',
             }"
           >
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>

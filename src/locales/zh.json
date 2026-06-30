@@ -113,6 +113,10 @@
     "claudePathNotFound": "⚠ 未检测到 claude，请手动指定路径",
     "claudePathOverride": "手动覆盖（可选）",
     "claudePathOverridePlaceholder": "留空则使用自动检测路径",
+    "llmApiUrl": "聊天 API 地址",
+    "chatApi": "聊天",
+    "llmApiUrlPlaceholder": "完整地址（含路径），用于翻译/优化。留空则自动推导",
+    "llmApiUrlLookup": "查询",
     "ponytailOff": "关闭 — 正常模式",
     "ponytailLite": "轻量 — 做完提更简方案",
     "ponytailFull": "标准 — 严格执行阶梯",
@@ -123,7 +127,11 @@
     "changelog": "更新日志",
     "fromSettingsJson": "settings.json",
     "editSettingsJson": "编辑 settings.json",
-    "settingsJsonReadError": "读取 settings.json 失败"
+    "settingsJsonReadError": "读取 settings.json 失败",
+    "installCC": "一键安装 Claude Code CLI",
+    "installingCC": "正在安装…（请在新窗口中完成操作）",
+    "installCCOk": "安装成功！claude 命令已就绪",
+    "installCCFail": "安装未成功，请查看安装窗口中的错误信息后重试，或手动安装"
   },
 
   "session": {
@@ -189,7 +197,9 @@
     "commands": "指令",
     "commandsTitle": "指令 (Ctrl+K)",
     "ponytailTitle": "Ponytail 精简模式",
-    "ponytailInstall": "安装 Ponytail"
+    "ponytailInstall": "安装 Ponytail",
+    "optimize": "优化",
+    "optimizeTitle": "AI 优化提示词 — 将模糊描述转为清晰指令"
   },
 
   "status": {

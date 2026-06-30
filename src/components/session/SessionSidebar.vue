@@ -141,10 +141,10 @@ async function handleDelete(id: string) {
 
         <!-- Hover actions -->
         <div class="hidden group-hover:flex items-center gap-0.5 shrink-0 ml-auto">
-          <button @click.stop="startRename(s.id, s.title)" class="w-5 h-5 flex items-center justify-center rounded transition-colors hover:bg-[var(--bg-active)]" style="color:var(--text-muted)" :title="$t('session.rename')">
+          <button @click.stop="startRename(s.id, s.title)" class="w-5 h-5 flex items-center justify-center rounded transition-colors hover:bg-[var(--bg-active)]" style="color:var(--text-secondary)" :title="$t('session.rename')">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
           </button>
-          <button @click.stop="handleDelete(s.id)" class="w-5 h-5 flex items-center justify-center rounded transition-colors hover:bg-[var(--bg-active)]" style="color:var(--text-muted)" :title="$t('session.delete')">
+          <button @click.stop="handleDelete(s.id)" class="w-5 h-5 flex items-center justify-center rounded transition-colors hover:bg-[var(--bg-active)]" style="color:var(--text-secondary)" :title="$t('session.delete')">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
           </button>
         </div>

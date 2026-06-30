@@ -50,8 +50,9 @@ function stub(name: string, template = "<div></div>") {
   return { name, template, props: {} as Record<string, unknown> };
 }
 
+// pony: <script setup> 内部变量无法被 vue-tsc 推断到 wrapper.vm 类型上，mount 时一并返回 any 类型的 vm
 function mountPanel() {
-  return mount(FilePanel, {
+  const wrapper = mount(FilePanel, {
     global: {
       plugins: [i18n],
       stubs: {
@@ -62,6 +63,7 @@ function mountPanel() {
       },
     },
   });
+  return { wrapper, vm: wrapper.vm as any };
 }
 
 describe("FilePanel", () => {
@@ -72,40 +74,40 @@ describe("FilePanel", () => {
   // ── openFile：路径存储 ──
 
   it("openFile stores filename and full path for root-level file", async () => {
-    const wrapper = mountPanel();
+    const { wrapper, vm } = mountPanel();
     await wrapper.vm.$nextTick();
 
-    await wrapper.vm.openFile({ name: "README.md", path: "C:\\project\\README.md", is_dir: false, size: 1024 });
+    await vm.openFile({ name: "README.md", path: "C:\\project\\README.md", is_dir: false, size: 1024 });
 
-    expect(wrapper.vm.selectedFile).toBe("README.md");
-    expect(wrapper.vm.selectedFilePath).toBe("C:\\project\\README.md");
+    expect(vm.selectedFile).toBe("README.md");
+    expect(vm.selectedFilePath).toBe("C:\\project\\README.md");
     expect(mockReadFileContent).toHaveBeenCalledWith("C:\\project\\README.md");
   });
 
   it("openFile stores full path including subdirectories for nested file", async () => {
-    const wrapper = mountPanel();
+    const { wrapper, vm } = mountPanel();
     await wrapper.vm.$nextTick();
 
-    await wrapper.vm.openFile({
+    await vm.openFile({
       name: "ChatPanel.vue",
       path: "C:\\project\\src\\components\\ChatPanel.vue",
       is_dir: false,
       size: 5000,
     });
 
-    expect(wrapper.vm.selectedFile).toBe("ChatPanel.vue");
-    expect(wrapper.vm.selectedFilePath).toBe("C:\\project\\src\\components\\ChatPanel.vue");
+    expect(vm.selectedFile).toBe("ChatPanel.vue");
+    expect(vm.selectedFilePath).toBe("C:\\project\\src\\components\\ChatPanel.vue");
   });
 
   it("openFile navigates to directory instead of previewing", async () => {
-    const wrapper = mountPanel();
+    const { wrapper, vm } = mountPanel();
     await wrapper.vm.$nextTick();
 
-    await wrapper.vm.openFile({ name: "src", path: "C:\\project\\src", is_dir: true, size: 0 });
+    await vm.openFile({ name: "src", path: "C:\\project\\src", is_dir: true, size: 0 });
 
     // 目录不设 selectedFile
-    expect(wrapper.vm.selectedFile).toBeNull();
-    expect(wrapper.vm.selectedFilePath).toBe("");
+    expect(vm.selectedFile).toBeNull();
+    expect(vm.selectedFilePath).toBe("");
     expect(mockReadFileContent).not.toHaveBeenCalled();
     // 导航到目录
     expect(mockListDir).toHaveBeenCalledWith("C:\\project\\src");
@@ -113,103 +115,103 @@ describe("FilePanel", () => {
 
   it("openFile shows error message when readFileContent fails", async () => {
     mockReadFileContent.mockRejectedValueOnce("Permission denied");
-    const wrapper = mountPanel();
+    const { wrapper, vm } = mountPanel();
     await wrapper.vm.$nextTick();
 
-    await wrapper.vm.openFile({ name: "secret.txt", path: "C:\\project\\secret.txt", is_dir: false, size: 0 });
+    await vm.openFile({ name: "secret.txt", path: "C:\\project\\secret.txt", is_dir: false, size: 0 });
 
     // 即使读取失败，路径仍正确存储
-    expect(wrapper.vm.selectedFile).toBe("secret.txt");
-    expect(wrapper.vm.selectedFilePath).toBe("C:\\project\\secret.txt");
-    expect(wrapper.vm.previewContent).not.toBe("file content");
-    expect(wrapper.vm.previewContent).not.toBe("");
+    expect(vm.selectedFile).toBe("secret.txt");
+    expect(vm.selectedFilePath).toBe("C:\\project\\secret.txt");
+    expect(vm.previewContent).not.toBe("file content");
+    expect(vm.previewContent).not.toBe("");
   });
 
   // ── openModalPreview：使用完整路径 ──
 
   it("openModalPreview uses selectedFilePath for modal preview", () => {
-    const wrapper = mountPanel();
+    const { wrapper, vm } = mountPanel();
 
     // 模拟从子目录选中文件后的状态
-    wrapper.vm.selectedFile = "App.vue";
-    wrapper.vm.selectedFilePath = "C:\\project\\src\\App.vue";
-    wrapper.vm.openModalPreview();
+    vm.selectedFile = "App.vue";
+    vm.selectedFilePath = "C:\\project\\src\\App.vue";
+    vm.openModalPreview();
 
-    expect(wrapper.vm.previewFile).toEqual({
+    expect(vm.previewFile).toEqual({
       name: "App.vue",
       path: "C:\\project\\src\\App.vue",
     });
   });
 
   it("openModalPreview preserves deep path through subdirectories", () => {
-    const wrapper = mountPanel();
+    const { wrapper, vm } = mountPanel();
 
-    wrapper.vm.selectedFile = "index.ts";
-    wrapper.vm.selectedFilePath = "C:\\project\\src\\composables\\useStreamProcessor.ts";
-    wrapper.vm.openModalPreview();
+    vm.selectedFile = "index.ts";
+    vm.selectedFilePath = "C:\\project\\src\\composables\\useStreamProcessor.ts";
+    vm.openModalPreview();
 
-    expect(wrapper.vm.previewFile?.path).toBe("C:\\project\\src\\composables\\useStreamProcessor.ts");
-    expect(wrapper.vm.previewFile?.name).toBe("index.ts");
+    expect(vm.previewFile?.path).toBe("C:\\project\\src\\composables\\useStreamProcessor.ts");
+    expect(vm.previewFile?.name).toBe("index.ts");
   });
 
   it("openModalPreview does nothing when selectedFile is null", () => {
-    const wrapper = mountPanel();
+    const { wrapper, vm } = mountPanel();
 
-    wrapper.vm.selectedFile = null;
-    wrapper.vm.selectedFilePath = "";
-    wrapper.vm.openModalPreview();
+    vm.selectedFile = null;
+    vm.selectedFilePath = "";
+    vm.openModalPreview();
 
-    expect(wrapper.vm.previewFile).toBeNull();
+    expect(vm.previewFile).toBeNull();
   });
 
   it("openModalPreview does nothing when selectedFilePath is empty", () => {
-    const wrapper = mountPanel();
+    const { wrapper, vm } = mountPanel();
 
     // 有文件名但无完整路径 —— 防御性保护
-    wrapper.vm.selectedFile = "orphan.txt";
-    wrapper.vm.selectedFilePath = "";
-    wrapper.vm.openModalPreview();
+    vm.selectedFile = "orphan.txt";
+    vm.selectedFilePath = "";
+    vm.openModalPreview();
 
-    expect(wrapper.vm.previewFile).toBeNull();
+    expect(vm.previewFile).toBeNull();
   });
 
   // ── 关闭预览清理状态 ──
 
   it("close button clears selectedFile, selectedFilePath, previewContent", async () => {
-    const wrapper = mountPanel();
+    const { wrapper, vm } = mountPanel();
     await wrapper.vm.$nextTick();
 
     // 展开面板才能渲染 inline preview 区域（collapsed 初始为 true）
-    wrapper.vm.collapsed = false;
+    vm.collapsed = false;
 
     // 通过 openFile 设置预览状态
-    await wrapper.vm.openFile({ name: "test.ts", path: "C:\\project\\test.ts", is_dir: false, size: 100 });
+    await vm.openFile({ name: "test.ts", path: "C:\\project\\test.ts", is_dir: false, size: 100 });
     await wrapper.vm.$nextTick();
 
-    expect(wrapper.vm.selectedFile).toBe("test.ts");
-    expect(wrapper.vm.selectedFilePath).toBe("C:\\project\\test.ts");
-    expect(wrapper.vm.previewContent).toBeTruthy();
+    expect(vm.selectedFile).toBe("test.ts");
+    expect(vm.selectedFilePath).toBe("C:\\project\\test.ts");
+    expect(vm.previewContent).toBeTruthy();
 
     // 点击关闭按钮（模板 inline preview 的 ×）
     const closeBtn = wrapper.find("button[title='Close Preview']");
     expect(closeBtn.exists()).toBe(true);
     await closeBtn.trigger("click");
 
-    expect(wrapper.vm.selectedFile).toBeNull();
-    expect(wrapper.vm.selectedFilePath).toBe("");
-    expect(wrapper.vm.previewContent).toBe("");
+    expect(vm.selectedFile).toBeNull();
+    expect(vm.selectedFilePath).toBe("");
+    expect(vm.previewContent).toBe("");
   });
 
   // ── 面包屑 ──
 
   it("pathSegments splits root path into clickable segments", async () => {
-    const wrapper = mountPanel();
+    const { wrapper, vm } = mountPanel();
     await wrapper.vm.$nextTick();
 
-    wrapper.vm.rootPath = "C:\\project\\src\\components";
+    vm.rootPath = "C:\\project\\src\\components";
     await wrapper.vm.$nextTick();
 
-    const segments = wrapper.vm.pathSegments;
+    const segments = vm.pathSegments;
     expect(segments).toHaveLength(4);
     expect(segments[0]).toEqual({ label: "C:", fullPath: "C:\\" });
     expect(segments[1]).toEqual({ label: "project", fullPath: "C:\\project" });

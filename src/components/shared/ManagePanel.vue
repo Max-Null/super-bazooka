@@ -438,6 +438,7 @@ async function toggleMcp(name: string) {
 async function loadSkills() {
   loading.value = true; error.value = "";
   try {
+    const seenNames = new Set<string>();  // 多版本缓存去重
     const groups: { label: string; items: Item[] }[] = [];
 
     // 1. 自定义 skills：~/.claude/skills/
@@ -446,6 +447,8 @@ async function loadSkills() {
       const customDirs = await listDir(customPath);
       const customItems: Item[] = [];
       for (const d of customDirs) {
+        if (seenNames.has(d.name)) continue;
+        seenNames.add(d.name);
         if (!d.is_dir) continue;
         let desc: string | null = null;
         try {
@@ -483,6 +486,8 @@ async function loadSkills() {
               for (const sd of skillDirs) {
                 if (!sd.is_dir) continue;
                 let desc: string | null = null;
+                if (seenNames.has(sd.name)) continue;
+                seenNames.add(sd.name);
                 try {
                   const skillMd = await readFileContent(`${sd.path}/SKILL.md`);
                   desc = parseDescription(skillMd);
@@ -662,6 +667,7 @@ async function enrichDescriptions() {
       needTranslate,
       settingsStore.apiKey,
       settingsStore.baseUrl,
+      settingsStore.optimizeApiUrl || undefined,
     );
     const map = new Map(enriched.map(e => [e.name, e]));
     for (const it of flatItems) {
@@ -696,6 +702,7 @@ async function enrichMcpDescriptions() {
       needQuery,
       settingsStore.apiKey,
       settingsStore.baseUrl,
+      settingsStore.optimizeApiUrl || undefined,
     );
     const map = new Map(generated.map(e => [e.name, e.desc_zh]));
     for (const it of items.value) {
@@ -714,8 +721,9 @@ async function enrichMcpDescriptions() {
   }
 }
 
-// 清空 Skills 描述并重新翻译
-async function retranslateSkills() {
+// 清空当前 tab 的条目描述并重新翻译（适用于 plugins/agents/skills）
+async function retranslateItems() {
+  for (const it of items.value) it.desc = null;
   for (const it of treeItems.value) {
     if (!("type" in it)) (it as Item).desc = null;
   }
@@ -778,7 +786,17 @@ function switchTab(t: Tab) {
       loadJSON("permissions", data => {
         const p = data.permissions || {};
         const result: Item[] = [];
-        if (p.defaultMode) result.push({ name: `defaultMode: ${p.defaultMode}`, enabled: true });
+        if (p.defaultMode) result.push({ name: `defaultMode`, detail: p.defaultMode, enabled: true });
+        if (Array.isArray(p.allow)) {
+          for (const r of p.allow) {
+            if (typeof r === "string") result.push({ name: r, detail: "allow", enabled: true });
+          }
+        }
+        if (Array.isArray(p.deny)) {
+          for (const r of p.deny) {
+            if (typeof r === "string") result.push({ name: r, detail: "deny", enabled: false });
+          }
+        }
         return result;
       }); break;
     case "styles":
@@ -900,13 +918,17 @@ function switchTab(t: Tab) {
       </div>
       <div v-if="activeTab === 'skills'" class="text-[0.7rem] leading-relaxed" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.skillsDesc') }}</div>
       <div v-if="activeTab === 'skills'" class="pt-2">
-        <button @click="retranslateSkills" class="w-full text-xs px-3 py-1.5 rounded border border-dashed transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-muted)', borderColor: 'var(--border-dim)' }">{{ $t('manage.retranslate') }}</button>
+        <button @click="retranslateItems" class="w-full text-xs px-3 py-1.5 rounded border border-dashed transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-muted)', borderColor: 'var(--border-dim)' }">{{ $t('manage.retranslate') }}</button>
       </div>
       <div v-if="activeTab === 'hooks'" class="text-[0.7rem] leading-relaxed" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.hooksDesc') }}</div>
       <div v-if="activeTab === 'agents'" class="text-[0.7rem] leading-relaxed" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.agentsDesc') }}</div>
+      <div v-if="activeTab === 'agents'" class="pt-2">
+        <button @click="retranslateItems" class="w-full text-xs px-3 py-1.5 rounded border border-dashed transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-muted)', borderColor: 'var(--border-dim)' }">{{ $t('manage.retranslate') }}</button>
+      </div>
       <div v-if="activeTab === 'styles'" class="text-[0.7rem] leading-relaxed" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.stylesDesc') }}</div>
-      <div v-if="activeTab === 'plugins'" class="pt-2">
-        <button @click="addPlugin" class="w-full text-xs px-3 py-1.5 rounded border border-dashed transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-muted)', borderColor: 'var(--border-dim)' }">{{ $t('manage.addPlugin') }}</button>
+      <div v-if="activeTab === 'plugins'" class="pt-2 flex gap-2">
+        <button @click="retranslateItems" class="flex-1 text-xs px-3 py-1.5 rounded border border-dashed transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-muted)', borderColor: 'var(--border-dim)' }">{{ $t('manage.retranslate') }}</button>
+        <button @click="addPlugin" class="text-xs px-3 py-1.5 rounded border border-dashed transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-muted)', borderColor: 'var(--border-dim)' }">{{ $t('manage.addPlugin') }}</button>
       </div>
     </template>
   </ModalShell>

@@ -113,6 +113,10 @@
     "claudePathNotFound": "⚠ Claude not found, please specify path manually",
     "claudePathOverride": "Manual override (optional)",
     "claudePathOverridePlaceholder": "Leave empty to use auto-detected path",
+    "llmApiUrl": "Chat API URL",
+    "chatApi": "Chat",
+    "llmApiUrlPlaceholder": "Full URL incl. path, for translate/optimize. Auto-derived if empty",
+    "llmApiUrlLookup": "Lookup",
     "ponytailOff": "Off — Normal",
     "ponytailLite": "Lite — Suggest leaner path",
     "ponytailFull": "Full — Enforce the ladder",
@@ -123,7 +127,11 @@
     "changelog": "Changelog",
     "fromSettingsJson": "settings.json",
     "editSettingsJson": "Edit settings.json",
-    "settingsJsonReadError": "Failed to read settings.json"
+    "settingsJsonReadError": "Failed to read settings.json",
+    "installCC": "Install Claude Code CLI",
+    "installingCC": "Installing… (complete in the new window)",
+    "installCCOk": "Installed! claude command is ready",
+    "installCCFail": "Installation failed. Check the installer window for errors, or install manually"
   },
 
   "session": {
@@ -189,7 +197,9 @@
     "commands": "Commands",
     "commandsTitle": "Commands (Ctrl+K)",
     "ponytailTitle": "Ponytail: Lazy mode",
-    "ponytailInstall": "Install Ponytail"
+    "ponytailInstall": "Install Ponytail",
+    "optimize": "Optimize",
+    "optimizeTitle": "AI prompt optimizer — clarify vague descriptions"
   },
 
   "status": {

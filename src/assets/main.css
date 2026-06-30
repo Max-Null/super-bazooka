@@ -16,12 +16,12 @@ html[data-font-size="large"]  { font-size: 22px; }
   --bg-hover: #1e1e26;
   --bg-active: #262634;
 
-  --border-dim: #1c1c26;
-  --border-default: #2a2a3a;
-  --border-bright: #404058;
+  --border-dim: #242436;
+  --border-default: #2e2e42;
+  --border-bright: #484864;
 
-  --text-muted: #4a4a5e;
-  --text-secondary: #7c7c94;
+  --text-muted: #5c5c76;
+  --text-secondary: #8888a4;
   --text-primary: #c0c0d0;
   --text-bright: #e8e8f4;
 
@@ -33,6 +33,7 @@ html[data-font-size="large"]  { font-size: 22px; }
   --amber-glow: rgba(245, 166, 35, 0.08);
 
   --coral: #ff5e5b;
+  --coral-glow: rgba(255, 94, 91, 0.10);
 
   --violet: #a78bfa;
 
@@ -65,6 +66,7 @@ html[data-font-size="large"]  { font-size: 22px; }
   --amber: #d97706;
   --amber-glow: rgba(217, 119, 6, 0.07);
   --coral: #dc2626;
+  --coral-glow: rgba(220, 38, 38, 0.08);
   --violet: #7c3aed;
 }
 [data-theme="light"] .prose {

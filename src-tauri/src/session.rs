@@ -340,6 +340,20 @@ impl SessionManager {
         Ok(messages)
     }
 
+    /// 校验测试连接的 URL 安全性——拒绝非 HTTPS 和云元数据地址。
+    /// 桌面应用场景不做过度限制（用户配 localhost 代理是合法需求）。
+    fn validate_test_url(url: &str) -> Result<(), String> {
+        let lower = url.to_lowercase();
+        if !lower.starts_with("https://") {
+            return Err("测试连接仅支持 HTTPS URL，拒绝明文传输 API Key".into());
+        }
+        // 阻止发往云元数据服务的请求（SSRF 纵深防御，桌面应用概率极低但无害）
+        if lower.contains("169.254.169.254") {
+            return Err("拒绝向云元数据服务发送 API Key".into());
+        }
+        Ok(())
+    }
+
     // ── API connection test ──
 
     /// Test connection to a DeepSeek-compatible API.
@@ -355,6 +369,7 @@ impl SessionManager {
             .trim_end_matches("/anthropic")
             .trim_end_matches("/v1");
         let url = format!("{}/v1/chat/completions", base);
+        Self::validate_test_url(&url)?;
 
         let body = serde_json::json!({
             "model": model,
@@ -383,20 +398,59 @@ impl SessionManager {
         }
     }
 
-    /// Test connection to Anthropic Messages API (GET /v1/models, zero token cost).
-    pub async fn test_connection_anthropic(&self, api_key: &str) -> Result<String, String> {
+    /// 测试 Anthropic 兼容 API 连接——用用户配置的 base_url，发一条最小 Messages 请求（1 token）。
+    /// 不硬编码 api.anthropic.com，DashScope 等第三方 Anthropic 兼容端点也能测。
+    pub async fn test_connection_anthropic(&self, api_key: &str, base_url: &str) -> Result<String, String> {
         let client = reqwest::Client::new();
+        let base = base_url.trim_end_matches('/');
+        let url = format!("{}/v1/messages", base);
+        Self::validate_test_url(&url)?;
+
+        let body = serde_json::json!({
+            "model": "claude-haiku-4-5-20251001",
+            "max_tokens": 1,
+            "messages": [{"role": "user", "content": "hi"}]
+        });
+
         let resp = client
-            .get("https://api.anthropic.com/v1/models")
+            .post(&url)
             .header("x-api-key", api_key)
             .header("anthropic-version", "2023-06-01")
+            .header("Content-Type", "application/json")
+            .json(&body)
             .send()
             .await
             .map_err(|e| format!("HTTP request failed: {}", e))?;
 
         let status = resp.status();
         if status.is_success() {
-            Ok(format!("Connected to Anthropic! Status: {}", status))
+            Ok(format!("Connected! Status: {}", status))
+        } else {
+            let body = resp.text().await.unwrap_or_default();
+            Err(format!("API error {}: {}", status, body))
+        }
+    }
+
+    /// 测试聊天 API 端点——发一条最小 Chat Completions 请求。
+    pub async fn test_chat_api(&self, api_key: &str, url: &str, model: &str) -> Result<String, String> {
+        Self::validate_test_url(url)?;
+        let client = reqwest::Client::new();
+        let body = serde_json::json!({
+            "model": model,
+            "messages": [{"role": "user", "content": "hi"}],
+            "max_tokens": 1,
+        });
+        let resp = client
+            .post(url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| format!("HTTP request failed: {}", e))?;
+        let status = resp.status();
+        if status.is_success() {
+            Ok(format!("Connected! Status: {}", status))
         } else {
             let body = resp.text().await.unwrap_or_default();
             Err(format!("API error {}: {}", status, body))

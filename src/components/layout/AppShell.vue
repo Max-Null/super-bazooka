@@ -239,7 +239,7 @@ function openFilePanelTo(path: string) {
         <button
           @click="handleCommand('zen-mode')"
           class="w-6 h-6 flex items-center justify-center rounded-md transition-colors shrink-0"
-          :style="{ background: zenMode ? 'var(--accent-glow)' : 'transparent', color: zenMode ? 'var(--accent)' : 'var(--text-muted)' }"
+          :style="{ background: zenMode ? 'var(--accent-glow)' : 'transparent', color: zenMode ? 'var(--accent)' : 'var(--text-secondary)' }"
           :class="zenMode ? '' : 'hover:bg-[var(--bg-hover)]'"
           :title="zenMode ? $t('header.exitZenMode') : $t('header.zenMode')"
         >🧘</button>
@@ -251,13 +251,13 @@ function openFilePanelTo(path: string) {
           <button
             @click="openFilePanelTo(cwd)"
             class="text-[10px] font-mono truncate px-2 py-0.5 rounded-l leading-none cursor-pointer transition-colors hover:border-[var(--accent)]"
-            :style="{ background: 'var(--bg-root)', color: 'var(--accent)', border: '1px solid var(--border-dim)', borderRight: 'none' }"
+            :style="{ background: 'var(--bg-root)', color: 'var(--accent)', border: '1px solid var(--accent-dim)', borderRight: 'none' }"
             :title="cwd + $t('header.cwdTitle')"
           >{{ cwd }}</button>
           <button
             @click.stop="showWorkspaceMenu = !showWorkspaceMenu"
             class="shrink-0 w-5 py-0.5 rounded-r flex items-center justify-center cursor-pointer transition-colors hover:text-[var(--accent)]"
-            :style="{ background: 'var(--bg-root)', color: 'var(--text-muted)', border: '1px solid var(--border-dim)', lineHeight: 1 }"
+            :style="{ background: 'var(--bg-root)', color: 'var(--accent-dim)', border: '1px solid var(--accent-dim)', lineHeight: 1 }"
             :title="$t('header.switchWorkspace')"
           >
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
@@ -372,7 +372,11 @@ function openFilePanelTo(path: string) {
           class="w-7 h-7 flex items-center justify-center rounded-md transition-colors hover:bg-[var(--bg-hover)]"
           style="color:var(--text-secondary)"
           :title="$t('manage.title')"
-        >🔧</button>
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+          </svg>
+        </button>
 
         <!-- Settings -->
         <button

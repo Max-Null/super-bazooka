@@ -296,7 +296,7 @@ const currentEffortLabel = computed(() => {
 }
 
 .toolbar-btn {
-  color: var(--text-muted);
+  color: var(--text-secondary);
   background: transparent;
   border: 1px solid transparent;
   transition: all 150ms ease;

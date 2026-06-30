@@ -171,16 +171,16 @@ export function useStreamProcessor() {
             if (finalThinking > 0) lastToolUse.thinkingDurationMs = (lastToolUse.thinkingDurationMs || 0) + finalThinking;
             toolExecStart = 0;
             lastToolUse = null;
-          } else if (finalThinking > 0 && msg.toolUses.length > 0) {
+          } else if (finalThinking > 0 && msg?.toolUses.length) {
             // 有工具但 toolExecStart 已结算（思考在 result 前就开始了）
             const last = msg.toolUses[msg.toolUses.length - 1];
             last.thinkingDurationMs = (last.thinkingDurationMs || 0) + finalThinking;
           }
           chat.finishAssistantMessage(
             data.duration_ms,
-            data.input_tokens ?? msg.inputTokens,
-            data.output_tokens ?? msg.outputTokens,
-            data.cost_usd ?? msg.costUSD,
+            data.input_tokens ?? msg?.inputTokens,
+            data.output_tokens ?? msg?.outputTokens,
+            data.cost_usd ?? msg?.costUSD,
           );
           // 持久化 debug/stderr 日志 + 刷新侧栏统计
           const sid = data.session_id || session.activeSessionId;
