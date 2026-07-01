@@ -26,7 +26,7 @@ const { switchTo } = useSessionSwitch();
 
 // 当前模式下的活跃会话 ID（禅模式用 zenActiveId，CC 用 activeSessionId）
 const activeId = computed(() =>
-  settings.zenMode ? sessionStore.zenActiveId : activeId,
+  settings.zenMode ? sessionStore.zenActiveId : sessionStore.activeSessionId,
 );
 
 const searchQuery = ref("");
