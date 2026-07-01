@@ -4,45 +4,48 @@ import { useRouter } from "vue-router";
 
 import { useSessionStore } from "@/stores/session";
 import { useChatStore } from "@/stores/chat";
+import { useSettingsStore } from "@/stores/settings";
 
 import { useNewSession } from "@/composables/useNewSession";
-import { listMessages } from "@/lib/tauri-bridge";
+import { useSessionSwitch } from "@/composables/useSessionSwitch";
 import { formatTokenCount } from "@/lib/utils";
+
+const emit = defineEmits<{
+  navigate: [id: string];
+  collapse: [];
+}>();
 
 const router = useRouter();
 
 const sessionStore = useSessionStore();
 const chatStore = useChatStore();
+const settings = useSettingsStore();
 
 const { handleNew } = useNewSession();
+const { switchTo } = useSessionSwitch();
+
+// 当前模式下的活跃会话 ID（禅模式用 zenActiveId，CC 用 activeSessionId）
+const activeId = computed(() =>
+  settings.zenMode ? sessionStore.zenActiveId : activeId,
+);
 
 const searchQuery = ref("");
 const editingId = ref<string | null>(null);
 const editingTitle = ref("");
 
 const filteredSessions = computed(() => {
+  const all = settings.zenMode
+    ? sessionStore.sessions.filter(s => s.mode === 'zen')
+    : sessionStore.sessions.filter(s => s.mode !== 'zen');
   const q = searchQuery.value.trim().toLowerCase();
-  if (!q) return sessionStore.sessions;
-  return sessionStore.sessions.filter(s => s.title.toLowerCase().includes(q));
+  if (!q) return all;
+  return all.filter(s => s.title.toLowerCase().includes(q));
 });
 
 onMounted(async () => { await sessionStore.loadSessions(); });
 
 async function handleSelect(id: string) {
-  sessionStore.setActiveSession(id);
-  // ponytail: clear 移到 handleSend / handleNew，此处查看历史不清理
-  try {
-    const msgs = await listMessages(id);
-    chatStore.loadMessages(msgs.map(m => ({
-      id: m.id,
-      role: m.role,
-      content: m.content,
-      created_at: m.created_at,
-    })));
-  } catch {
-    chatStore.clearMessages();
-  }
-  router.push("/chat");
+  await switchTo(id);
 }
 
 function startRename(id: string, title: string) { editingId.value = id; editingTitle.value = title; }
@@ -53,7 +56,7 @@ async function finishRename(id: string) {
 }
 function cancelRename() { editingId.value = null; }
 async function handleDelete(id: string) {
-  const wasActive = sessionStore.activeSessionId === id;
+  const wasActive = activeId.value === id;
   await sessionStore.deleteSession(id);
   // 删除当前会话 → 清空消息，回到首页
   if (wasActive) {
@@ -68,16 +71,28 @@ async function handleDelete(id: string) {
     <!-- Header -->
     <div class="flex items-center justify-between px-3 py-3">
       <span class="text-[11px] font-semibold uppercase tracking-widest" style="color:var(--text-muted)">{{ $t('session.title') }}</span>
-      <button
-        @click="handleNew"
-        class="w-6 h-6 flex items-center justify-center rounded-md transition-colors hover:bg-[var(--bg-hover)]"
-        style="color:var(--text-secondary)"
-        :title="$t('session.new')"
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-          <path d="M12 5v14M5 12h14" />
-        </svg>
-      </button>
+      <div class="flex items-center gap-1">
+        <button
+          @click="handleNew"
+          class="w-6 h-6 flex items-center justify-center rounded-md transition-colors hover:bg-[var(--bg-hover)]"
+          style="color:var(--text-secondary)"
+          :title="$t('session.new')"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+        </button>
+        <button
+          @click="emit('collapse')"
+          class="w-6 h-6 flex items-center justify-center rounded-md transition-colors hover:bg-[var(--bg-hover)]"
+          style="color:var(--text-muted)"
+          title="收起侧栏"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M3 12h18M3 6h18M3 18h18" />
+          </svg>
+        </button>
+      </div>
     </div>
 
     <!-- Search -->
@@ -108,11 +123,11 @@ async function handleDelete(id: string) {
         @click="handleSelect(s.id)"
         class="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-left text-[13px] transition-colors group"
         :style="{
-          background: s.id === sessionStore.activeSessionId ? 'var(--accent-glow)' : 'transparent',
-          color: s.id === sessionStore.activeSessionId ? 'var(--accent)' : 'var(--text-secondary)'
+          background: s.id === activeId ? 'var(--accent-glow)' : 'transparent',
+          color: s.id === activeId ? 'var(--accent)' : 'var(--text-secondary)'
         }"
       >
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" :style="{ opacity: s.id === sessionStore.activeSessionId ? 1 : 0.35 }">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" :style="{ opacity: s.id === activeId ? 1 : 0.35 }">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
         </svg>
 
@@ -128,7 +143,8 @@ async function handleDelete(id: string) {
           maxlength="100"
         />
         <div v-else class="truncate flex-1 min-w-0">
-          <span class="block truncate">{{ s.title }}</span>
+          <!-- "New Chat" 是 Rust 后端默认标题，前端按 i18n 显示 -->
+          <span class="block truncate">{{ s.title === 'New Chat' ? $t('session.new') : s.title }}</span>
           <span
             v-if="s.totalTokens"
             class="block text-[10px] truncate"
@@ -139,8 +155,15 @@ async function handleDelete(id: string) {
           </span>
         </div>
 
-        <!-- Hover actions -->
-        <div class="hidden group-hover:flex items-center gap-0.5 shrink-0 ml-auto">
+        <!-- Activity dot -->
+        <span
+          v-if="sessionStore.sessionActivity[s.id]"
+          class="activity-dot shrink-0"
+          :class="'dot-' + sessionStore.sessionActivity[s.id]"
+        />
+
+        <!-- Hover actions — always in layout (invisible) 防止出现时行高抖动 -->
+        <div class="invisible group-hover:visible flex items-center gap-0.5 shrink-0 ml-auto">
           <button @click.stop="startRename(s.id, s.title)" class="w-5 h-5 flex items-center justify-center rounded transition-colors hover:bg-[var(--bg-active)]" style="color:var(--text-secondary)" :title="$t('session.rename')">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
           </button>
@@ -159,3 +182,26 @@ async function handleDelete(id: string) {
     </div>
   </div>
 </template>
+
+<style scoped>
+.activity-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+.dot-processing {
+  background: #22c55e;
+  animation: dot-blink 1s ease-in-out infinite;
+}
+.dot-unread {
+  background: #3b82f6;
+}
+.dot-blocked {
+  background: #f97316;
+  animation: dot-blink 0.6s ease-in-out infinite;
+}
+@keyframes dot-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.15; }
+}
+</style>

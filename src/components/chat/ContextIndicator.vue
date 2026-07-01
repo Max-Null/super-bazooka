@@ -4,6 +4,8 @@ import { useChatStore } from "@/stores/chat";
 import { useSettingsStore } from "@/stores/settings";
 import { formatNum } from "@/lib/utils";
 
+defineEmits<{ click: [] }>();
+
 const chat = useChatStore();
 const settings = useSettingsStore();
 
@@ -59,16 +61,16 @@ const barSegments = 10;
 <template>
   <div
     v-if="chat.messages.length > 0"
-    class="flex items-center gap-1.5 text-[10px] shrink-0 cursor-pointer"
-    :style="{ color: 'var(--text-muted)' }"
+    class="context-indicator"
     :title="tooltip"
+    @click="$emit('click')"
   >
     <!-- Mini progress bar -->
-    <div class="flex gap-px items-end" style="height: 10px">
+    <div class="context-bar">
       <div
         v-for="i in barSegments"
         :key="i"
-        class="w-1 rounded-sm transition-colors"
+        class="context-bar-segment"
         :style="{
           height: (i / barSegments) * 10 + 'px',
           background: i <= Math.round(pct / (100 / barSegments)) ? statusColor : 'var(--border-dim)',
@@ -77,8 +79,34 @@ const barSegments = 10;
       ></div>
     </div>
     <!-- Label -->
-    <span class="tabular-nums" :style="{ color: statusColor }">
+    <span class="context-pct" :style="{ color: statusColor }">
       {{ pct }}%
     </span>
   </div>
 </template>
+
+<style scoped>
+.context-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 10px;
+  flex-shrink: 0;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+.context-bar {
+  display: flex;
+  gap: 1px;
+  align-items: flex-end;
+  height: 10px;
+}
+.context-bar-segment {
+  width: 4px;
+  border-radius: 2px;
+  transition: background-color 150ms, opacity 150ms;
+}
+.context-pct {
+  font-variant-numeric: tabular-nums;
+}
+</style>

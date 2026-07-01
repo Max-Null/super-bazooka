@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { ref } from "vue";
+import { ref, computed } from "vue";
 import {
   createSession as createSessionBackend,
   listSessions,
@@ -18,11 +18,36 @@ export interface Session {
   totalCost?: number | null;
   /** The real claude session UUID (for --resume) */
   claudeSessionId?: string;
+  /** 'cc' | 'zen' — 会话类型 */
+  mode?: string;
 }
 
 export const useSessionStore = defineStore("session", () => {
   const sessions = ref<Session[]>([]);
   const activeSessionId = ref<string>("");
+  /** 当前 CC 会话已连接的 MCP 服务器名称列表 */
+  const connectedMcpServers = ref<string[]>([]);
+
+  // ── 禅模式会话视图（从 sessions 中过滤 mode='zen'）──
+  const zenSessions = computed(() => sessions.value.filter(s => s.mode === 'zen'));
+  const zenActiveId = ref<string>("");
+
+  // ── 会话活动状态指示 ──
+  // 'processing' = CC 运行中 → 绿点闪烁
+  // 'unread'     = 完成但未查看 → 蓝点
+  // 'blocked'    = 等待授权/问答 → 橙点（优先级最高，覆盖 processing）
+  type ActivityStatus = 'processing' | 'unread' | 'blocked';
+  const sessionActivity = ref<Record<string, ActivityStatus>>({});
+
+  function setSessionActivity(id: string, status: ActivityStatus | null) {
+    const next = { ...sessionActivity.value };
+    if (status) {
+      next[id] = status;
+    } else {
+      delete next[id];
+    }
+    sessionActivity.value = next;
+  }
 
   /** Load sessions from Rust SQLite backend */
   async function loadSessions() {
@@ -35,10 +60,10 @@ export const useSessionStore = defineStore("session", () => {
     }
   }
 
-  /** Create a new session via backend，可指定 CWD */
-  async function createSession(model?: string, cwd?: string): Promise<string> {
+  /** Create a new session via backend，可指定 CWD 和 mode */
+  async function createSession(model?: string, cwd?: string, mode?: string): Promise<string> {
     try {
-      const s = await createSessionBackend(model, cwd);
+      const s = await createSessionBackend(model, cwd, mode);
       sessions.value.unshift(toLocalSession(s));
       activeSessionId.value = s.id;
       return s.id;
@@ -113,6 +138,11 @@ export const useSessionStore = defineStore("session", () => {
     deleteSession,
     setClaudeSessionId,
     getActiveClaudeSessionId,
+    connectedMcpServers,
+    zenSessions,
+    zenActiveId,
+    sessionActivity,
+    setSessionActivity,
   };
 });
 
@@ -127,5 +157,6 @@ function toLocalSession(s: SessionData): Session {
     totalTokens: s.total_tokens,
     totalCost: s.total_cost,
     claudeSessionId: s.cli_session_id ?? undefined,
+    mode: s.mode || "cc",
   };
 }

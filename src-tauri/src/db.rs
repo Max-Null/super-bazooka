@@ -50,6 +50,7 @@ fn run_migrations(conn: &Connection) -> SqliteResult<()> {
             cwd TEXT NOT NULL DEFAULT '',
             model TEXT DEFAULT '',
             status TEXT NOT NULL DEFAULT 'idle',
+            mode TEXT NOT NULL DEFAULT 'cc',
             debug_log TEXT DEFAULT '',
             stderr_log TEXT DEFAULT '',
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -89,14 +90,14 @@ fn run_migrations(conn: &Connection) -> SqliteResult<()> {
         ",
     )?;
 
-    // 兼容已有数据库：添加 debug_log / stderr_log 列（SQLite 不支持 IF NOT EXISTS for ALTER）
-    if let Err(e) = conn.execute_batch(
-        "ALTER TABLE sessions ADD COLUMN debug_log TEXT DEFAULT '';
-         ALTER TABLE sessions ADD COLUMN stderr_log TEXT DEFAULT '';",
-    ) {
-        let msg = e.to_string();
-        if !msg.contains("duplicate column") {
-            return Err(e); // 非"列已存在"的错误才传播
+    // 兼容已有数据库：添加新列（SQLite 不支持 IF NOT EXISTS for ALTER）
+    // 每条 ALTER 独立执行——放一个 batch 里只要有一条失败就全部回滚
+    for col in ["debug_log TEXT DEFAULT ''", "stderr_log TEXT DEFAULT ''", "mode TEXT NOT NULL DEFAULT 'cc'"] {
+        if let Err(e) = conn.execute(&format!("ALTER TABLE sessions ADD COLUMN {}", col), []) {
+            let msg = e.to_string();
+            if !msg.contains("duplicate column") {
+                return Err(e);
+            }
         }
     }
 

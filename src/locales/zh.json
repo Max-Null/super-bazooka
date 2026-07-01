@@ -51,7 +51,8 @@
     "aboutTitle": "关于 90火",
     "aboutSubtitle": "90火 — 连接 Claude 的智能桥梁",
     "aboutTech": "Tauri 2 + Vue 3 + TypeScript · Rust · SQLite · 多厂商 API",
-    "aboutCopyright": "© 2026 Super Bazooka contributors · MIT"
+    "aboutCopyright": "© 2026 Super Bazooka contributors · MIT",
+    "zenActive": "禅模式"
   },
 
   "provider": {
@@ -202,7 +203,13 @@
     "ponytailTitle": "Ponytail 精简模式",
     "ponytailInstall": "安装 Ponytail",
     "optimize": "优化",
-    "optimizeTitle": "AI 优化提示词 — 将模糊描述转为清晰指令"
+    "optimizeTitle": "AI 优化提示词 — 将模糊描述转为清晰指令",
+    "slash": "斜杠",
+    "slashTitle": "快捷斜杠命令",
+    "slashFavorites": "收藏",
+    "slashRecent": "最近使用",
+    "slashBrowseAll": "浏览全部命令…",
+    "slashEmpty": "暂无记录，发送 / 命令后自动出现"
   },
 
   "status": {
@@ -220,8 +227,8 @@
   "header": {
     "newSession": "新会话",
     "toggleSidebar": "切换侧边栏",
-    "zenMode": "禅模式",
-    "exitZenMode": "退出禅模式",
+    "zenMode": "禅模式（直接 LLM 对话）",
+    "exitZenMode": "退出禅模式（恢复 CC CLI）",
     "fullscreen": "全屏",
     "exitFullscreen": "退出全屏",
     "lightMode": "亮色模式",
@@ -276,6 +283,8 @@
     "mcpTypeWs": "WebSocket",
     "translateError": "翻译失败",
     "retranslate": "重新翻译",
+    "favorite": "收藏",
+    "unfavorite": "取消收藏",
     "pluginsDesc": "插件描述来自 marketplace 中 .claude-plugin/plugin.json 元数据。按名称 key 后的 {'@'} 确定 marketplace。",
     "mcpDesc": "来源：用户配置来自 ~/.claude.json，插件来自已启用的插件。描述由 AI 自动生成并缓存，点击「重新翻译」刷新。",
     "skillsDesc": "来源：自定义（~/.claude/skills/）+ 已启用插件。按来源分组显示。描述来自 SKILL.md 的 YAML 头部。点击行可查看/编辑。",
@@ -324,7 +333,7 @@
     "exportSessionDesc": "将当前会话导出为 Markdown",
     "switchSession": "切换会话",
     "zenMode": "禅模式",
-    "zenModeDesc": "隐藏侧边栏和文件面板，仅对话区",
+    "zenModeDesc": "直接与 LLM 对话（聊天 API），不启动 CC CLI",
     "permDefault": "默认模式",
     "permDefaultDesc": "仅自动批准读取操作",
     "permPlan": "计划模式",
@@ -394,6 +403,7 @@
     "memoryFiles": "记忆文件",
     "skills": "技能",
     "messages": "消息",
-    "note": "System / Tools / Agents / Memory / Skills 为静态估算值。消息 tokens 来自实际 API 返回。精确值请运行 /context"
+    "note": "System / Tools / Agents / Memory / Skills 为静态估算值。消息 tokens 来自实际 API 返回。精确值请运行 /context",
+    "compact": "压缩上下文"
   }
 }

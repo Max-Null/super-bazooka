@@ -2,6 +2,17 @@ import { defineStore } from "pinia";
 import { ref, watch } from "vue";
 import { getClaudeSettings, setClaudeSettings, resolveClaudePath, saveProviderConfig, loadProviderConfigs } from "@/lib/tauri-bridge";
 
+/** Provider logo CDN URL 映射（lobe-icons，与 SettingsPanel 同源） */
+export const PROVIDER_LOGOS: Record<string, string> = {
+  anthropic: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/anthropic.svg",
+  deepseek: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/deepseek-color.svg",
+  openrouter: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/openrouter.svg",
+  siliconflow: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/siliconcloud-color.svg",
+  zhipu: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/zhipu-color.svg",
+  kimi: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/kimi-color.svg",
+  minimax: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/minimax-color.svg",
+};
+
 const STORAGE_KEY = "sb-ui-settings";
 
 /**
@@ -120,6 +131,9 @@ export const useSettingsStore = defineStore("settings", () => {
   const LLM_API_URL_KEY = "sb-llm-api-url-override";
   const optimizeApiUrl = ref(localStorage.getItem(LLM_API_URL_KEY) || "");
 
+  // 禅模式：直接与 LLM 对话，不启动 CC CLI（仅内存状态，不持久化）
+  const zenMode = ref(false);
+
   // 启动时获取自动检测的 claude 路径
   resolveClaudePath().then(p => resolvedClaudePath.value = p).catch(() => {});
 
@@ -170,9 +184,11 @@ export const useSettingsStore = defineStore("settings", () => {
     { deep: true },
   );
 
-  // Provider 配置编辑 → 自动写 SQLite
+  // Provider 配置编辑 → 自动写 SQLite（500ms 防抖，避免每次按键都写盘）
+  let saveTimer: ReturnType<typeof setTimeout> | null = null;
   watch([apiKey, baseUrl, model], () => {
-    saveCurrentConfig();
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => saveCurrentConfig(), 500);
   });
 
   // LLM API 地址：未手填时跟随 baseUrl，手填后存 localStorage
@@ -200,5 +216,5 @@ export const useSettingsStore = defineStore("settings", () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
   }, { deep: true });
 
-  return { apiKey, baseUrl, model, providerId, models, planMode, autoMode, permissionMode, effort, ponytailMode, theme, locale, fontSize, claudePath, optimizeApiUrl, resolvedClaudePath, saveCurrentConfig, restoreConfig };
+  return { apiKey, baseUrl, model, providerId, models, planMode, autoMode, permissionMode, effort, ponytailMode, theme, locale, fontSize, claudePath, optimizeApiUrl, zenMode, resolvedClaudePath, saveCurrentConfig, restoreConfig };
 });

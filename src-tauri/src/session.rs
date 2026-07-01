@@ -19,6 +19,7 @@ pub struct Session {
     pub cwd: String,
     pub model: String,
     pub status: String,
+    pub mode: String,
     pub created_at: String,
     pub updated_at: String,
     pub message_count: u32,
@@ -54,13 +55,14 @@ impl SessionManager {
         &self,
         cwd: &str,
         model: &str,
+        mode: &str,
     ) -> Result<Session, String> {
         let id = uuid_v4();
         let conn = self.db.conn.lock().map_err(|e| format!("DB lock: {}", e))?;
 
         conn.execute(
-            "INSERT INTO sessions (id, title, cwd, model, status) VALUES (?1, 'New Chat', ?2, ?3, 'idle')",
-            params![id, cwd, model],
+            "INSERT INTO sessions (id, title, cwd, model, status, mode) VALUES (?1, 'New Chat', ?2, ?3, 'idle', ?4)",
+            params![id, cwd, model, mode],
         )
         .map_err(|e| format!("DB insert session: {}", e))?;
 
@@ -74,7 +76,7 @@ impl SessionManager {
 
         let mut stmt = conn
             .prepare(
-                "SELECT s.id, s.title, s.cli_session_id, s.cwd, s.model, s.status,
+                "SELECT s.id, s.title, s.cli_session_id, s.cwd, s.model, s.status, s.mode,
                         s.created_at, s.updated_at,
                         (SELECT COUNT(*) FROM messages WHERE session_id = s.id) AS msg_count
                  FROM sessions s WHERE s.id = ?1",
@@ -89,9 +91,10 @@ impl SessionManager {
                 cwd: row.get(3)?,
                 model: row.get(4)?,
                 status: row.get(5)?,
-                created_at: row.get(6)?,
-                updated_at: row.get(7)?,
-                message_count: row.get(8)?,
+                mode: row.get::<_, String>(6).unwrap_or_else(|_| "cc".into()),
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
+                message_count: row.get(9)?,
                 total_tokens: None,
                 total_cost: None,
             })
@@ -105,7 +108,7 @@ impl SessionManager {
 
         let mut stmt = conn
             .prepare(
-                "SELECT s.id, s.title, s.cli_session_id, s.cwd, s.model, s.status,
+                "SELECT s.id, s.title, s.cli_session_id, s.cwd, s.model, s.status, s.mode,
                         s.created_at, s.updated_at,
                         (SELECT COUNT(*) FROM messages WHERE session_id = s.id) AS msg_count
                  FROM sessions s ORDER BY s.updated_at DESC",
@@ -121,9 +124,10 @@ impl SessionManager {
                     cwd: row.get(3)?,
                     model: row.get(4)?,
                     status: row.get(5)?,
-                    created_at: row.get(6)?,
-                    updated_at: row.get(7)?,
-                    message_count: row.get(8)?,
+                    mode: row.get::<_, String>(6).unwrap_or_else(|_| "cc".into()),
+                    created_at: row.get(7)?,
+                    updated_at: row.get(8)?,
+                    message_count: row.get(9)?,
                     total_tokens: None,
                     total_cost: None,
                 })

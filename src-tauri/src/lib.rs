@@ -10,7 +10,7 @@ use std::sync::Arc;
 use db::Db;
 use process::{spawn_claude_session, ProcessManager, SpawnParams, StdinManager};
 use session::{SessionManager};
-use tauri::State;
+use tauri::{Emitter, State};
 use tokio::sync::Mutex;
 
 pub struct AppState {
@@ -224,7 +224,7 @@ async fn stop_session(
     state: State<'_, AppState>,
     session_id: String,
 ) -> Result<(), String> {
-    let pm = state.process_manager.lock().await;
+    let mut pm = state.process_manager.lock().await;
     pm.kill(&session_id).await?;
     // Update status in DB
     let session = state.session_manager.lock().await;
@@ -239,6 +239,7 @@ async fn create_session(
     state: State<'_, AppState>,
     model: Option<String>,
     cwd: Option<String>,
+    mode: Option<String>,
 ) -> Result<session::Session, String> {
     let session = state.session_manager.lock().await;
     let cwd = match cwd.filter(|p| !p.is_empty()) {
@@ -253,7 +254,7 @@ async fn create_session(
         }
         None => detect_project_root(),
     };
-    session.create_session(&cwd, &model.unwrap_or_default())
+    session.create_session(&cwd, &model.unwrap_or_default(), &mode.unwrap_or_else(|| "cc".into()))
 }
 
 #[tauri::command]
@@ -1107,6 +1108,168 @@ async fn generate_mcp_descriptions(
     Ok(cached)
 }
 
+/// 禅模式：直接调用 LLM chat/completions API + SSE 流式，绕过 CC CLI。
+/// 响应通过 stream-event 事件逐 chunk 推给前端，复用现有 useStreamProcessor。
+#[tauri::command]
+async fn zen_send_message(
+    state: State<'_, AppState>,
+    session_id: String,
+    message: String,
+    api_key: String,
+    chat_url: String,
+    model: String,
+    app_handle: tauri::AppHandle,
+) -> Result<String, String> {
+    ensure_https(&chat_url)?;
+
+    // 保存用户消息到 DB + 加载历史构建多轮上下文
+    let mut api_messages: Vec<serde_json::Value> = Vec::new();
+    {
+        let session = state.session_manager.lock().await;
+        let msg_id = format!("{}-u", chrono_now());
+        let _ = session.save_message(&msg_id, &session_id, "user", &message, "{}");
+        let _ = session.auto_title_from_first_message(&session_id, &message);
+        let _ = session.set_session_status(&session_id, "running");
+
+        // 加载历史消息构建多轮对话（不含刚存的——它已经是最新用户消息）
+        if let Ok(history) = session.list_messages(&session_id) {
+            for msg in history {
+                let content: String = match msg.role.as_str() {
+                    "user" => extract_message_text(&msg.content),
+                    "assistant" => extract_assistant_text(&msg.content),
+                    _ => continue,
+                };
+                if content.is_empty() { continue; }
+                api_messages.push(serde_json::json!({
+                    "role": msg.role, "content": content,
+                }));
+            }
+        }
+    } // DB 锁释放
+
+    // 追加当前用户消息（DB 中已存但历史查询可能不包含——由 created_at 排序保证）
+    // ponytail: 简单去重——如果最后一条已是同内容 user，跳过
+    let is_dup = api_messages.last()
+        .map(|m| m["role"] == "user" && m["content"] == message)
+        .unwrap_or(false);
+    if !is_dup {
+        api_messages.push(serde_json::json!({"role": "user", "content": message}));
+    }
+
+    let client = reqwest::Client::new();
+    let body = serde_json::json!({
+        "model": model,
+        "messages": api_messages,
+        "stream": true,
+    });
+
+    let resp = client
+        .post(&chat_url)
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("HTTP 请求失败: {}", e))?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body_text = resp.text().await.unwrap_or_default();
+        return Err(format!("API {} ({})", status, body_text));
+    }
+
+    // 后台任务：流式读取 SSE 响应，逐 chunk 发事件
+    let sid = session_id.clone();
+    let handle = app_handle.clone();
+    let start = std::time::Instant::now();
+    let session_mgr = state.session_manager.clone();
+
+    tauri::async_runtime::spawn(async move {
+        use futures_util::StreamExt;
+        let mut stream = resp.bytes_stream();
+        let mut full_text = String::new();
+        let mut input_tokens: Option<u64> = None;
+        let mut output_tokens: Option<u64> = None;
+
+        // SSE 按行解析：每个 data: {...} 是一个事件
+        // ponytail: 假设每个 bytes chunk 包含完整行，不做跨 chunk 拼接——data 行通常 < 1KB，不会被截断
+        while let Some(chunk) = stream.next().await {
+            match chunk {
+                Ok(bytes) => {
+                    let text = String::from_utf8_lossy(&bytes);
+                    for line in text.lines() {
+                        let line = line.trim();
+                        if line.is_empty() || line == "data: [DONE]" {
+                            continue;
+                        }
+                        if let Some(json_str) = line.strip_prefix("data: ") {
+                            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(json_str) {
+                                // 提取 usage（出现在最后一个 chunk 中）
+                                if let Some(usage) = parsed.get("usage") {
+                                    input_tokens = usage.get("prompt_tokens").and_then(|v| v.as_u64());
+                                    output_tokens = usage.get("completion_tokens").and_then(|v| v.as_u64());
+                                }
+                                // 提取文本增量
+                                if let Some(delta) = parsed["choices"][0]["delta"]["content"].as_str() {
+                                    full_text.push_str(delta);
+                                    let _ = handle.emit("stream-event", serde_json::json!({
+                                        "type": "assistant",
+                                        "session_id": sid,
+                                        "text": delta,
+                                        "thinking": "",
+                                        "is_final": false,
+                                    }));
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    let _ = handle.emit("stream-event", serde_json::json!({
+                        "type": "error",
+                        "session_id": sid,
+                        "error": format!("流读取错误: {}", e),
+                        "is_final": true,
+                    }));
+                    let _ = handle.emit("process-exited", serde_json::json!({
+                        "session_id": sid,
+                        "exit_code": 1,
+                        "success": false,
+                    }));
+                    return;
+                }
+            }
+        }
+
+        let duration_ms = start.elapsed().as_millis() as u64;
+
+        // 更新 DB 会话状态为 completed
+        {
+            let session = session_mgr.lock().await;
+            let _ = session.set_session_status(&sid, "completed");
+        }
+
+        let _ = handle.emit("stream-event", serde_json::json!({
+            "type": "result",
+            "session_id": sid,
+            "text": full_text,
+            "thinking": "",
+            "duration_ms": duration_ms,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "is_final": true,
+        }));
+
+        let _ = handle.emit("process-exited", serde_json::json!({
+            "session_id": sid,
+            "exit_code": 0,
+            "success": true,
+        }));
+    });
+
+    Ok(session_id)
+}
+
 /// 持久化会话 debug 日志（JSON 字符串数组）
 #[tauri::command]
 async fn save_session_debug_log(
@@ -1230,6 +1393,7 @@ pub fn run() {
             load_session_logs,
             install_claude_code,
             optimize_prompt,
+            zen_send_message,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -1251,6 +1415,24 @@ pub(crate) fn build_user_message(text: &str, file_paths: &[String]) -> String {
     }
     msg.push(']');
     msg
+}
+
+/// 从用户消息中提取纯文本（可能为 JSON 格式 `{text, attachments}` 或纯文本）
+fn extract_message_text(content: &str) -> String {
+    if let Ok(v) = serde_json::from_str::<serde_json::Value>(content) {
+        v["text"].as_str().unwrap_or(content).to_string()
+    } else {
+        content.to_string()
+    }
+}
+
+/// 从 assistant 消息 JSON 中提取纯文本（`{text, thinking, toolUses, ...}`）
+fn extract_assistant_text(content: &str) -> String {
+    if let Ok(v) = serde_json::from_str::<serde_json::Value>(content) {
+        v["text"].as_str().unwrap_or("").to_string()
+    } else {
+        content.to_string()
+    }
 }
 
 fn chrono_now() -> String {

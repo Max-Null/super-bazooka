@@ -55,7 +55,8 @@ impl ProcessManager {
     }
 
     /// Kill a session process gracefully (send kill_tx), then wait for exit_notify.
-    pub async fn kill(&self, id: &str) -> Result<(), String> {
+    /// 会自动从 HashMap 清除，防止 send_message 往已关闭管道写入。
+    pub async fn kill(&mut self, id: &str) -> Result<(), String> {
         let proc = self
             .processes
             .get(id)
@@ -70,6 +71,10 @@ impl ProcessManager {
         tokio::time::timeout(std::time::Duration::from_secs(5), proc.exit_notify.notified())
             .await
             .map_err(|_| "Kill timeout".to_string())?;
+
+        // 进程已退出，从管理器中移除（否则 send_message 会误判进程仍存活）
+        drop(proc);
+        self.processes.remove(id);
 
         Ok(())
     }

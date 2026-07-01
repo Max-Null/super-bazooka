@@ -1,4 +1,3 @@
-import { ref } from "vue";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useI18n } from "vue-i18n";
 import { useChatStore, type ToolUse } from "@/stores/chat";
@@ -36,9 +35,6 @@ interface SessionCreatedPayload {
   claudeSessionId: string;
   mcpServers?: string[];
 }
-
-/** 模块级 MCP 服务器连接状态，供 ManagePanel 等组件读取 */
-export const connectedMcpServers = ref<string[]>([]);
 
 export function useStreamProcessor() {
   const chat = useChatStore();
@@ -78,10 +74,36 @@ export function useStreamProcessor() {
 
     unlisten = await listen<StreamEvent>("stream-event", (event) => {
       const data = event.payload;
-      debugLog.add(`📨 event: ${data.type} | text=${data.text.slice(0,50)} | thinking=${data.thinking.slice(0,50)} | final=${data.is_final}`);
+      debugLog.add(`📨 event: ${data.type} | sid=${data.session_id} | text=${(data.text||'').slice(0,50)} | thinking=${(data.thinking||'').slice(0,50)} | final=${data.is_final}`);
+
+      // 事件是否属于当前活跃会话（CC 或 Zen）
+      const isActive = data.session_id === session.activeSessionId
+        || data.session_id === session.zenActiveId;
+
+      // 事件属于后台会话 → 写入缓存，更新 activity 指示器
+      if (data.session_id && !isActive) {
+        chat.handleBackgroundStreamEvent(data.session_id, data);
+        if (data.type === 'control_request') {
+          session.setSessionActivity(data.session_id, 'blocked');
+        } else if (data.type === 'result' || data.type === 'done') {
+          // 不在 blocked 时降级为 unread
+          if (session.sessionActivity[data.session_id] !== 'blocked') {
+            session.setSessionActivity(data.session_id, 'unread');
+          }
+        } else if (data.type === 'assistant') {
+          if (session.sessionActivity[data.session_id] !== 'blocked') {
+            session.setSessionActivity(data.session_id, 'processing');
+          }
+        }
+        return;
+      }
 
       switch (data.type) {
         case "assistant":
+          // 活跃会话处理中（不被 blocked 覆盖）
+          if (data.session_id && session.sessionActivity[data.session_id] !== 'blocked') {
+            session.setSessionActivity(data.session_id, 'processing');
+          }
           if (data.text || data.thinking) markThinkingStart();
           if (data.text) {
             // 去重：当完整 assistant 事件携带的文本以已有内容开头时，
@@ -129,6 +151,8 @@ export function useStreamProcessor() {
           break;
 
         case "control_request":
+          // 需要用户审批/问答 → 橙点（最高优先级）
+          if (data.session_id) session.setSessionActivity(data.session_id, 'blocked');
           if (data.control_request) {
             const cr = data.control_request;
             debugLog.add(`  🔐 subtype=${cr.subtype} tool=${cr.tool_name} request_id=${cr.request_id}`);
@@ -147,9 +171,11 @@ export function useStreamProcessor() {
 
         case "result":
         case "done": {
+          // 活跃会话完成 → 用户正在看，无需指示器
+          if (data.session_id) session.setSessionActivity(data.session_id, null);
           const msg = chat.currentAssistantMsg;
           if (msg) {
-            const targetSessionId = data.session_id || session.activeSessionId;
+            const targetSessionId = data.session_id || session.zenActiveId || session.activeSessionId;
             // Save full message as JSON blob: content + thinking + toolUses + stats
             const fullContent = JSON.stringify({
               text: msg.content,
@@ -183,7 +209,7 @@ export function useStreamProcessor() {
             data.cost_usd ?? msg?.costUSD,
           );
           // 持久化 debug/stderr 日志 + 刷新侧栏统计
-          const sid = data.session_id || session.activeSessionId;
+          const sid = data.session_id || session.zenActiveId || session.activeSessionId;
           if (sid) {
             saveSessionDebugLog(sid, JSON.stringify(debugLog.exportLines(sid))).catch(() => {});
             saveSessionStderrLog(sid, JSON.stringify(stderrLog.exportLines(sid))).catch(() => {});
@@ -233,14 +259,29 @@ export function useStreamProcessor() {
       const { ourId, claudeSessionId, mcpServers } = event.payload;
       session.setClaudeSessionId(ourId, claudeSessionId);
       storeClaudeSession(ourId, claudeSessionId); // → Rust SessionManager
-      if (mcpServers) connectedMcpServers.value = [...mcpServers];
+      if (mcpServers) session.connectedMcpServers = [...mcpServers];
       debugLog.add(`🔗 session: ${ourId} → claude:${claudeSessionId}`);
     });
 
-    // Process exited: update processing state
+    // Process exited: 仅当是活跃会话时才更新 UI 状态
     unlistenProcessExit = await listen<ProcessExitedEvent>("process-exited", (event) => {
       const { session_id, exit_code, success } = event.payload;
       debugLog.add(`🏁 process exited: ${session_id} code=${exit_code} ok=${success}`);
+      const isActiveExit = session_id === session.activeSessionId
+        || session_id === session.zenActiveId;
+      if (session_id && !isActiveExit) {
+        // 后台会话退出：若未正常 result，强制结束缓存中的流式消息
+        if (!success) {
+          chat.handleBackgroundStreamEvent(session_id, { type: 'error', error: '进程异常退出' });
+        }
+        // 非 blocked 状态 → 标记为 unread
+        if (session.sessionActivity[session_id] !== 'blocked') {
+          session.setSessionActivity(session_id, 'unread');
+        }
+        return;
+      }
+      // 活跃会话退出 → 清除 activity（用户正在看）
+      session.setSessionActivity(session_id, null);
       chat.isProcessing = false;
       if (!success) {
         chat.finishAssistantMessage();

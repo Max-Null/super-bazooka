@@ -98,6 +98,7 @@ export interface SessionData {
   cwd: string;
   model: string;
   status: string;
+  mode: string;
   created_at: string;
   updated_at: string;
   message_count: number;
@@ -114,8 +115,8 @@ export interface MessageData {
   created_at: string;
 }
 
-export async function createSession(model?: string, cwd?: string): Promise<SessionData> {
-  return invoke("create_session", { model: model ?? null, cwd: cwd ?? null });
+export async function createSession(model?: string, cwd?: string, mode?: string): Promise<SessionData> {
+  return invoke("create_session", { model: model ?? null, cwd: cwd ?? null, mode: mode ?? null });
 }
 
 export async function listSessions(): Promise<SessionData[]> {
@@ -239,6 +240,17 @@ export async function installClaudeCode(): Promise<number> {
 /** 用 LLM 优化用户输入的提示词 */
 export async function optimizePrompt(apiKey: string, baseUrl: string, prompt: string, optimizeUrl?: string): Promise<string> {
   return invoke("optimize_prompt", { apiKey, baseUrl, prompt, optimizeUrl: optimizeUrl || null });
+}
+
+/** 禅模式：直接调 LLM chat/completions API（SSE 流式），绕过 CC CLI */
+export async function zenSendMessage(
+  sessionId: string,
+  message: string,
+  apiKey: string,
+  chatUrl: string,
+  model: string,
+): Promise<string> {
+  return invoke("zen_send_message", { sessionId, message, apiKey, chatUrl, model });
 }
 
 /** 从 ~/.claude/settings.json 读取配置 */

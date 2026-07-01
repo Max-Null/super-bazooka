@@ -8,6 +8,33 @@ Super Bazooka is a clean, fast, developer‑friendly desktop interface for [Clau
 
 ---
 
+## 📸 Screenshots
+
+![Chat interface](scripts/英文截图1.png)
+
+![Management panel](scripts/英文截图2.png)
+
+---
+
+## 🎯 What & Why
+
+**Claude Code CLI is powerful, but the terminal isn't for everyone.** Super Bazooka wraps it in a clean desktop window — no memorizing flags, no terminal config, no bouncing between CLI and editor.
+
+**How is it different from the official Claude client?**
+
+| | Official Claude Client | Super Bazooka |
+|---|---|---|
+| **Purpose** | General AI chat | GUI wrapper purpose-built for Claude Code CLI |
+| **Tool access** | Limited | Full CLI toolchain (file I/O, shell, permission modes) |
+| **Sessions** | Cloud list | Local SQLite persistence — create, resume, delete freely |
+| **File management** | None | Built-in file tree, code preview, diff viewer |
+| **Prompt optimizer** | None | One-click AI rewrite for vague prompts |
+| **Extras** | — | Desktop notifications, command palette, multi-provider |
+
+**TL;DR:** If you already use Claude Code CLI, Super Bazooka makes it smoother. If you haven't started yet, Super Bazooka makes it easier.
+
+---
+
 ## 🤔 Why "Super Bazooka"?
 
 Because this tool is designed to be **simple, powerful, and precise** — just like the weapon it's named after. It delivers your prompts with zero detours.

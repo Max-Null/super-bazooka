@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, nextTick } from "vue";
+import { ref, computed, nextTick } from "vue";
 import { optimizePrompt } from "@/lib/tauri-bridge";
 import { useSettingsStore } from "@/stores/settings";
+import { useSlashCommands } from "@/composables/useSlashCommands";
 
 const props = defineProps<{ disabled: boolean; autoMode?: boolean; apiKey?: string; baseUrl?: string }>();
 const emit = defineEmits<{ send: [text: string]; files: [files: Array<{ name: string; path: string }>]; stop: [] }>();
@@ -27,11 +28,56 @@ const isDragOver = ref(false);
 function send() {
   const text = input.value.trim();
   if (!text) return;
-  // 中途发送由 ChatPanel.handleSend 处理，不在此处拦
+  showSlashMenu.value = false;
   emit("send", text);
   input.value = "";
-  // JS 赋值不触发 @input，手动恢复初始高度
   autoResize();
+}
+
+// ── 斜杠命令自动补全 ──
+const { favorites, recentCommands } = useSlashCommands();
+const slashMenuIdx = ref(0);
+const showSlashMenu = ref(false);
+
+const slashSuggestions = computed(() => {
+  const val = input.value;
+  // 仅当输入以 / 开头且无空格时弹出（单行命令模式）
+  if (!val.startsWith("/") || val.includes(" ")) return [];
+  const query = val.slice(1).toLowerCase();
+  // 合并：最近使用在前，收藏在后，去重
+  const seen = new Set<string>();
+  const items: string[] = [];
+  for (const r of recentCommands.value) {
+    if (!seen.has(r) && r.toLowerCase().includes(query)) { items.push(r); seen.add(r); }
+  }
+  for (const f of favorites.value) {
+    if (!seen.has(f) && f.toLowerCase().includes(query)) { items.push(f); seen.add(f); }
+  }
+  // 如果输入只有 /，加一个快速补全当前内容为 /command 而非过滤
+  return items.slice(0, 8);
+});
+
+function applySlashSuggestion(suggestion: string) {
+  showSlashMenu.value = false;
+  // 斜杠命令选择后直接发送
+  emit("send", "/" + suggestion);
+  input.value = "";
+  autoResize();
+}
+
+function onBlurSlash() {
+  focused.value = false;
+  setTimeout(() => { showSlashMenu.value = false; }, 150);
+}
+
+function onInputSlash() {
+  const val = input.value;
+  if (val.startsWith("/") && !val.includes(" ") && val.length >= 1) {
+    showSlashMenu.value = true;
+    slashMenuIdx.value = 0;
+  } else {
+    showSlashMenu.value = false;
+  }
 }
 
 // ── Drag & drop files ──
@@ -46,6 +92,12 @@ function onDragLeave() {
 }
 
 function onKeydown(e: KeyboardEvent) {
+  if (showSlashMenu.value && slashSuggestions.value.length > 0) {
+    if (e.key === "ArrowDown") { e.preventDefault(); slashMenuIdx.value = Math.min(slashMenuIdx.value + 1, slashSuggestions.value.length - 1); return; }
+    if (e.key === "ArrowUp") { e.preventDefault(); slashMenuIdx.value = Math.max(slashMenuIdx.value - 1, 0); return; }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); applySlashSuggestion(slashSuggestions.value[slashMenuIdx.value]); return; }
+    if (e.key === "Escape") { e.preventDefault(); showSlashMenu.value = false; return; }
+  }
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
 }
 
@@ -104,7 +156,17 @@ async function autoResize() {
 </script>
 
 <template>
-  <div class="shrink-0 pt-3 pb-8" style="background: var(--bg-root)">
+  <div class="sb-input-bar shrink-0 pt-3 pb-8 relative" style="background: var(--bg-root)">
+    <!-- 斜杠自动补全下拉 — 绝对定位，不挤占消息区域 -->
+    <div v-if="showSlashMenu && slashSuggestions.length > 0" class="slash-autocomplete">
+      <button
+        v-for="(s, i) in slashSuggestions"
+        :key="s"
+        @mousedown.prevent="applySlashSuggestion(s)"
+        :class="['slash-ac-item', i === slashMenuIdx ? 'slash-ac-active' : '']"
+      >/{{ s }}</button>
+    </div>
+
     <div
       class="flex items-center max-w-3xl mx-auto rounded-xl transition-colors duration-150"
       :style="{
@@ -120,9 +182,9 @@ async function autoResize() {
         v-model="input"
         @keydown="onKeydown"
         @paste="onPaste"
-        @input="autoResize"
+        @input="autoResize(); onInputSlash()"
         @focus="focused = true"
-        @blur="focused = false"
+        @blur="onBlurSlash"
         :placeholder="$t('chat.placeholder')"
         rows="1"
         class="chat-textarea flex-1 resize-none bg-transparent text-sm leading-relaxed py-3 pl-4 pr-2 disabled:opacity-30"
@@ -193,3 +255,38 @@ async function autoResize() {
     </div>
   </div>
 </template>
+
+<style scoped>
+.slash-autocomplete {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  max-width: 48rem;
+  margin: 0 auto 0.25rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+  overflow: hidden;
+  z-index: 20;
+}
+.slash-ac-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.375rem 0.75rem;
+  font-size: 12px;
+  font-family: ui-monospace, monospace;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: background-color 100ms;
+}
+.slash-ac-item:hover,
+.slash-ac-active {
+  background: var(--accent-glow);
+  color: var(--accent);
+}
+</style>

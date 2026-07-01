@@ -115,7 +115,7 @@ function goUp() {
 
 <template>
   <ErrorBoundary name="FilePanel">
-    <div class="flex shrink-0 overflow-hidden">
+    <div class="sb-file-panel flex shrink-0 overflow-hidden">
     <!-- Drag handle (thin strip, visible when panel is open) -->
     <div
       v-if="!collapsed"

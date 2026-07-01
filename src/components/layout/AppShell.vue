@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import SessionSidebar from "@/components/session/SessionSidebar.vue";
 import FilePanel from "@/components/files/FilePanel.vue";
@@ -7,19 +7,47 @@ import CommandPalette from "@/components/shared/CommandPalette.vue";
 import ManagePanel from "@/components/shared/ManagePanel.vue";
 import { emitChatCommand } from "@/composables/useCommandPalette";
 import { useNewSession } from "@/composables/useNewSession";
+import { useSessionSwitch } from "@/composables/useSessionSwitch";
 import { getWorkspaceRoot } from "@/lib/tauri-bridge";
 import { open } from "@tauri-apps/plugin-dialog";
-import { useSettingsStore } from "@/stores/settings";
+import { useSettingsStore, PROVIDER_LOGOS } from "@/stores/settings";
+import { useSessionStore } from "@/stores/session";
 import { useI18n } from "vue-i18n";
 
 const { t } = useI18n();
 const router = useRouter();
 const route = useRoute();
 const settings = useSettingsStore();
+const sessionStore = useSessionStore();
 const { handleNew } = useNewSession();
+const { switchTo, zenSwitchTo } = useSessionSwitch();
+
+// 当前模式对应的会话列表（禅模式 / CC 模式）
+const railSessions = computed(() =>
+  settings.zenMode ? sessionStore.zenSessions : sessionStore.sessions,
+);
+const railActiveId = computed(() =>
+  settings.zenMode ? sessionStore.zenActiveId : sessionStore.activeSessionId,
+);
+
+async function onRailNewSession() {
+  if (settings.zenMode) {
+    const id = await sessionStore.createSession(settings.model, undefined, "zen");
+    zenSwitchTo(id);
+  } else {
+    handleCommand("new-session");
+  }
+}
+
+// 会话标题首字符（英文大写，中文原样）
+function sessionChar(title: string): string {
+  const first = title.trim().charAt(0);
+  if (!first) return '?';
+  return /[a-zA-Z]/.test(first) ? first.toUpperCase() : first;
+}
+
 const drawerOpen = ref(false);
 const showManagePanel = ref(false);
-const zenMode = ref(false);
 const fileNavCounter = ref(0);
 const filePanelForceClose = ref(0);
 const cwd = ref("");
@@ -77,8 +105,8 @@ function handleCommand(action: string) {
     case "toggle-sidebar": drawerOpen.value = !drawerOpen.value; break;
     case "toggle-files": fileNavCounter.value++; break;
     case "zen-mode":
-      zenMode.value = !zenMode.value;
-      if (zenMode.value) {
+      settings.zenMode = !settings.zenMode;
+      if (settings.zenMode) {
         drawerOpen.value = false;
         filePanelForceClose.value++;
       }
@@ -178,6 +206,7 @@ function onGlobalKeydown(e: KeyboardEvent) {
 
 onMounted(async () => {
   try { cwd.value = await getWorkspaceRoot(); } catch {}
+  sessionStore.loadSessions().catch(() => {});
   document.addEventListener("keydown", onGlobalKeydown);
   document.addEventListener("fullscreenchange", onFullscreenChange);
 });
@@ -206,7 +235,8 @@ async function switchWorkspace() {
   switchToWorkspace(newPath);
 }
 
-function openFilePanelTo(path: string) {
+function openFilePanelTo(_path: string) {
+  // ponytail: path 参数保留兼容旧调用方，实际导航由 FilePanel 的 navPath prop (= cwd) 控制
   fileNavCounter.value++;
 }
 </script>
@@ -215,36 +245,29 @@ function openFilePanelTo(path: string) {
   <div class="h-screen flex flex-col" style="background:var(--bg-root)">
     <!-- Navbar -->
     <header
-      class="flex items-center h-11 px-4 shrink-0 select-none"
+      class="sb-header flex items-center h-11 px-4 shrink-0 select-none"
       style="background:var(--bg-surface); border-bottom:1px solid var(--border-dim)"
     >
       <!-- Logo group -->
-      <!-- Logo + CWD — left aligned, baseline aligned -->
-      <div class="flex items-baseline gap-2.5 flex-1 min-w-0">
-        <button
-          @click="drawerOpen = !drawerOpen"
-          class="w-7 h-7 flex items-center justify-center rounded-md transition-colors shrink-0 translate-y-0.5"
-          :style="{ background: drawerOpen ? 'var(--bg-active)' : 'transparent', color: 'var(--text-secondary)' }"
-          :class="drawerOpen ? '' : 'hover:bg-[var(--bg-hover)]'"
-          :title="$t('header.toggleSidebar')"
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <path d="M3 12h18M3 6h18M3 18h18" />
-          </svg>
-        </button>
-
+      <div class="header-logo-group">
         <span class="text-sm font-semibold tracking-tight leading-none" style="color:var(--text-bright)">{{ $t('app.title') }}</span>
 
         <!-- 禅模式 -->
         <button
           @click="handleCommand('zen-mode')"
           class="w-6 h-6 flex items-center justify-center rounded-md transition-colors shrink-0"
-          :style="{ background: zenMode ? 'var(--accent-glow)' : 'transparent', color: zenMode ? 'var(--accent)' : 'var(--text-secondary)' }"
-          :class="zenMode ? '' : 'hover:bg-[var(--bg-hover)]'"
-          :title="zenMode ? $t('header.exitZenMode') : $t('header.zenMode')"
-        >🧘</button>
-
-        <span class="text-[10px] font-medium px-1.5 py-px rounded leading-none" style="background:var(--accent-glow); color:var(--accent-dim)">DEV</span>
+          :style="{ background: settings.zenMode ? 'var(--accent-glow)' : 'transparent', color: settings.zenMode ? 'var(--accent)' : 'var(--text-secondary)' }"
+          :class="settings.zenMode ? '' : 'hover:bg-[var(--bg-hover)]'"
+          :title="settings.zenMode ? $t('header.exitZenMode') : $t('header.zenMode')"
+        >
+          <img
+            v-if="PROVIDER_LOGOS[settings.providerId]"
+            :src="PROVIDER_LOGOS[settings.providerId]"
+            class="w-4 h-4 shrink-0"
+            alt=""
+          />
+          <span v-else>🤖</span>
+        </button>
 
         <!-- CWD + 工作区管理 -->
         <div v-if="cwd" class="workspace-menu flex items-center gap-0 ml-1 relative">
@@ -334,6 +357,14 @@ function openFilePanelTo(path: string) {
           </svg>
         </button>
 
+        <!-- Locale toggle -->
+        <button
+          @click="settings.locale = settings.locale === 'zh' ? 'en' : 'zh'"
+          class="w-7 h-7 flex items-center justify-center rounded-md transition-colors hover:bg-[var(--bg-hover)] text-[11px] font-semibold"
+          style="color:var(--text-secondary)"
+          :title="$t('settings.language')"
+        >{{ settings.locale === 'zh' ? 'EN' : '中' }}</button>
+
         <!-- 全屏 -->
         <button
           @click="toggleFullscreen"
@@ -399,19 +430,75 @@ function openFilePanelTo(path: string) {
 
     <!-- Body -->
     <div class="flex-1 flex overflow-hidden">
-      <!-- Drawer -->
-      <aside
-        class="shrink-0 overflow-hidden transition-all duration-200 ease-in-out"
-        :style="{
-          width: drawerOpen ? '260px' : '0',
-          borderRight: drawerOpen ? '1px solid var(--border-dim)' : 'none',
-          background: 'var(--bg-surface)'
-        }"
-      >
-        <div class="w-[260px] h-full">
-          <SessionSidebar @navigate="drawerOpen = false" />
-        </div>
-      </aside>
+      <!-- 左侧会话栏：rail + 展开面板 -->
+      <div class="flex shrink-0">
+        <!-- 窄 rail（收起时显示） -->
+        <nav v-show="!drawerOpen" class="sb-session-rail">
+          <!-- 展开/收起 -->
+          <button
+            @click="drawerOpen = !drawerOpen"
+            class="rail-btn"
+            :style="{ color: drawerOpen ? 'var(--accent)' : 'var(--text-muted)' }"
+            :title="$t('header.toggleSidebar')"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M3 12h18M3 6h18M3 18h18" />
+            </svg>
+          </button>
+
+          <!-- 分隔 -->
+          <div class="rail-divider" />
+
+          <!-- 新建会话 -->
+          <button
+            @click="onRailNewSession"
+            class="rail-btn"
+            style="color: var(--text-muted)"
+            :title="$t('session.new')"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </button>
+
+          <!-- 分隔 -->
+          <div class="rail-divider" />
+
+          <!-- 会话历史（首字符按钮 + 活动指示点） -->
+          <button
+            v-for="s in railSessions"
+            :key="s.id"
+            @click="settings.zenMode ? zenSwitchTo(s.id) : switchTo(s.id)"
+            class="rail-session-btn relative"
+            :style="{
+              color: s.id === railActiveId ? 'var(--accent)' : 'var(--text-muted)',
+              background: s.id === railActiveId ? 'var(--accent-glow)' : 'transparent',
+            }"
+            :title="s.title"
+          >
+            {{ sessionChar(s.title) }}
+            <span
+              v-if="sessionStore.sessionActivity[s.id]"
+              class="rail-dot"
+              :class="'dot-' + sessionStore.sessionActivity[s.id]"
+            />
+          </button>
+        </nav>
+
+        <!-- 展开面板 -->
+        <aside
+          :class="['sb-session-panel overflow-hidden transition-all duration-200 ease-in-out',
+            drawerOpen ? 'w-[260px]' : 'w-0']"
+          :style="{
+            borderRight: drawerOpen ? '1px solid var(--border-dim)' : 'none',
+            background: 'var(--bg-surface)',
+          }"
+        >
+          <div class="w-[260px] h-full">
+            <SessionSidebar @navigate="drawerOpen = false" @collapse="drawerOpen = false" />
+          </div>
+        </aside>
+      </div>
 
       <!-- Main -->
       <main class="flex-1 flex overflow-hidden">
@@ -428,3 +515,96 @@ function openFilePanelTo(path: string) {
     <ManagePanel :open="showManagePanel" @close="showManagePanel = false" />
   </div>
 </template>
+
+<style scoped>
+.header-logo-group {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── 会话 rail（左侧窄栏）── */
+.sb-session-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 0;
+  width: 40px;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-dim);
+  overflow-y: auto;
+  /* ponytail: 不显示滚动条，40px 宽放不下；会话多了展开面板即可 */
+  scrollbar-width: none;
+}
+.sb-session-rail::-webkit-scrollbar {
+  display: none;
+}
+
+.rail-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: background 150ms, color 150ms;
+}
+.rail-btn:hover {
+  background: var(--bg-hover);
+}
+
+.rail-session-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 150ms, color 150ms;
+}
+.rail-session-btn:hover {
+  background: var(--bg-hover);
+}
+
+.rail-divider {
+  width: 20px;
+  height: 1px;
+  margin: 2px 0;
+  background: var(--border-dim);
+}
+
+.sb-session-panel {
+  background: var(--bg-surface);
+}
+
+/* ── Activity dot（rail 角标）── */
+.rail-dot {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px solid var(--bg-surface);
+}
+.dot-processing {
+  background: #22c55e;
+  animation: dot-blink 1s ease-in-out infinite;
+}
+.dot-unread {
+  background: #3b82f6;
+}
+.dot-blocked {
+  background: #f97316;
+  animation: dot-blink 0.6s ease-in-out infinite;
+}
+@keyframes dot-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.15; }
+}
+</style>

@@ -51,7 +51,8 @@
     "aboutTitle": "About Super Bazooka",
     "aboutSubtitle": "Super Bazooka — Smart Bridge for Claude",
     "aboutTech": "Tauri 2 + Vue 3 + TypeScript · Rust · SQLite · Multi-provider API",
-    "aboutCopyright": "© 2026 Super Bazooka contributors · MIT"
+    "aboutCopyright": "© 2026 Super Bazooka contributors · MIT",
+    "zenActive": "Zen Mode"
   },
 
   "provider": {
@@ -202,7 +203,13 @@
     "ponytailTitle": "Ponytail: Lazy mode",
     "ponytailInstall": "Install Ponytail",
     "optimize": "Optimize",
-    "optimizeTitle": "AI prompt optimizer — clarify vague descriptions"
+    "optimizeTitle": "AI prompt optimizer — clarify vague descriptions",
+    "slash": "Slash",
+    "slashTitle": "Quick slash commands",
+    "slashFavorites": "Favorites",
+    "slashRecent": "Recent",
+    "slashBrowseAll": "Browse all commands…",
+    "slashEmpty": "No history yet. Send a / command to get started."
   },
 
   "status": {
@@ -220,8 +227,8 @@
   "header": {
     "newSession": "New Session",
     "toggleSidebar": "Toggle sidebar",
-    "zenMode": "Zen Mode",
-    "exitZenMode": "Exit Zen Mode",
+    "zenMode": "Zen Mode (Direct LLM Chat)",
+    "exitZenMode": "Exit Zen Mode (Restore CC CLI)",
     "fullscreen": "Fullscreen",
     "exitFullscreen": "Exit Fullscreen",
     "lightMode": "Light mode",
@@ -276,6 +283,8 @@
     "mcpTypeWs": "WebSocket",
     "translateError": "Translation failed",
     "retranslate": "Retranslate",
+    "favorite": "Favorite",
+    "unfavorite": "Unfavorite",
     "pluginsDesc": "Plugin descriptions are read from .claude-plugin/plugin.json metadata in the marketplace. Marketplace is determined by the {'@'} suffix in the plugin key.",
     "mcpDesc": "Sources: user config from ~/.claude.json, plugins from enabled plugins only. Descriptions are AI-generated and cached locally — click \"Retranslate\" to refresh.",
     "skillsDesc": "Sources: custom (~/.claude/skills/) + enabled plugins. Grouped by source. Descriptions from SKILL.md YAML frontmatter. Click to view/edit.",
@@ -324,7 +333,7 @@
     "exportSessionDesc": "Export current session as Markdown",
     "switchSession": "Switch Session",
     "zenMode": "Zen Mode",
-    "zenModeDesc": "Hide sidebar & file panel, chat only",
+    "zenModeDesc": "Direct LLM chat via chat API, no CC CLI",
     "permDefault": "Default Mode",
     "permDefaultDesc": "Auto-approve reads only",
     "permPlan": "Plan Mode",
@@ -394,6 +403,7 @@
     "memoryFiles": "Memory Files",
     "skills": "Skills",
     "messages": "Messages",
-    "note": "System / Tools / Agents / Memory / Skills are static estimates. Message tokens from actual API response. For exact values run /context"
+    "note": "System / Tools / Agents / Memory / Skills are static estimates. Message tokens from actual API response. For exact values run /context",
+    "compact": "Compact Context"
   }
 }

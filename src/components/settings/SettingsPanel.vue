@@ -63,7 +63,10 @@ async function startLookupUrl() {
   const prompt = `请联网查询 ${settings.providerId} 服务商的模型 ${settings.model} 的 OpenAI 兼容 chat completions API 完整端点 URL，只输出 URL 不要任何解释`;
   isLookingUpUrl.value = true;
   let sid = sessionStore.activeSessionId;
-  if (!sid) sid = await sessionStore.createSession(settings.model);
+  if (!sid) {
+    sid = await sessionStore.createSession(settings.model);
+    chat.clearMessages();  // 新建会话时清空旧消息记录
+  }
   chat.addUserMessage(prompt);
   // 非中途发送才新建 assistant 消息位
   if (!chat.isProcessing) chat.startAssistantMessage();
@@ -299,7 +302,7 @@ async function saveSettingsJson() {
 
 <template>
   <ErrorBoundary name="SettingsPanel">
-    <div style="flex:1;min-height:0;overflow-y:auto;padding:2rem" class="flex flex-col">
+    <div class="sb-settings-panel flex flex-col" style="flex:1;min-height:0;overflow-y:auto;padding:2rem">
       <!-- Header -->
       <div class="flex items-center gap-3 mb-8">
         <button @click="router.push('/chat')" class="w-7 h-7 flex items-center justify-center rounded-md transition-colors hover:bg-[var(--bg-hover)]" style="color:var(--text-secondary)">

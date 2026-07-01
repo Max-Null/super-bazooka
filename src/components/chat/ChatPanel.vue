@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, nextTick, watch, onMounted } from "vue";
-import { useChatStore } from "@/stores/chat";
+import { useChatStore, type AttachedFile } from "@/stores/chat";
 import { useSessionStore } from "@/stores/session";
 import { useDebugLog } from "@/composables/useDebugLog";
 import { useStderrLog } from "@/composables/useStderrLog";
@@ -8,6 +8,7 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import {
   sendMessage,
   sendStdin,
+  zenSendMessage,
   getAutoModeStatus,
   stopSession,
   listMessages,
@@ -15,7 +16,7 @@ import {
   loadSessionLogs,
 } from "@/lib/tauri-bridge";
 import { useFilePreview } from "@/composables/useFilePreview";
-import { useSettingsStore } from "@/stores/settings";
+import { useSettingsStore, PROVIDER_LOGOS } from "@/stores/settings";
 import { translateError } from "@/lib/utils";
 import ErrorBoundary from "@/components/shared/ErrorBoundary.vue";
 import InputBar from "./InputBar.vue";
@@ -31,10 +32,14 @@ import { useCommandPaletteBus, useChatCommandBus } from "@/composables/useComman
 import { useI18n } from "vue-i18n";
 const { t } = useI18n();
 import { useCommandRegistry } from "@/composables/useCommandRegistry";
+import { useSlashCommands } from "@/composables/useSlashCommands";
 
 const chat = useChatStore();
 const session = useSessionStore();
+const slashCommands = useSlashCommands();
 const settings = useSettingsStore();
+const appVersion = __APP_VERSION__;
+
 const debugLog = useDebugLog();
 const stderrLog = useStderrLog();
 const scrollContainer = ref<HTMLElement | null>(null);
@@ -74,7 +79,6 @@ function copyStderrLog() {
 }
 
 // ── Attached files ──
-interface AttachedFile { name: string; path: string }
 const attachedFiles = ref<AttachedFile[]>([]);
 
 function removeAttachedFile(index: number) {
@@ -147,6 +151,14 @@ onMounted(async () => {
 
 // Sync on store change
 watch(() => settings.autoMode, (v) => { autoModeActive.value = v; });
+// 审批队列清空 → blocked 降级为 processing
+watch(() => chat.pendingControlRequest, (cr) => {
+  if (!cr && session.activeSessionId) {
+    if (session.sessionActivity[session.activeSessionId] === 'blocked') {
+      session.setSessionActivity(session.activeSessionId, 'processing');
+    }
+  }
+});
 // Ponytail 模式变更（设置面板或工具栏）→ 发送 /ponytail 命令给 CC
 let ponytailInit = true;
 watch(() => settings.ponytailMode, (v) => {
@@ -269,6 +281,13 @@ watch(() => chatCommand.value.ts, (ts) => {
 // ── Sticky question banner ──
 const stickyQuestion = ref("");
 const showSticky = ref(false);
+// 消息清空（新建会话 / clear）时同步隐藏置顶问题横幅
+watch(() => chat.messages.length, (len) => {
+  if (len === 0) {
+    stickyQuestion.value = "";
+    showSticky.value = false;
+  }
+});
 
 // 自动滚动检测：必须立即响应，不能节流。否则在 50ms 节流窗口内，
 // 新的 token 到达时 autoScroll 还没变成 false，会把用户拽回底部。
@@ -311,6 +330,8 @@ function onScrollThrottled() {
 }
 
 async function handleSend(text: string) {
+  // 记录斜杠命令（仅用户主动发送的，非中途追加）
+  if (text.startsWith("/")) slashCommands.recordCommand(text);
   const isMidProcessing = chat.isProcessing;
   // 新消息（非中途追加）才清日志和计划
   if (!isMidProcessing) {
@@ -318,8 +339,22 @@ async function handleSend(text: string) {
     stderrLog.clear();
     savedPlan.value = { plan: "", planFilePath: "" };
   }
-  let sid = session.activeSessionId;
-  if (!sid) sid = await session.createSession(settings.model);
+  let sid: string;
+  if (settings.zenMode) {
+    // 禅模式：用 Zen 会话 ID（持久化到 DB，mode='zen'）
+    sid = session.zenActiveId;
+    if (!sid) {
+      chat.clearMessages();
+      sid = await session.createSession(settings.model, undefined, "zen");
+      session.zenActiveId = sid;
+    }
+  } else {
+    sid = session.activeSessionId;
+    if (!sid) {
+      chat.clearMessages();  // 新建会话时清空旧消息记录
+      sid = await session.createSession(settings.model);
+    }
+  }
 
   // Collect attached file paths before clearing
   const filePaths = attachedFiles.value.map(f => f.path);
@@ -340,16 +375,26 @@ async function handleSend(text: string) {
   isNearBottom.value = true;
   await scrollToBottomInstant();
   try {
-    await sendMessage(sid, text, {
-      planMode: settings.planMode,
-      autoMode: settings.autoMode,
-      permissionMode: settings.permissionMode,
-      effort: settings.effort,
-      ultracode: settings.effort === "ultracode",
-      model: settings.model,
-      filePaths: filePaths.length > 0 ? filePaths : undefined,
-      claudePath: settings.claudePath || undefined,
-    });
+    if (settings.zenMode) {
+      // 禅模式：直接调 LLM chat/completions（SSE 流式），绕过 CC CLI
+      const chatUrl = settings.optimizeApiUrl;
+      if (!chatUrl) {
+        throw new Error("未配置聊天 API 地址，请在设置中填写 LLM API 地址（含完整路径，如 https://api.deepseek.com/v1/chat/completions）");
+      }
+      // 用 model 字段（用户当前选择的模型），禅模式下通常应为 OpenAI-format 模型名（如 deepseek-chat）
+      await zenSendMessage(sid, text, settings.apiKey, chatUrl, settings.model);
+    } else {
+      await sendMessage(sid, text, {
+        planMode: settings.planMode,
+        autoMode: settings.autoMode,
+        permissionMode: settings.permissionMode,
+        effort: settings.effort,
+        ultracode: settings.effort === "ultracode",
+        model: settings.model,
+        filePaths: filePaths.length > 0 ? filePaths : undefined,
+        claudePath: settings.claudePath || undefined,
+      });
+    }
     // 侧栏统计在 useStreamProcessor result 事件后刷新（token 已入库）
   } catch (err) {
     debugLog.add(`>>> Error: ${err}`);
@@ -566,8 +611,14 @@ async function exportPlan() {
 
 // ── Stop processing ──
 async function handleStop() {
-  const sid = session.activeSessionId;
+  const sid = settings.zenMode ? session.zenActiveId : session.activeSessionId;
   if (!sid) return;
+  // 禅模式：无 CC 进程可终止，直接标记停止
+  if (settings.zenMode) {
+    chat.markStopped();
+    chat.finishAssistantMessage();
+    return;
+  }
   // 先发 interrupt 控制请求，让 CC 优雅中断
   try {
     await sendStdin(sid, JSON.stringify({
@@ -620,15 +671,20 @@ function scrollToBottomAndResume() {
 function scrollToBottomIfAuto() {
   if (autoScroll.value) scrollToBottomInstant();
 }
-watch(() => chat.messages.length, () => scrollToBottomIfAuto());
-watch(() => chat.currentAssistantMsg?.content, () => scrollToBottomIfAuto());
-watch(() => chat.currentAssistantMsg?.thinking, () => scrollToBottomIfAuto());
-watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAuto());
+watch(
+  () => [
+    chat.messages.length,
+    chat.currentAssistantMsg?.content,
+    chat.currentAssistantMsg?.thinking,
+    chat.currentAssistantMsg?.toolUses.length,
+  ],
+  () => scrollToBottomIfAuto(),
+);
 </script>
 
 <template>
   <ErrorBoundary name="ChatPanel">
-  <div class="flex flex-col flex-1 h-full relative overflow-hidden">
+  <div class="sb-chat-panel flex flex-col flex-1 h-full relative overflow-hidden">
     <!-- Sticky question banner -->
     <div
       v-if="showSticky"
@@ -639,7 +695,7 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAut
     </div>
 
     <!-- Messages -->
-    <div ref="scrollContainer" :class="['flex-1 relative', chat.messages.length > 0 ? 'overflow-y-auto' : '']" @scroll="onScrollThrottled">
+    <div ref="scrollContainer" class="flex-1 relative overflow-y-auto" @scroll="onScrollThrottled">
       <!-- Welcome -->
       <div v-if="chat.messages.length === 0" class="flex items-center justify-center h-full">
         <div class="text-center max-w-sm px-6 pb-24">
@@ -665,9 +721,9 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAut
       </div>
 
       <!-- Message list -->
-      <div class="max-w-3xl mx-auto px-4 py-6 space-y-5">
+      <div v-if="chat.messages.length > 0" class="max-w-3xl mx-auto px-4 py-6 space-y-5">
         <!-- Export bar (when messages exist) -->
-        <div v-if="chat.messages.length > 0" class="flex items-center justify-end">
+        <div class="flex items-center justify-end">
           <button
             @click="prepareExport"
             class="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] transition-colors hover:bg-[var(--bg-hover)]"
@@ -739,8 +795,7 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAut
       <button
         v-if="!isNearBottom && chat.messages.length > 0"
         @click="scrollToBottomAndResume"
-        class="absolute bottom-[140px] left-1/2 -translate-x-1/2 z-10 flex items-center justify-center w-7 h-7 rounded-full transition-all duration-150 hover:scale-110"
-        style="background: var(--bg-elevated); color: var(--text-secondary); border: 1px solid var(--border-bright); box-shadow: 0 1px 6px rgba(0,0,0,0.15)"
+        class="scroll-to-bottom-btn"
         :title="$t('chat.scrollToBottom')"
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -762,11 +817,13 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAut
       </div>
     </Transition>
 
-    <!-- Toolbar（左：debug/LLM 切换按钮，右：模式/effort 等） -->
+    <!-- Toolbar（禅模式下隐藏——模式/effort/Ponytail 对直接 LLM 无意义） -->
     <InputBarToolbar
+      v-if="!settings.zenMode"
       @attach-file="handleAttachFile"
       @open-command-menu="commandBus.open()"
       @send-slash="(t: string) => handleSend(t)"
+      @show-context="showContextModal = true"
     >
       <template #left>
         <template v-if="debugLog.lines.value.length > 0 || stderrLog.lines.value.length > 0">
@@ -793,17 +850,35 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAut
       </template>
     </InputBarToolbar>
 
-    <!-- 已保存计划的快捷入口 + 附件 chips -->
-    <div class="max-w-3xl mx-auto px-1 pb-1.5 flex flex-wrap gap-1.5">
+    <!-- 禅模式指示器（toolbar 外，不随 toolbar v-if 隐藏） -->
+    <div
+      v-if="settings.zenMode"
+      class="sb-toolbar"
+    >
+      <span
+        class="text-[11px] px-1.5 py-0.5 rounded font-medium shrink-0"
+        :style="{ color: 'var(--accent)', background: 'var(--accent-glow)' }"
+      >
+        <img
+          v-if="PROVIDER_LOGOS[settings.providerId]"
+          :src="PROVIDER_LOGOS[settings.providerId]"
+          class="w-3.5 h-3.5 shrink-0 inline-block align-middle"
+          alt=""
+        />
+        <span v-else>🤖</span>
+        {{ $t('chat.zenActive') }}
+      </span>
+    </div>
+
+    <!-- 已保存计划的快捷入口 + 附件 chips — 无内容时不占高度 -->
+    <div v-if="(savedPlan.plan && !isPlanPending()) || attachedFiles.length > 0" class="sb-attachment-bar">
       <button
         v-if="savedPlan.plan && !isPlanPending()"
         @click="showPlanModal = true"
         class="flex items-center gap-1 pl-2 pr-1 py-1 rounded-md text-[11px] shrink-0 transition-colors hover:bg-[var(--bg-hover)]"
         :style="{ color: 'var(--text-muted)', border: '1px dashed var(--border-dim)' }"
       >📋 {{ $t('chat.viewPlan') }}</button>
-    </div>
-    <!-- Attached files chips -->
-    <div v-if="attachedFiles.length > 0" class="max-w-3xl mx-auto px-1 pb-1.5 flex flex-wrap gap-1.5">
+      <!-- Attached files chips -->
       <div
         v-for="(file, i) in attachedFiles"
         :key="file.path"
@@ -833,7 +908,7 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAut
 
     <!-- File preview modal -->
     <FilePreviewModal :file="previewFile" @close="previewFile = null" />
-    <ContextUsageModal :open="showContextModal" @close="showContextModal = false" />
+    <ContextUsageModal :open="showContextModal" @close="showContextModal = false" @compact="showContextModal = false; handleSend('/compact')" />
     <ManagePanel :open="showManage" :initialTab="manageTab" @close="showManage = false" @send-slash="(t) => handleSend(t)" />
 
     <!-- AskUserQuestion 问答弹窗 -->

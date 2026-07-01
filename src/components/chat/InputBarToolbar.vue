@@ -2,8 +2,10 @@
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useI18n } from "vue-i18n";
 import { useSettingsStore } from "@/stores/settings";
+import { useChatStore } from "@/stores/chat";
 import { getClaudeDir, readFileContent } from "@/lib/tauri-bridge";
 import ContextIndicator from "./ContextIndicator.vue";
+import { useSlashCommands } from "@/composables/useSlashCommands";
 import type { Effort } from "@/stores/settings";
 
 const { t } = useI18n();
@@ -24,13 +26,11 @@ function installPonytail() {
   emit("sendSlash", "请帮我安装 Ponytail 插件（ponytail@claude-plugins-official）");
 }
 
-const emit = defineEmits<{
-  attachFile: [];
-  openCommandMenu: [];
-  sendSlash: [text: string];
-}>();
+const emit = defineEmits<{ attachFile: []; openCommandMenu: []; sendSlash: [text: string]; showContext: []; }>();
 
 const settings = useSettingsStore();
+const chat = useChatStore();
+const { favorites, recentCommands } = useSlashCommands();
 
 const modeOptions = [
   { value: "askBefore", label: () => t("mode.askBefore") },
@@ -71,9 +71,9 @@ function selectPonytail(value: "off" | "lite" | "full" | "ultra") {
 }
 
 // ── Custom dropdowns ──
-const openMenu = ref<"mode" | "effort" | "ponytail" | null>(null);
+const openMenu = ref<"mode" | "effort" | "ponytail" | "slash" | null>(null);
 
-function toggleMenu(menu: "mode" | "effort" | "ponytail") {
+function toggleMenu(menu: "mode" | "effort" | "ponytail" | "slash") {
   openMenu.value = openMenu.value === menu ? null : menu;
 }
 
@@ -139,28 +139,75 @@ const currentEffortLabel = computed(() => {
 </script>
 
 <template>
-  <div class="toolbar flex items-center gap-1.5 max-w-3xl mx-auto pb-1 select-none">
+  <div class="sb-toolbar">
     <!-- 外部注入按钮（debug/LLM 切换等），左对齐 -->
     <slot name="left" />
 
     <!-- 📎 Attach File -->
     <button
       @click="emit('attachFile')"
-      class="toolbar-btn flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] shrink-0"
+      class="toolbar-btn"
       :title="$t('toolbar.attachTitle')"
     >
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-      <span class="hidden sm:inline font-medium">{{ $t('toolbar.attach') }}</span>
+      <span class="toolbar-btn-label">{{ $t('toolbar.attach') }}</span>
     </button>
+
+    <!-- / Slash quick menu -->
+    <div class="slash-menu-container">
+      <button
+        @click.stop="toggleMenu('slash')"
+        class="toolbar-btn"
+        :title="$t('toolbar.slashTitle')"
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="4" x2="6" y2="20"/></svg>
+      </button>
+      <Transition name="drop">
+        <div
+          v-if="openMenu === 'slash'"
+          class="dropdown-menu slash-dropdown toolbar-dropdown"
+        >
+          <!-- 最近 -->
+          <template v-if="recentCommands.length > 0">
+            <div class="slash-section-header">🕐 {{ $t('toolbar.slashRecent') }}</div>
+            <button
+              v-for="r in recentCommands.slice(0, 5)"
+              :key="r"
+              @click="emit('sendSlash', '/' + r); openMenu = null"
+              class="dropdown-item"
+            >{{ r }}</button>
+          </template>
+          <!-- 收藏 -->
+          <template v-if="favorites.size > 0">
+            <div class="slash-section-header">⭐ {{ $t('toolbar.slashFavorites') }}</div>
+            <button
+              v-for="f in [...favorites]"
+              :key="f"
+              @click="emit('sendSlash', '/' + f); openMenu = null"
+              class="dropdown-item"
+            >{{ f }}</button>
+          </template>
+          <!-- Browse all -->
+          <div v-if="recentCommands.length > 0 || favorites.size > 0" class="slash-section-divider"></div>
+          <button
+            @click="emit('openCommandMenu'); openMenu = null"
+            class="dropdown-item slash-browse-all"
+          >📋 {{ $t('toolbar.slashBrowseAll') }}</button>
+          <!-- 空状态 -->
+          <div v-if="favorites.size === 0 && recentCommands.length === 0" class="slash-empty">
+            {{ $t('toolbar.slashEmpty') }}
+          </div>
+        </div>
+      </Transition>
+    </div>
 
     <!-- ☰ Command Menu -->
     <button
       @click="emit('openCommandMenu')"
-      class="toolbar-btn flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] shrink-0"
+      class="toolbar-btn"
       :title="$t('toolbar.commandsTitle')"
     >
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
-      <span class="hidden sm:inline font-medium">{{ $t('toolbar.commands') }}</span>
     </button>
 
     <!-- Spacer -->
@@ -168,7 +215,7 @@ const currentEffortLabel = computed(() => {
 
     <!-- Permission Mode dropdown -->
     <div
-      class="toolbar-dropdown toolbar-pill flex items-center gap-1.5 text-[11px] shrink-0 rounded-lg relative cursor-pointer"
+      class="toolbar-pill"
       @click.stop="toggleMenu('mode')"
     >
       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="color: var(--accent); opacity: 0.7">
@@ -181,14 +228,13 @@ const currentEffortLabel = computed(() => {
       <Transition name="drop">
         <div
           v-if="openMenu === 'mode'"
-          class="dropdown-menu absolute bottom-full right-0 mb-1 py-1 rounded-lg z-30 min-w-[140px]"
-          style="background: var(--bg-elevated); border: 1px solid var(--border-default); box-shadow: 0 8px 24px rgba(0,0,0,0.4)"
+          class="dropdown-menu" style="min-width: 140px"
         >
           <button
             v-for="m in modeOptions"
             :key="m.value"
             @click="selectMode(m.value)"
-            class="w-full text-left px-3 py-1.5 text-[11px] transition-colors hover:bg-[var(--bg-hover)]"
+            class="dropdown-item"
             :style="{
               color: activeMode === m.value ? 'var(--accent)' : 'var(--text-secondary)',
               background: activeMode === m.value ? 'var(--accent-glow)' : 'transparent'
@@ -200,7 +246,7 @@ const currentEffortLabel = computed(() => {
 
     <!-- Effort dropdown -->
     <div
-      class="toolbar-dropdown toolbar-pill flex items-center gap-1.5 text-[11px] shrink-0 rounded-lg relative cursor-pointer"
+      class="toolbar-pill"
       @click.stop="toggleMenu('effort')"
     >
       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" :style="{ color: currentEffortColor, opacity: 0.7 }">
@@ -213,14 +259,13 @@ const currentEffortLabel = computed(() => {
       <Transition name="drop">
         <div
           v-if="openMenu === 'effort'"
-          class="dropdown-menu absolute bottom-full right-0 mb-1 py-1 rounded-lg z-30 min-w-[130px]"
-          style="background: var(--bg-elevated); border: 1px solid var(--border-default); box-shadow: 0 8px 24px rgba(0,0,0,0.4)"
+          class="dropdown-menu" style="min-width: 130px"
         >
           <button
             v-for="e in effortOptions"
             :key="e.value"
             @click="selectEffort(e.value)"
-            class="w-full text-left px-3 py-1.5 text-[11px] transition-colors hover:bg-[var(--bg-hover)]"
+            class="dropdown-item"
             :style="{
               color: settings.effort === e.value ? e.color : 'var(--text-secondary)',
               background: settings.effort === e.value ? e.color + '18' : 'transparent'
@@ -233,7 +278,7 @@ const currentEffortLabel = computed(() => {
     <!-- Ponytail: 检测中不渲染，已安装 → 下拉，未安装 → 安装按钮 -->
     <div
       v-if="hasPonytail === true"
-      class="toolbar-dropdown toolbar-pill flex items-center gap-1.5 text-[0.65rem] shrink-0 rounded-lg relative cursor-pointer"
+      class="toolbar-pill"
       @click.stop="toggleMenu('ponytail')"
       :title="$t('toolbar.ponytailTitle')"
     >
@@ -243,14 +288,13 @@ const currentEffortLabel = computed(() => {
       <Transition name="drop">
         <div
           v-if="openMenu === 'ponytail'"
-          class="dropdown-menu absolute bottom-full right-0 mb-1 py-1 rounded-lg z-30 min-w-[110px]"
-          style="background: var(--bg-elevated); border: 1px solid var(--border-default); box-shadow: 0 8px 24px rgba(0,0,0,0.4)"
+          class="dropdown-menu" style="min-width: 110px"
         >
           <button
             v-for="p in ponytailOptions"
             :key="p.value"
             @click="selectPonytail(p.value)"
-            class="w-full text-left px-3 py-1.5 text-[0.65rem] transition-colors hover:bg-[var(--bg-hover)] flex items-center gap-2"
+            class="dropdown-item"
             :style="{
               color: settings.ponytailMode === p.value ? p.color : 'var(--text-secondary)',
               background: settings.ponytailMode === p.value ? p.color + '18' : 'transparent'
@@ -262,28 +306,23 @@ const currentEffortLabel = computed(() => {
     <button
       v-else-if="hasPonytail === false"
       @click="installPonytail"
-      class="toolbar-pill flex items-center gap-1 text-[0.6rem] shrink-0 rounded-lg"
+      class="toolbar-pill"
       :title="$t('toolbar.ponytailInstall')"
     >
       <span class="opacity-60">⬇</span>
       <span class="font-medium">{{ $t('toolbar.ponytailInstall') }}</span>
     </button>
 
-    <!-- Mini divider -->
-    <div class="w-px h-4 shrink-0" style="background: var(--border-dim)"></div>
-
-    <!-- Context indicator -->
-    <ContextIndicator />
+    <!-- Mini divider + context indicator — 有消息时才显示 -->
+    <template v-if="chat.messages.length > 0">
+      <div class="w-px h-4 shrink-0" style="background: var(--border-dim)"></div>
+      <ContextIndicator @click="emit('showContext')" />
+    </template>
   </div>
 
   <!-- Effort warning -->
-  <div
-    v-if="effortWarning"
-    class="max-w-3xl mx-auto pb-1"
-  >
-    <div class="text-[10px] px-2 py-1 rounded-md flex items-center gap-1.5"
-      style="background: var(--amber-glow); color: var(--amber); border: 1px solid rgba(245,166,35,0.2)"
-    >
+  <div v-if="effortWarning" class="effort-warning">
+    <div class="effort-warning-banner">
       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
       {{ effortWarning }}
     </div>
@@ -291,38 +330,129 @@ const currentEffortLabel = computed(() => {
 </template>
 
 <style scoped>
-.toolbar {
-  position: relative;
+/* ── Toolbar container ── */
+.sb-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  max-width: 48rem;
+  margin-inline: auto;
+  padding-bottom: 0.25rem;
+  user-select: none;
 }
 
+/* ── Tool buttons (attach, command menu) ── */
 .toolbar-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.625rem;
+  border-radius: 0.5rem;
+  font-size: 11px;
+  flex-shrink: 0;
   color: var(--text-secondary);
   background: transparent;
-  border: 1px solid transparent;
+  border: 1px solid var(--border-dim);
   transition: all 150ms ease;
 }
-
 .toolbar-btn:hover {
   color: var(--text-secondary);
   background: var(--bg-elevated);
-  border-color: var(--border-dim);
+  border-color: var(--accent);
+}
+.toolbar-btn-label {
+  font-weight: 500;
+}
+@media (max-width: 640px) {
+  .toolbar-btn-label { display: none; }
 }
 
+/* ── Pill dropdowns (mode, effort, ponytail) ── */
 .toolbar-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 11px;
+  flex-shrink: 0;
+  border-radius: 0.5rem;
+  position: relative;
+  cursor: pointer;
   background: var(--bg-elevated);
   border: 1px solid var(--border-dim);
-  padding: 3px 8px 3px 8px;
+  padding: 3px 8px;
   transition: border-color 150ms;
   outline: none;
   user-select: none;
 }
-
 .toolbar-pill:hover {
   border-color: var(--border-bright);
 }
 
+/* ── Dropdown menu ── */
 .dropdown-menu {
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  margin-bottom: 0.25rem;
+  padding-block: 0.25rem;
+  border-radius: 0.5rem;
+  z-index: 30;
   overflow: hidden;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+
+/* ── Dropdown item ── */
+.dropdown-item {
+  width: 100%;
+  text-align: left;
+  padding: 0.375rem 0.75rem;
+  font-size: 11px;
+  transition: background-color 150ms;
+}
+.dropdown-item:hover {
+  background: var(--bg-hover);
+}
+
+/* ── Slash quick menu ── */
+.slash-menu-container {
+  position: relative;
+}
+.slash-icon {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+}
+.slash-dropdown {
+  right: auto;
+  left: 0;
+  min-width: 180px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.slash-section-header {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.375rem 0.75rem 0.125rem;
+  color: var(--text-muted);
+}
+.slash-section-divider {
+  height: 1px;
+  margin: 0.25rem 0.5rem;
+  background: var(--border-dim);
+}
+.slash-browse-all {
+  color: var(--accent);
+  font-weight: 500;
+}
+.slash-empty {
+  font-size: 11px;
+  padding: 0.75rem;
+  text-align: center;
+  color: var(--text-muted);
 }
 
 /* Dropdown animation */
@@ -330,4 +460,22 @@ const currentEffortLabel = computed(() => {
 .drop-leave-active { transition: all 100ms ease-in; }
 .drop-enter-from { opacity: 0; transform: translateY(4px) scale(0.96); }
 .drop-leave-to { opacity: 0; transform: translateY(2px) scale(0.98); }
+
+/* ── Effort warning ── */
+.effort-warning {
+  max-width: 48rem;
+  margin-inline: auto;
+  padding-bottom: 0.25rem;
+}
+.effort-warning-banner {
+  font-size: 10px;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.375rem;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  background: var(--amber-glow);
+  color: var(--amber);
+  border: 1px solid rgba(245,166,35,0.2);
+}
 </style>

@@ -6,7 +6,7 @@ import { formatNum } from "@/lib/utils";
 import ModalShell from "./ModalShell.vue";
 
 defineProps<{ open: boolean }>();
-const emit = defineEmits<{ close: [] }>();
+const emit = defineEmits<{ close: []; compact: [] }>();
 
 const chat = useChatStore();
 const settings = useSettingsStore();
@@ -105,5 +105,12 @@ const rows = computed<Row[]>(() => [
     <p class="text-[10px] leading-relaxed pb-1" :style="{ color: 'var(--text-muted)' }">
       {{ $t('contextUsage.note') }}
     </p>
+
+    <!-- Compact 按钮 — 点击后关闭弹窗 -->
+    <button
+      @click="emit('close'); emit('compact')"
+      class="w-full py-2 rounded-lg text-xs font-medium transition-colors"
+      style="background: var(--bg-elevated); color: var(--accent); border: 1px solid var(--accent-dim)"
+    >🗜️ {{ $t('contextUsage.compact') }}</button>
   </ModalShell>
 </template>

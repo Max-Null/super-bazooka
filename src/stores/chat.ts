@@ -62,6 +62,88 @@ export const useChatStore = defineStore("chat", () => {
     pendingControlRequests.value.length > 0 ? pendingControlRequests.value[0] : null
   );
 
+  // 会话消息缓存：切换会话时保留进行中的流式消息（DB 只有已完成的消息）
+  const sessionCache = new Map<string, Message[]>();
+
+  /** 将当前消息深拷贝存入缓存（切换会话前调用） */
+  function saveSessionCache(sessionId: string) {
+    if (!sessionId) return;
+    // JSON 深拷贝，避免引用污染（ponytail: WebView2 不保证 structuredClone）
+    sessionCache.set(sessionId, JSON.parse(JSON.stringify(messages.value)));
+  }
+
+  /** 从缓存恢复消息；缓存无数据则返回 null */
+  function loadFromCache(sessionId: string): Message[] | null {
+    return sessionCache.get(sessionId) ?? null;
+  }
+
+  /**
+   * 处理后台会话的流式事件（当前活跃会话不是该 session 时调用）。
+   * 将增量数据写入 sessionCache，切回时 loadFromCache 即可恢复完整状态。
+   */
+  // ponytail: event 用 any 避免跨模块类型依赖
+  function handleBackgroundStreamEvent(sessionId: string, event: any) {
+    const cached = sessionCache.get(sessionId) || [];
+    let last = cached[cached.length - 1];
+
+    if (event.type === 'assistant') {
+      // 确保有进行中的 assistant 消息
+      if (!last || last.role !== 'assistant' || !last.isStreaming) {
+        last = {
+          id: genId(), role: 'assistant', content: '', thinking: '',
+          toolUses: [], timestamp: Date.now(), isStreaming: true,
+        };
+        cached.push(last);
+      }
+      // 文本去重（同 useStreamProcessor 逻辑）
+      if (event.text) {
+        if (last.content && event.text.startsWith(last.content)) {
+          const newPart = event.text.slice(last.content.length);
+          if (newPart) last.content += newPart;
+        } else {
+          last.content += event.text;
+        }
+      }
+      // thinking 去重
+      if (event.thinking) {
+        if (last.thinking && event.thinking.startsWith(last.thinking)) {
+          const newPart = event.thinking.slice(last.thinking.length);
+          if (newPart) last.thinking += newPart;
+        } else {
+          last.thinking += event.thinking;
+        }
+      }
+      if (event.tool_use) {
+        for (const tu of event.tool_use) {
+          last.toolUses.push({ id: tu.id, name: tu.name, input: tu.input || {} });
+        }
+      }
+      if (event.input_tokens != null) last.inputTokens = event.input_tokens;
+      if (event.output_tokens != null) last.outputTokens = event.output_tokens;
+      if (event.cost_usd != null) last.costUSD = event.cost_usd;
+    } else if (event.type === 'result' || event.type === 'done') {
+      if (last && last.isStreaming) {
+        last.isStreaming = false;
+        last.durationMs = event.duration_ms;
+        last.inputTokens = event.input_tokens ?? last.inputTokens;
+        last.outputTokens = event.output_tokens ?? last.outputTokens;
+        last.costUSD = event.cost_usd ?? last.costUSD;
+      }
+    } else if (event.type === 'error') {
+      if (last && last.isStreaming) {
+        last.content += `\n\n> ⚠️ ${event.error || 'Unknown error'}`;
+        last.isStreaming = false;
+      }
+    } else if (event.type === 'token_usage') {
+      if (last) {
+        if (event.input_tokens != null) last.inputTokens = event.input_tokens;
+        if (event.output_tokens != null) last.outputTokens = event.output_tokens;
+      }
+    }
+
+    sessionCache.set(sessionId, cached);
+  }
+
   function addUserMessage(content: string, attachments?: AttachedFile[]): string {
     const id = genId();
     messages.value.push({
@@ -306,6 +388,10 @@ export const useChatStore = defineStore("chat", () => {
     usedAgents,
     clearMessages,
     loadMessages,
+    saveSessionCache,
+    loadFromCache,
+    handleBackgroundStreamEvent,
+    sessionCache,
     updateMessage,
     truncateFromIndex,
     truncateAfterMessage,

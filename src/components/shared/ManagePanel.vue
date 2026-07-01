@@ -3,9 +3,10 @@ import { ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { readFileContent, writeFile, getClaudeDir, getWorkspaceRoot, listDir, ensureItemDescriptions, clearItemDescriptions, clearMcpDescriptions, generateMcpDescriptions, type DescriptionItem } from "@/lib/tauri-bridge";
 import { translateError as mapError } from "@/lib/utils";
-import { connectedMcpServers } from "@/composables/useStreamProcessor";
 import { useSettingsStore } from "@/stores/settings";
 import { useChatStore } from "@/stores/chat";
+import { useSessionStore } from "@/stores/session";
+import { useSlashCommands } from "@/composables/useSlashCommands";
 import ModalShell from "./ModalShell.vue";
 
 const props = defineProps<{ open: boolean; initialTab?: string }>();
@@ -14,6 +15,8 @@ const emit = defineEmits<{ close: []; sendSlash: [text: string] }>();
 const { t, locale } = useI18n();
 const settingsStore = useSettingsStore();
 const chatStore = useChatStore();
+const sessionStore = useSessionStore();
+const { isFavorite, toggleFavorite } = useSlashCommands();
 
 type Tab = "plugins" | "mcp" | "skills" | "agents" | "hooks" | "memory" | "permissions" | "styles";
 const tabs: { id: Tab }[] = [
@@ -386,7 +389,7 @@ async function loadMCP() {
   } catch {}
 
   // 4) 运行时连接状态 + 禁用标记
-  const connected = new Set(connectedMcpServers.value);
+  const connected = new Set(sessionStore.connectedMcpServers);
   for (const it of result) {
     it.enabled = connected.has(it.name);
     it.disabled = disabledSet.has(it.name);
@@ -809,7 +812,7 @@ function switchTab(t: Tab) {
 </script>
 
 <template>
-  <ModalShell :open="open" size="lg" @close="emit('close')">
+  <ModalShell :open="open" size="lg" class="sb-manage-panel" @close="emit('close')">
     <template #header>
       <div class="flex flex-col flex-1">
         <div class="flex items-center gap-2">
@@ -857,6 +860,13 @@ function switchTab(t: Tab) {
           >
             <span class="text-[0.75rem]">{{ activeTab === 'skills' ? '📋' : '🧠' }}</span>
             <span class="font-mono flex-1 truncate">{{ (it as Item).name }}</span>
+            <!-- 收藏切换（仅 skills）— 已收藏常显，未收藏 hover 才出现 -->
+            <button v-if="activeTab === 'skills'" @click.stop="toggleFavorite((it as Item).name)" :class="['px-1 py-0.5 rounded transition-opacity shrink-0 hover:bg-[var(--bg-hover)]', isFavorite((it as Item).name) ? '' : 'opacity-0 group-hover:opacity-100']" :title="isFavorite((it as Item).name) ? $t('manage.unfavorite') : $t('manage.favorite')">
+              <!-- 已收藏：实心星 -->
+              <svg v-if="isFavorite((it as Item).name)" width="12" height="12" viewBox="0 0 24 24" fill="var(--amber)" stroke="var(--amber)" stroke-width="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              <!-- 未收藏：空心星 -->
+              <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            </button>
             <button v-if="activeTab === 'skills'" @click.stop="openEditor((it as Item).path + '/SKILL.md')" class="text-[0.7rem] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity shrink-0 hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.view') }}</button>
             <button v-else class="text-[0.7rem] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity shrink-0" :style="{ color: 'var(--text-muted)' }">{{ $t('manage.edit') }}</button>
           </div>
