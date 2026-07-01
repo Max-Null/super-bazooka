@@ -12,9 +12,6 @@ test-results/
 # Tauri auto-generated schema (regenerated on build)
 src-tauri/gen/schemas/
 
-# Temp screenshots in scripts/
-scripts/*.png
-
 # Playwright test artifact (generated on each run)
 e2e/fixtures/real-stream-output.png
 cc-installer/install-cc.bat
