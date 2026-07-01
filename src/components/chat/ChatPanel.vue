@@ -650,10 +650,8 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAut
               <line x1="12" y1="19" x2="20" y2="19" />
             </svg>
           </div>
-          <h2 class="text-xl font-bold mb-2 tracking-tight" style="color:var(--text-bright)">cc-gui</h2>
-          <p class="text-sm leading-relaxed mb-6" style="color:var(--text-secondary)">
-            Claude Code Desktop GUI
-          </p>
+          <h2 class="text-xl font-bold mb-2 tracking-tight" style="color:var(--text-bright)">{{ $t('chat.welcomeTitle') }}</h2>
+          <p class="text-sm leading-relaxed mb-6" style="color:var(--text-secondary)">{{ $t('chat.welcomeSubtitle') }}</p>
           <div class="flex items-center justify-center gap-2 text-[11px]" style="color:var(--text-muted)">
             <kbd class="px-1.5 py-0.5 rounded text-[10px]" style="background:var(--bg-elevated); border:1px solid var(--border-dim)">Enter</kbd>
             <span>{{ $t('chat.welcomeSend') }}</span>
@@ -947,19 +945,19 @@ watch(() => chat.currentAssistantMsg?.toolUses.length, () => scrollToBottomIfAut
     <!-- 关于弹窗 -->
     <ModalShell :open="showAbout" size="sm" @close="showAbout = false">
       <template #header>
-        <span class="text-sm font-semibold" :style="{ color: 'var(--text-bright)' }">关于 cc-gui</span>
+        <span class="text-sm font-semibold" :style="{ color: 'var(--text-bright)' }">{{ $t('chat.aboutTitle') }}</span>
       </template>
       <div class="text-center py-4 space-y-3">
-        <div class="text-lg font-bold" :style="{ color: 'var(--text-bright)' }">cc-gui</div>
-        <div class="text-xs" :style="{ color: 'var(--text-secondary)' }">Claude Code Desktop GUI</div>
-        <div class="text-[11px] font-mono" :style="{ color: 'var(--text-muted)' }">v0.1.0</div>
+        <div class="text-lg font-bold" :style="{ color: 'var(--text-bright)' }">{{ $t('app.title') }}</div>
+        <div class="text-xs" :style="{ color: 'var(--text-secondary)' }">{{ $t('chat.aboutSubtitle') }}</div>
+        <div class="text-[11px] font-mono" :style="{ color: 'var(--text-muted)' }">v{{ appVersion }}</div>
         <div class="text-[11px]" :style="{ color: 'var(--text-muted)' }">
           Tauri 2 + Vue 3 + TypeScript<br/>
           Rust 后端 · SQLite 持久化<br/>
-          DeepSeek API 兼容
+          多厂商 API 兼容
         </div>
         <div class="text-[10px] pt-2" :style="{ color: 'var(--text-muted)' }">
-          © 2026 cc-gui contributors · MIT
+          © 2026 Super Bazooka contributors · MIT
         </div>
       </div>
     </ModalShell>

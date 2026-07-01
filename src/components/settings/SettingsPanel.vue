@@ -730,7 +730,7 @@ async function saveSettingsJson() {
       <!-- Footer：关于 -->
       <footer class="mt-8 pt-4" style="border-top:1px solid var(--border-dim)">
         <div class="flex items-center justify-between text-[10px]" :style="{ color: 'var(--text-muted)' }">
-          <span>{{ $t('settings.aboutDesc') }}</span>
+          <span>{{ $t('app.title') }}</span>
           <div class="flex items-center gap-3">
             <button
               class="hover:underline transition-colors"

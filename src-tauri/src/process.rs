@@ -495,7 +495,7 @@ pub async fn spawn_claude_session(
                 let mgr = session_mgr.lock().await;
                 if let Err(e) = mgr.set_session_status(&sid_waiter, new_status) {
                     eprintln!(
-                        "[cc-gui] Failed to update session status for {} -> {}: {}",
+                        "[SB] Failed to update session status for {} -> {}: {}",
                         sid_waiter, new_status, e
                     );
                 }

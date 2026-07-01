@@ -1,5 +1,5 @@
 {
-  "app": { "title": "cc-gui - Claude Code 桌面 GUI" },
+  "app": { "title": "90火" },
 
   "chat": {
     "placeholder": "输入消息，Enter 发送...",
@@ -42,13 +42,16 @@
     "renameConfirm": "确认",
     "renameCancel": "取消",
     "welcome": "Claude Code Desktop GUI",
+    "welcomeTitle": "90火",
+    "welcomeSubtitle": "90火 — Claude 的极简桌面客户端",
     "welcomeSend": "发送",
     "welcomeNewline": "换行",
     "debugLabel": "调试",
     "llmRequestLabel": "LLM 请求",
-    "aboutTitle": "关于 cc-gui",
-    "aboutTech": "Tauri 2 + Vue 3 + TypeScript · Rust · SQLite · DeepSeek API",
-    "aboutCopyright": "© 2026 cc-gui contributors · MIT"
+    "aboutTitle": "关于 90火",
+    "aboutSubtitle": "90火 — 连接 Claude 的智能桥梁",
+    "aboutTech": "Tauri 2 + Vue 3 + TypeScript · Rust · SQLite · 多厂商 API",
+    "aboutCopyright": "© 2026 Super Bazooka contributors · MIT"
   },
 
   "provider": {

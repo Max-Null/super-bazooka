@@ -1,8 +1,8 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicepage/nicepage/refs/heads/main/schemas/tauri/config.schema.json",
-  "productName": "cc-gui",
+  "productName": "Super Bazooka",
   "version": "0.1.5",
-  "identifier": "com.maxnull.cc-gui",
+  "identifier": "com.maxnull.super-bazooka",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "cc-gui",
+        "title": "Super Bazooka",
         "width": 1400,
         "height": 900,
         "minWidth": 800,
@@ -35,8 +35,8 @@
       "icons/icon.ico"
     ],
     "category": "DeveloperTool",
-    "shortDescription": "Claude Code Desktop GUI",
-    "longDescription": "A Tauri 2 + Vue 3 desktop GUI for Claude Code CLI, with DeepSeek backend support.",
+    "shortDescription": "Super Bazooka — A minimalist GUI client for Claude",
+    "longDescription": "Super Bazooka (90火) — A clean, fast, developer-friendly desktop interface for Claude Code CLI, with multi-provider backend support.",
     "copyright": "© 2026 cc-gui contributors",
     "windows": {
       "nsis": {

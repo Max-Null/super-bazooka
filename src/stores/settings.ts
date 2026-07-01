@@ -2,7 +2,7 @@ import { defineStore } from "pinia";
 import { ref, watch } from "vue";
 import { getClaudeSettings, setClaudeSettings, resolveClaudePath, saveProviderConfig, loadProviderConfigs } from "@/lib/tauri-bridge";
 
-const STORAGE_KEY = "cc-gui-ui-settings";
+const STORAGE_KEY = "sb-ui-settings";
 
 /**
  * 权限模式映射（对应 CLI --permission-mode 标志）:
@@ -117,7 +117,7 @@ export const useSettingsStore = defineStore("settings", () => {
   const resolvedClaudePath = ref("");
 
   // LLM API 地址：跟随 baseUrl，用户手动编辑过才存 localStorage 覆盖
-  const LLM_API_URL_KEY = "cc-gui-llm-api-url-override";
+  const LLM_API_URL_KEY = "sb-llm-api-url-override";
   const optimizeApiUrl = ref(localStorage.getItem(LLM_API_URL_KEY) || "");
 
   // 启动时获取自动检测的 claude 路径

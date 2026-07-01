@@ -25,7 +25,7 @@ const filePanelForceClose = ref(0);
 const cwd = ref("");
 
 // ── 最近工作区管理 ──
-const RECENT_WORKSPACES_KEY = "cc-gui-recent-workspaces";
+const RECENT_WORKSPACES_KEY = "sb-recent-workspaces";
 const MAX_RECENT = 10;
 const recentWorkspaces = ref<string[]>([]);
 const showWorkspaceMenu = ref(false);
@@ -233,7 +233,7 @@ function openFilePanelTo(path: string) {
           </svg>
         </button>
 
-        <span class="text-sm font-semibold tracking-tight leading-none" style="color:var(--text-bright)">cc-gui</span>
+        <span class="text-sm font-semibold tracking-tight leading-none" style="color:var(--text-bright)">{{ $t('app.title') }}</span>
 
         <!-- 禅模式 -->
         <button

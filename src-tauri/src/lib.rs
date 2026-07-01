@@ -497,7 +497,7 @@ async fn ensure_item_descriptions(
     base_url: String,
     optimize_api_url: Option<String>,
 ) -> Result<Vec<DescriptionItem>, String> {
-    // 如果 cc-gui 未配置 API Key，尝试从 ~/.claude/settings.json 读取 ANTHROPIC_AUTH_TOKEN
+    // 如果未配置 API Key，尝试从 ~/.claude/settings.json 读取 ANTHROPIC_AUTH_TOKEN
     let api_key = if api_key.is_empty() {
         read_claude_api_key().unwrap_or_default()
     } else {
@@ -575,7 +575,7 @@ async fn ensure_item_descriptions(
 }
 
 /// 调用 DeepSeek API 将英文描述翻译为中文
-/// 从 ~/.claude/settings.json 读取 cc-gui 相关配置
+/// 从 ~/.claude/settings.json 读取配置
 #[derive(serde::Serialize)]
 struct ClaudeSettings {
     api_key: String,
@@ -636,7 +636,7 @@ fn get_claude_settings() -> Result<ClaudeSettings, String> {
     })
 }
 
-/// 将 cc-gui 配置写入 ~/.claude/settings.json
+/// 将配置写入 ~/.claude/settings.json
 /// provider_id 用于写入正确的 env var 组合，切换时清除旧 provider 独有的 key
 #[tauri::command]
 fn set_claude_settings(
@@ -1269,7 +1269,7 @@ async fn install_claude_code() -> Result<i32, String> {
 
     // 写入临时文件
     let temp_dir = std::env::temp_dir();
-    let ps1_path = temp_dir.join("cc-gui-install-cc.ps1");
+    let ps1_path = temp_dir.join("sb-install-cc.ps1");
     std::fs::write(&ps1_path, ps1_content)
         .map_err(|e| format!("写入安装脚本失败: {e}"))?;
 
