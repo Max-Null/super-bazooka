@@ -114,9 +114,9 @@
     "ponytailMode": "Lean mode",
     "claudePath": "Claude CLI Path",
     "claudePathDetected": "✓ Detected: {path}",
-    "claudePathNotFound": "⚠ Claude not found, please specify path manually",
+    "claudePathNotFound": "⚠ Claude not found, please specify claude.exe location",
     "claudePathOverride": "Manual override (optional)",
-    "claudePathOverridePlaceholder": "Leave empty to use auto-detected path",
+    "claudePathOverridePlaceholder": "Full path to claude.exe, leave empty to auto-detect",
     "llmApiUrl": "Chat API URL",
     "chatApi": "Chat",
     "llmApiUrlPlaceholder": "Full URL incl. path, for translate/optimize. Auto-derived if empty",
@@ -295,7 +295,7 @@
 
   "error": {
     "retry": "Retry",
-    "claudeNotFound": "Claude Code CLI not found. Please install: npm install -g {'@anthropic-ai/claude-code'}, or specify the claude path in Settings",
+    "claudeNotFound": "Claude Code CLI not found (error: {detail}). Please verify claude is installed, or specify claude.exe path in Settings",
     "spawnFailed": "Failed to spawn Claude: {error}",
     "fileReadError": "Failed to read file: {error}",
     "fileWriteError": "Failed to write file: {error}",

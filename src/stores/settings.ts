@@ -1,6 +1,6 @@
 import { defineStore } from "pinia";
 import { ref, watch } from "vue";
-import { getClaudeSettings, setClaudeSettings, resolveClaudePath, saveProviderConfig, loadProviderConfigs } from "@/lib/tauri-bridge";
+import { getClaudeSettings, setClaudeSettings, resolveClaudePath, saveProviderConfig, loadProviderConfigs, saveUiSettings as saveUiSettingsDb, loadUiSettings as loadUiSettingsDb } from "@/lib/tauri-bridge";
 
 /** Provider logo CDN URL 映射（lobe-icons，与 SettingsPanel 同源） */
 export const PROVIDER_LOGOS: Record<string, string> = {
@@ -129,13 +129,47 @@ export const useSettingsStore = defineStore("settings", () => {
 
   // LLM API 地址：跟随 baseUrl，用户手动编辑过才存 localStorage 覆盖
   const LLM_API_URL_KEY = "sb-llm-api-url-override";
-  const optimizeApiUrl = ref(localStorage.getItem(LLM_API_URL_KEY) || "");
+  const optimizeApiUrl = ref(localStorage.getItem(LLM_API_URL_KEY) || baseUrl.value);
 
   // 禅模式：直接与 LLM 对话，不启动 CC CLI（仅内存状态，不持久化）
   const zenMode = ref(false);
 
+  // ── 工作区状态 ──
+  const MAX_RECENT_WORKSPACES = 10;
+  const cwd = ref(localStorage.getItem("sb-current-workspace") || "");
+
+  const recentWorkspaces = ref<string[]>([]);
+  try {
+    const raw = localStorage.getItem("sb-recent-workspaces");
+    if (raw) recentWorkspaces.value = JSON.parse(raw);
+  } catch { recentWorkspaces.value = []; }
+
+  function addRecentWorkspace(path: string) {
+    const next = recentWorkspaces.value.filter(p => p !== path);
+    next.unshift(path);
+    if (next.length > MAX_RECENT_WORKSPACES) next.pop();
+    recentWorkspaces.value = next;
+    // localStorage 同步备份
+    localStorage.setItem("sb-recent-workspaces", JSON.stringify(next));
+  }
+
   // 启动时获取自动检测的 claude 路径
   resolveClaudePath().then(p => resolvedClaudePath.value = p).catch(() => {});
+
+  // 从 SQLite 恢复 UI 设置（不受 Tauri identifier 变更影响），优先于 localStorage
+  loadUiSettingsDb().then(json => {
+    try {
+      const db = JSON.parse(json);
+      if (db.optimizeApiUrl) optimizeApiUrl.value = db.optimizeApiUrl;
+      if (db.claudePath) claudePath.value = db.claudePath;
+      if (db.theme) theme.value = db.theme as "dark" | "light" | "system";
+      if (db.locale) locale.value = db.locale as "zh" | "en";
+      if (db.fontSize) fontSize.value = db.fontSize as "small" | "medium" | "large";
+      if (db.ponytailMode) ponytailMode.value = db.ponytailMode as PonytailMode;
+      if (db.cwd) cwd.value = db.cwd;
+      if (db.recentWorkspaces) recentWorkspaces.value = db.recentWorkspaces;
+    } catch {}
+  }).catch(() => {});
 
   // 启动时从 ~/.claude/settings.json 加载配置
   getClaudeSettings().then(s => {
@@ -216,5 +250,37 @@ export const useSettingsStore = defineStore("settings", () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
   }, { deep: true });
 
-  return { apiKey, baseUrl, model, providerId, models, planMode, autoMode, permissionMode, effort, ponytailMode, theme, locale, fontSize, claudePath, optimizeApiUrl, zenMode, resolvedClaudePath, saveCurrentConfig, restoreConfig };
+  // UI 偏好变更 → 写 SQLite（500ms 防抖，不受 Tauri identifier 变更影响）
+  let uiDbTimer: ReturnType<typeof setTimeout> | null = null;
+  watch(
+    [optimizeApiUrl, claudePath, theme, locale, fontSize, ponytailMode, planMode, autoMode, permissionMode, effort, cwd, recentWorkspaces],
+    () => {
+      if (uiDbTimer) clearTimeout(uiDbTimer);
+      uiDbTimer = setTimeout(() => {
+        saveUiSettingsDb(JSON.stringify({
+          optimizeApiUrl: optimizeApiUrl.value,
+          claudePath: claudePath.value,
+          theme: theme.value,
+          locale: locale.value,
+          fontSize: fontSize.value,
+          ponytailMode: ponytailMode.value,
+          planMode: planMode.value,
+          autoMode: autoMode.value,
+          permissionMode: permissionMode.value,
+          effort: effort.value,
+          cwd: cwd.value,
+          recentWorkspaces: recentWorkspaces.value,
+        })).catch(() => {});
+      }, 500);
+    },
+    { deep: true },
+  );
+
+  // cwd 变更 → localStorage 同步备份
+  watch(cwd, (v) => {
+    if (v) localStorage.setItem("sb-current-workspace", v);
+    else localStorage.removeItem("sb-current-workspace");
+  });
+
+  return { apiKey, baseUrl, model, providerId, models, planMode, autoMode, permissionMode, effort, ponytailMode, theme, locale, fontSize, claudePath, optimizeApiUrl, zenMode, resolvedClaudePath, saveCurrentConfig, restoreConfig, cwd, recentWorkspaces, addRecentWorkspace };
 });

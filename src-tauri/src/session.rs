@@ -57,12 +57,25 @@ impl SessionManager {
         model: &str,
         mode: &str,
     ) -> Result<Session, String> {
+        // ponytail: 默认标题由前端按 locale 传入，常量仅作 SQL 默认值
+        self.create_session_with_title(cwd, model, mode, "New Chat")
+    }
+
+    /// 创建会话，使用前端传入的本地化标题
+    pub fn create_session_with_title(
+        &self,
+        cwd: &str,
+        model: &str,
+        mode: &str,
+        title: &str,
+    ) -> Result<Session, String> {
         let id = uuid_v4();
         let conn = self.db.conn.lock().map_err(|e| format!("DB lock: {}", e))?;
 
+        let display_title = if title.is_empty() { "New Chat" } else { title };
         conn.execute(
-            "INSERT INTO sessions (id, title, cwd, model, status, mode) VALUES (?1, 'New Chat', ?2, ?3, 'idle', ?4)",
-            params![id, cwd, model, mode],
+            "INSERT INTO sessions (id, title, cwd, model, status, mode) VALUES (?1, ?2, ?3, ?4, 'idle', ?5)",
+            params![id, display_title, cwd, model, mode],
         )
         .map_err(|e| format!("DB insert session: {}", e))?;
 
@@ -220,7 +233,7 @@ impl SessionManager {
         };
         let conn = self.db.conn.lock().map_err(|e| format!("DB lock: {}", e))?;
         conn.execute(
-            "UPDATE sessions SET title = ?1 WHERE id = ?2 AND title = 'New Chat'",
+            "UPDATE sessions SET title = ?1 WHERE id = ?2 AND (title = 'New Chat' OR title = '新会话')",
             params![title, id],
         )
         .map_err(|e| format!("DB auto title: {}", e))?;

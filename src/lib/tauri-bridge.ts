@@ -115,8 +115,8 @@ export interface MessageData {
   created_at: string;
 }
 
-export async function createSession(model?: string, cwd?: string, mode?: string): Promise<SessionData> {
-  return invoke("create_session", { model: model ?? null, cwd: cwd ?? null, mode: mode ?? null });
+export async function createSession(model?: string, cwd?: string, mode?: string, title?: string): Promise<SessionData> {
+  return invoke("create_session", { model: model ?? null, cwd: cwd ?? null, mode: mode ?? null, title: title ?? null });
 }
 
 export async function listSessions(): Promise<SessionData[]> {
@@ -279,6 +279,18 @@ export async function saveProviderConfig(
 /** 加载所有已保存的 provider 配置 */
 export async function loadProviderConfigs(): Promise<Record<string, { apiKey: string; baseUrl: string; model: string }>> {
   return invoke("load_provider_configs");
+}
+
+// ── UI 设置持久化（SQLite，不受 Tauri identifier 变更影响）──
+
+/** 保存前端 UI 设置到 SQLite（JSON blob） */
+export async function saveUiSettings(json: string): Promise<void> {
+  return invoke("save_ui_settings", { json });
+}
+
+/** 从 SQLite 加载前端 UI 设置，无记录返回 "{}" */
+export async function loadUiSettings(): Promise<string> {
+  return invoke("load_ui_settings");
 }
 
 // ── 项目描述（翻译 + 缓存）──

@@ -153,6 +153,9 @@ async function autoResize() {
   const el = document.querySelector(".chat-textarea") as HTMLTextAreaElement | null;
   if (el) { el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 180) + "px"; }
 }
+
+/** 外部设置输入框文本（FilePreview DOM 选择器等） */
+defineExpose({ setText: (text: string) => { input.value = text; autoResize(); } });
 </script>
 
 <template>

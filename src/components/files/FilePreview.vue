@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted, shallowRef } from "vue";
+import { ref, watch, onMounted, onUnmounted, shallowRef, computed, nextTick } from "vue";
 import { EditorView, keymap, lineNumbers, highlightActiveLine } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
@@ -21,6 +21,24 @@ const props = defineProps<{ content: string; filename: string }>();
 const container = ref<HTMLElement | null>(null);
 const view = shallowRef<EditorView | null>(null);
 
+/** .html/.htm 文件用 iframe 渲染，其他用 CodeMirror */
+const isHtmlPreview = computed(() => {
+  const ext = props.filename.split(".").pop()?.toLowerCase() || "";
+  return ext === "html" || ext === "htm";
+});
+
+/** HTML 预览用 Blob URL（绕过 srcdoc 的脚本执行 bug） */
+const htmlBlob = ref("");
+watch(() => props.content, (val) => {
+  if (isHtmlPreview.value) {
+    URL.revokeObjectURL(htmlBlob.value);
+    htmlBlob.value = URL.createObjectURL(new Blob([val], { type: "text/html" }));
+  }
+}, { immediate: true });
+onUnmounted(() => URL.revokeObjectURL(htmlBlob.value));
+
+// ── CodeMirror ──
+
 function langFromFilename(name: string) {
   const ext = name.split(".").pop()?.toLowerCase();
   switch (ext) {
@@ -28,7 +46,7 @@ function langFromFilename(name: string) {
     case "py": return python();
     case "rs": return rust();
     case "css": return css();
-    case "html": case "vue": case "svelte": return html();
+    case "vue": case "svelte": return html();
     case "json": return json();
     case "md": return markdown();
     case "sql": return sql();
@@ -38,7 +56,7 @@ function langFromFilename(name: string) {
   }
 }
 
-onMounted(() => {
+function createCodeMirror() {
   if (!container.value) return;
   const extensions = [
     lineNumbers(),
@@ -52,11 +70,24 @@ onMounted(() => {
   ];
   const lang = langFromFilename(props.filename);
   if (lang) extensions.push(lang);
-
   view.value = new EditorView({
     state: EditorState.create({ doc: props.content, extensions }),
     parent: container.value,
   });
+}
+
+onMounted(() => {
+  if (!isHtmlPreview.value) createCodeMirror();
+});
+
+// HTML ↔ 其他文件切换时，重建/销毁 CodeMirror
+watch(isHtmlPreview, (now) => {
+  if (now) {
+    view.value?.destroy();
+    view.value = null;
+  } else {
+    nextTick(() => { if (!view.value) createCodeMirror(); });
+  }
 });
 
 watch(() => props.content, (val) => {
@@ -72,5 +103,12 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div ref="container" class="text-xs"></div>
+  <iframe
+    v-if="isHtmlPreview"
+    class="w-full h-full border-none"
+    sandbox="allow-scripts"
+    :src="htmlBlob"
+    style="background: #fff; min-height: 0"
+  />
+  <div v-else ref="container" class="text-xs"></div>
 </template>

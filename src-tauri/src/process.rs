@@ -166,8 +166,29 @@ pub fn find_claude() -> Option<String> {
                 return Some(cmd.to_string_lossy().to_string());
             }
         }
-        // 3rd: PATH fallback via where.exe (handles non-standard npm prefix,
-        //        pip install, Chocolatey, manual PATH additions, etc.)
+        // 3rd: npm root -g — 覆盖任意 npm prefix（D:\Program Files\nodejs 等非标准路径）
+        if let Ok(output) = std::process::Command::new("npm").args(["root", "-g"]).output() {
+            if output.status.success() {
+                let npm_root = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                let exe = std::path::Path::new(&npm_root)
+                    .join("@anthropic-ai")
+                    .join("claude-code")
+                    .join("bin")
+                    .join("claude.exe");
+                if exe.exists() {
+                    return Some(exe.to_string_lossy().to_string());
+                }
+                // fallback: claude.cmd in npm prefix
+                let cmd = std::path::Path::new(&npm_root).parent()
+                    .map(|p| p.join("claude.cmd"));
+                if let Some(ref cmd_path) = cmd {
+                    if cmd_path.exists() {
+                        return Some(cmd_path.to_string_lossy().to_string());
+                    }
+                }
+            }
+        }
+        // 4th: PATH fallback via where.exe (pip install, Chocolatey, manual PATH, etc.)
         if let Ok(output) = std::process::Command::new("where").arg("claude").output() {
             if output.status.success() {
                 let stdout = String::from_utf8_lossy(&output.stdout);

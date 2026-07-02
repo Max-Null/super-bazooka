@@ -144,7 +144,7 @@ async function handleDelete(id: string) {
         />
         <div v-else class="truncate flex-1 min-w-0">
           <!-- "New Chat" 是 Rust 后端默认标题，前端按 i18n 显示 -->
-          <span class="block truncate">{{ s.title === 'New Chat' ? $t('session.new') : s.title }}</span>
+          <span class="block truncate">{{ s.title === 'New Chat' || s.title === '新会话' ? $t('session.new') : s.title }}</span>
           <span
             v-if="s.totalTokens"
             class="block text-[10px] truncate"

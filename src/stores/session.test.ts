@@ -19,7 +19,7 @@ describe("session store", () => {
 
     expect(session.sessions).toHaveLength(1);
     expect(session.activeSessionId).toBe(id);
-    expect(session.sessions[0].title).toBe("New Chat");
+    expect(session.sessions[0].title).toBe("新会话");
   });
 
   it("switches active session", async () => {

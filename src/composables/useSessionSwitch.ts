@@ -19,7 +19,10 @@ export function useSessionSwitch() {
       chat.saveSessionCache(session.activeSessionId);
     }
     session.setActiveSession(id);
-    session.setSessionActivity(id, null); // 已读
+    // 只清除已完成的会话指示器，处理中的保留绿点
+    if (session.sessionActivity[id] !== 'processing') {
+      session.setSessionActivity(id, null);
+    }
 
     // 优先从缓存恢复，缓存无数据则从 DB 加载
     const cached = chat.loadFromCache(id);
@@ -56,7 +59,9 @@ export function useSessionSwitch() {
       chat.saveSessionCache(session.zenActiveId);
     }
     session.zenActiveId = id;
-    session.setSessionActivity(id, null);
+    if (session.sessionActivity[id] !== 'processing') {
+      session.setSessionActivity(id, null);
+    }
 
     const cached = chat.loadFromCache(id);
     chat.clearMessages();

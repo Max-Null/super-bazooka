@@ -143,14 +143,13 @@ const currentEffortLabel = computed(() => {
     <!-- 外部注入按钮（debug/LLM 切换等），左对齐 -->
     <slot name="left" />
 
-    <!-- 📎 Attach File -->
+    <!-- ➕ Attach File -->
     <button
       @click="emit('attachFile')"
       class="toolbar-btn"
       :title="$t('toolbar.attachTitle')"
     >
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-      <span class="toolbar-btn-label">{{ $t('toolbar.attach') }}</span>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
     </button>
 
     <!-- / Slash quick menu -->
@@ -345,8 +344,10 @@ const currentEffortLabel = computed(() => {
 .toolbar-btn {
   display: flex;
   align-items: center;
-  gap: 0.375rem;
-  padding: 0.375rem 0.625rem;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
   border-radius: 0.5rem;
   font-size: 11px;
   flex-shrink: 0;
@@ -359,12 +360,6 @@ const currentEffortLabel = computed(() => {
   color: var(--text-secondary);
   background: var(--bg-elevated);
   border-color: var(--accent);
-}
-.toolbar-btn-label {
-  font-weight: 500;
-}
-@media (max-width: 640px) {
-  .toolbar-btn-label { display: none; }
 }
 
 /* ── Pill dropdowns (mode, effort, ponytail) ── */

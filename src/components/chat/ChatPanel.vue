@@ -28,7 +28,7 @@ import ContextUsageModal from "@/components/shared/ContextUsageModal.vue";
 import ManagePanel from "@/components/shared/ManagePanel.vue";
 import ModalShell from "@/components/shared/ModalShell.vue";
 import MarkdownRenderer from "@/components/shared/MarkdownRenderer.vue";
-import { useCommandPaletteBus, useChatCommandBus } from "@/composables/useCommandPalette";
+import { useCommandPaletteBus, useChatCommandBus, emitGlobalCommand } from "@/composables/useCommandPalette";
 import { useI18n } from "vue-i18n";
 const { t } = useI18n();
 import { useCommandRegistry } from "@/composables/useCommandRegistry";
@@ -48,6 +48,9 @@ const autoScroll = ref(true);
 const commandBus = useCommandPaletteBus();
 import { isImageFile } from "@/composables/useFilePreview";
 const { getThumbnail, thumbnails } = useFilePreview();
+
+// ── InputBar ref（供外部命令设置输入文本）──
+const inputBar = ref<InstanceType<typeof InputBar> | null>(null);
 
 // 翻译 CC 工具名（中文环境 Bash→命令行、Write→写入文件，英文保持原名）
 function toolLabel(name: string): string {
@@ -84,6 +87,11 @@ const attachedFiles = ref<AttachedFile[]>([]);
 function removeAttachedFile(index: number) {
   attachedFiles.value.splice(index, 1);
 }
+
+// ── DOM 选择器片段（来自文件预览）──
+interface DomSnippet { html: string; filePath: string; selector: string }
+const domSnippet = ref<DomSnippet | null>(null);
+function removeDomSnippet() { domSnippet.value = null; }
 
 const previewFile = ref<{ name: string; path: string } | null>(null);
 
@@ -228,11 +236,31 @@ watch(() => chatCommand.value.ts, (ts) => {
     case "slash-clear": handleSend("/clear"); break;
     case "install-ponytail": handleSend("请帮我安装 Ponytail 插件（ponytail@claude-plugins-official）"); break;
     default:
-      if (action.startsWith("switch-workspace:")) {
-        const newPath = action.slice("switch-workspace:".length);
-        if (session.activeSessionId && chat.isProcessing) {
-          stopSession(session.activeSessionId).catch(() => {});
+      if (action.startsWith("md-convert:")) {
+        // 来自 FilePreviewModal 的 MD → docx 转换指令
+        const msg = action.slice("md-convert:".length);
+        if (chat.isProcessing) {
+          inputBar.value?.setText(msg);
+        } else {
+          handleSend(msg);
         }
+      } else if (action.startsWith("attach-dom:")) {
+        // 来自 FilePreview DOM 选择器 — 存为卡片，随下次消息一起发送
+        const data = action.slice("attach-dom:".length);
+        const lines = data.split("\n");
+        // 格式：我在 `full/path` 中选中了这个元素，请修改其内容：
+        const fileMatch = lines[0]?.match(/`([^`]+)`/);
+        const fullPath = fileMatch?.[1] || "";
+        const htmlLines = lines.slice(1).join("\n");
+        domSnippet.value = {
+          filePath: fullPath,
+          selector: htmlLines.match(/<(\w+)/)?.[1] || "element",
+          html: data,
+        };
+      } else if (action.startsWith("switch-workspace:")) {
+        // 处理中不切工作区，防止消息区域突然清空
+        if (chat.isProcessing) break;
+        const newPath = action.slice("switch-workspace:".length);
         chat.clearMessages();
         isNearBottom.value = true;
         autoScroll.value = true;
@@ -356,12 +384,17 @@ async function handleSend(text: string) {
     }
   }
 
-  // Collect attached file paths before clearing
+  // Collect attached file paths + DOM snippet before clearing
   const filePaths = attachedFiles.value.map(f => f.path);
   attachedFiles.value = [];
 
+  // DOM 选择器片段：拼到消息文本前面（显示 + 发送都包含）
+  const domText = domSnippet.value ? `${domSnippet.value.html}\n\n` : "";
+  domSnippet.value = null;
+  const fullText = domText + text;
+
   const attachments = filePaths.length > 0 ? filePaths.map(p => ({ name: p.split(/[/\\]/).pop() || p, path: p })) : undefined;
-  chat.addUserMessage(text, attachments);
+  chat.addUserMessage(fullText, attachments);
 
   // 用户消息由 Rust 后端在 send_message 中统一保存，
   // 前端不再重复保存，避免历史回显时出现双份用户消息。
@@ -371,6 +404,8 @@ async function handleSend(text: string) {
     chat.startAssistantMessage();
   }
   chat.isProcessing = true;
+  // 发送即设绿点（不等第一条 assistant 事件）
+  session.setSessionActivity(sid, 'processing');
   autoScroll.value = true;
   isNearBottom.value = true;
   await scrollToBottomInstant();
@@ -382,9 +417,9 @@ async function handleSend(text: string) {
         throw new Error("未配置聊天 API 地址，请在设置中填写 LLM API 地址（含完整路径，如 https://api.deepseek.com/v1/chat/completions）");
       }
       // 用 model 字段（用户当前选择的模型），禅模式下通常应为 OpenAI-format 模型名（如 deepseek-chat）
-      await zenSendMessage(sid, text, settings.apiKey, chatUrl, settings.model);
+      await zenSendMessage(sid, fullText, settings.apiKey, chatUrl, settings.model);
     } else {
-      await sendMessage(sid, text, {
+      await sendMessage(sid, fullText, {
         planMode: settings.planMode,
         autoMode: settings.autoMode,
         permissionMode: settings.permissionMode,
@@ -443,6 +478,22 @@ async function handleDeny() {
 }
 
 // ── Edit + Resend: 保留原消息不动，新消息追加到末尾 ──
+
+/** 从消息文本中提取 DOM 片段，恢复为卡片并返回去掉片段的文本 */
+function extractDomSnippet(content: string): string {
+  const match = content.match(/^我在 `(.+?)` 中选中了这个元素，请修改其内容：\n```html\n([\s\S]+?)\n```\n\n/);
+  if (!match) return content;
+  const filePath = match[1];
+  const html = match[2];
+  const tagMatch = html.match(/<(\w+)/);
+  domSnippet.value = {
+    filePath,
+    selector: tagMatch?.[1] || "element",
+    html: match[0].slice(0, -2), // 去掉末尾 \n\n
+  };
+  return content.slice(match[0].length);
+}
+
 async function handleEditSave(id: string, newContent: string) {
   const originalMsg = chat.messages.find(m => m.id === id);
 
@@ -454,19 +505,20 @@ async function handleEditSave(id: string, newContent: string) {
     }));
   }
 
-  await handleSend(newContent);
+  const cleanContent = extractDomSnippet(newContent);
+  await handleSend(cleanContent);
 }
 
 async function handleResend(id: string, content: string) {
   const originalMsg = chat.messages.find(m => m.id === id);
-  // 恢复原始附件
   if (originalMsg?.attachments?.length) {
     attachedFiles.value = originalMsg.attachments.map(a => ({
       name: a.name,
       path: a.path,
     }));
   }
-  await handleSend(content);
+  const cleanContent = extractDomSnippet(content);
+  await handleSend(cleanContent);
 }
 
 // ── AskUserQuestion 问答状态 ──
@@ -850,14 +902,16 @@ watch(
       </template>
     </InputBarToolbar>
 
-    <!-- 禅模式指示器（toolbar 外，不随 toolbar v-if 隐藏） -->
+    <!-- 禅模式指示器 — 点击退出禅模式 -->
     <div
       v-if="settings.zenMode"
       class="sb-toolbar"
     >
-      <span
-        class="text-[11px] px-1.5 py-0.5 rounded font-medium shrink-0"
+      <button
+        @click="emitGlobalCommand('zen-mode')"
+        class="text-[11px] px-1.5 py-0.5 rounded font-medium shrink-0 cursor-pointer transition-colors hover:opacity-80"
         :style="{ color: 'var(--accent)', background: 'var(--accent-glow)' }"
+        :title="$t('header.exitZenMode')"
       >
         <img
           v-if="PROVIDER_LOGOS[settings.providerId]"
@@ -866,18 +920,28 @@ watch(
           alt=""
         />
         <span v-else>🤖</span>
-        {{ $t('chat.zenActive') }}
-      </span>
+        {{ $t('chat.zenActive') }} · {{ $t('header.exitZenMode') }}
+      </button>
     </div>
 
     <!-- 已保存计划的快捷入口 + 附件 chips — 无内容时不占高度 -->
-    <div v-if="(savedPlan.plan && !isPlanPending()) || attachedFiles.length > 0" class="sb-attachment-bar">
+    <div v-if="(savedPlan.plan && !isPlanPending()) || attachedFiles.length > 0 || domSnippet" class="sb-attachment-bar">
       <button
         v-if="savedPlan.plan && !isPlanPending()"
         @click="showPlanModal = true"
         class="flex items-center gap-1 pl-2 pr-1 py-1 rounded-md text-[11px] shrink-0 transition-colors hover:bg-[var(--bg-hover)]"
         :style="{ color: 'var(--text-muted)', border: '1px dashed var(--border-dim)' }"
       >📋 {{ $t('chat.viewPlan') }}</button>
+      <!-- DOM 选择器片段卡片 -->
+      <div
+        v-if="domSnippet"
+        class="flex items-center gap-1.5 pl-2 pr-1 py-1 rounded-md text-[11px] group shrink-0 max-w-[260px]"
+        :style="{ background: 'var(--accent-glow)', border: '1px solid var(--accent-dim)', color: 'var(--accent)' }"
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="shrink-0"><polyline points="6 9 12 15 18 9"/><line x1="4" y1="20" x2="20" y2="20"/></svg>
+        <span class="truncate text-[11px] font-medium" :title="domSnippet.filePath">{{ domSnippet.filePath.split(/[\\/]/).pop() }} · &lt;{{ domSnippet.selector }}&gt;</span>
+        <button @click="removeDomSnippet" class="shrink-0 w-4 h-4 flex items-center justify-center rounded hover:bg-[var(--bg-hover)] transition-colors">×</button>
+      </div>
       <!-- Attached files chips -->
       <div
         v-for="(file, i) in attachedFiles"
@@ -1072,7 +1136,7 @@ watch(
     </ModalShell>
 
     <!-- Input -->
-    <InputBar :disabled="chat.isProcessing" :auto-mode="autoModeActive" :api-key="settings.apiKey" :base-url="settings.baseUrl" @send="handleSend" @stop="handleStop" @files="(fs) => { for (const f of fs) { if (!attachedFiles.some(af => af.path === f.path)) attachedFiles.push(f); } }" />
+    <InputBar ref="inputBar" :disabled="chat.isProcessing" :auto-mode="autoModeActive" :api-key="settings.apiKey" :base-url="settings.baseUrl" @send="handleSend" @stop="handleStop" @files="(fs) => { for (const f of fs) { if (!attachedFiles.some(af => af.path === f.path)) attachedFiles.push(f); } }" />
   </div>
   </ErrorBoundary>
 </template>

@@ -37,7 +37,7 @@ describe("settings store", () => {
     settings.theme = "light";
     await nextTick();
 
-    const raw = localStorage.getItem("cc-gui-ui-settings");
+    const raw = localStorage.getItem("sb-ui-settings");
     expect(raw).toBeTruthy();
     const parsed = JSON.parse(raw!);
     expect(parsed.theme).toBe("light");
@@ -45,8 +45,8 @@ describe("settings store", () => {
 
   it("loads UI preferences from localStorage on init", () => {
     localStorage.setItem(
-      "cc-gui-ui-settings",
-      JSON.stringify({ planMode: true, autoMode: false, permissionMode: "default", effort: "xhigh", theme: "light", locale: "en" })
+      "sb-ui-settings",
+      JSON.stringify({ planMode: true, autoMode: false, permissionMode: "default", effort: "xhigh", theme: "light", locale: "en", fontSize: "medium", ponytailMode: "full", claudePath: "" })
     );
 
     setActivePinia(createPinia());

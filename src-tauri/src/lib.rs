@@ -240,11 +240,11 @@ async fn create_session(
     model: Option<String>,
     cwd: Option<String>,
     mode: Option<String>,
+    title: Option<String>,
 ) -> Result<session::Session, String> {
     let session = state.session_manager.lock().await;
     let cwd = match cwd.filter(|p| !p.is_empty()) {
         Some(p) => {
-            // 校验：canonicalize 解析符号链接 + 验证是目录
             let canonical = std::fs::canonicalize(&p)
                 .map_err(|e| format!("无效的工作区路径 '{}': {}", p, e))?;
             if !canonical.is_dir() {
@@ -254,7 +254,8 @@ async fn create_session(
         }
         None => detect_project_root(),
     };
-    session.create_session(&cwd, &model.unwrap_or_default(), &mode.unwrap_or_else(|| "cc".into()))
+    let title = title.unwrap_or_default();
+    session.create_session_with_title(&cwd, &model.unwrap_or_default(), &mode.unwrap_or_else(|| "cc".into()), &title)
 }
 
 #[tauri::command]
@@ -812,6 +813,33 @@ fn load_provider_configs(
         }
     }
     Ok(configs)
+}
+
+/// 持久化前端 UI 设置到 SQLite（单 key JSON blob，不受 Tauri identifier 影响）
+#[tauri::command]
+fn save_ui_settings(state: State<'_, AppState>, json: String) -> Result<(), String> {
+    let db = state.db.conn.lock().map_err(|e| format!("DB lock: {}", e))?;
+    db.execute(
+        "INSERT OR REPLACE INTO settings (key, value) VALUES ('ui_settings', ?1)",
+        rusqlite::params![json],
+    )
+    .map_err(|e| format!("Failed to save UI settings: {}", e))?;
+    Ok(())
+}
+
+/// 从 SQLite 加载前端 UI 设置，无记录返回 "{}"
+#[tauri::command]
+fn load_ui_settings(state: State<'_, AppState>) -> Result<String, String> {
+    let db = state.db.conn.lock().map_err(|e| format!("DB lock: {}", e))?;
+    match db.query_row(
+        "SELECT value FROM settings WHERE key = 'ui_settings'",
+        [],
+        |row| row.get(0),
+    ) {
+        Ok(val) => Ok(val),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok("{}".to_string()),
+        Err(e) => Err(format!("Failed to load UI settings: {}", e)),
+    }
 }
 
 /// 从 ~/.claude/settings.json 读取 API key（内部翻译用）
@@ -1384,6 +1412,8 @@ pub fn run() {
             set_claude_settings,
             save_provider_config,
             load_provider_configs,
+            save_ui_settings,
+            load_ui_settings,
             ensure_item_descriptions,
             generate_mcp_descriptions,
             clear_item_descriptions,

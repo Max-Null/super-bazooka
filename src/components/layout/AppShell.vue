@@ -1,17 +1,18 @@
 ﻿<script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import SessionSidebar from "@/components/session/SessionSidebar.vue";
 import FilePanel from "@/components/files/FilePanel.vue";
 import CommandPalette from "@/components/shared/CommandPalette.vue";
 import ManagePanel from "@/components/shared/ManagePanel.vue";
-import { emitChatCommand } from "@/composables/useCommandPalette";
+import { emitChatCommand, useGlobalCommandBus } from "@/composables/useCommandPalette";
 import { useNewSession } from "@/composables/useNewSession";
 import { useSessionSwitch } from "@/composables/useSessionSwitch";
 import { getWorkspaceRoot } from "@/lib/tauri-bridge";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useSettingsStore, PROVIDER_LOGOS } from "@/stores/settings";
 import { useSessionStore } from "@/stores/session";
+import { useChatStore } from "@/stores/chat";
 import { useI18n } from "vue-i18n";
 
 const { t } = useI18n();
@@ -19,12 +20,15 @@ const router = useRouter();
 const route = useRoute();
 const settings = useSettingsStore();
 const sessionStore = useSessionStore();
+const chatStore = useChatStore();
 const { handleNew } = useNewSession();
 const { switchTo, zenSwitchTo } = useSessionSwitch();
 
-// 当前模式对应的会话列表（禅模式 / CC 模式）
+// 当前模式对应的会话列表（CC 模式只显示 CC 会话，禅模式只显示 Zen 会话）
 const railSessions = computed(() =>
-  settings.zenMode ? sessionStore.zenSessions : sessionStore.sessions,
+  settings.zenMode
+    ? sessionStore.sessions.filter(s => s.mode === 'zen')
+    : sessionStore.sessions.filter(s => s.mode !== 'zen'),
 );
 const railActiveId = computed(() =>
   settings.zenMode ? sessionStore.zenActiveId : sessionStore.activeSessionId,
@@ -50,32 +54,14 @@ const drawerOpen = ref(false);
 const showManagePanel = ref(false);
 const fileNavCounter = ref(0);
 const filePanelForceClose = ref(0);
-const cwd = ref("");
-
-// ── 最近工作区管理 ──
-const RECENT_WORKSPACES_KEY = "sb-recent-workspaces";
-const MAX_RECENT = 10;
-const recentWorkspaces = ref<string[]>([]);
 const showWorkspaceMenu = ref(false);
 
-function loadRecentWorkspaces() {
-  try {
-    const raw = localStorage.getItem(RECENT_WORKSPACES_KEY);
-    recentWorkspaces.value = raw ? JSON.parse(raw) : [];
-  } catch { recentWorkspaces.value = []; }
-}
-loadRecentWorkspaces();
-
-function addRecentWorkspace(path: string) {
-  recentWorkspaces.value = recentWorkspaces.value.filter(p => p !== path);
-  recentWorkspaces.value.unshift(path);
-  if (recentWorkspaces.value.length > MAX_RECENT) recentWorkspaces.value.pop();
-  localStorage.setItem(RECENT_WORKSPACES_KEY, JSON.stringify(recentWorkspaces.value));
-}
+// ── 工作区（状态由 settings store 管理，SQLite 持久化）──
+const cwd = computed(() => settings.cwd);
 
 function switchToWorkspace(path: string) {
-  cwd.value = path;
-  addRecentWorkspace(path);
+  settings.cwd = path;
+  settings.addRecentWorkspace(path);
   emitChatCommand(`switch-workspace:${path}`);
   showWorkspaceMenu.value = false;
   fileNavCounter.value++;
@@ -105,10 +91,32 @@ function handleCommand(action: string) {
     case "toggle-sidebar": drawerOpen.value = !drawerOpen.value; break;
     case "toggle-files": fileNavCounter.value++; break;
     case "zen-mode":
-      settings.zenMode = !settings.zenMode;
-      if (settings.zenMode) {
+      if (!settings.zenMode) {
+        // 进入禅模式
+        settings.zenMode = true;
         drawerOpen.value = false;
         filePanelForceClose.value++;
+        // 保存当前 CC 会话消息，切换到禅模式会话
+        if (sessionStore.activeSessionId) {
+          chatStore.saveSessionCache(sessionStore.activeSessionId);
+        }
+        if (sessionStore.zenActiveId) {
+          zenSwitchTo(sessionStore.zenActiveId);
+        } else {
+          // 无禅模式会话则新建
+          sessionStore.createSession(settings.model, undefined, "zen").then(id => {
+            zenSwitchTo(id);
+          });
+        }
+      } else {
+        // 退出禅模式，恢复 CC 会话
+        settings.zenMode = false;
+        if (sessionStore.zenActiveId) {
+          chatStore.saveSessionCache(sessionStore.zenActiveId);
+        }
+        if (sessionStore.activeSessionId) {
+          switchTo(sessionStore.activeSessionId);
+        }
       }
       break;
 
@@ -204,8 +212,17 @@ function onGlobalKeydown(e: KeyboardEvent) {
   }
 }
 
+// 监听子组件发出的全局命令
+const { globalCommand } = useGlobalCommandBus();
+watch(() => globalCommand.value.ts, () => {
+  if (globalCommand.value.action) handleCommand(globalCommand.value.action);
+});
+
 onMounted(async () => {
-  try { cwd.value = await getWorkspaceRoot(); } catch {}
+  // 工作区：store 已从 SQLite / localStorage 恢复，无记录才取默认根目录
+  if (!settings.cwd) {
+    try { settings.cwd = await getWorkspaceRoot(); } catch {}
+  }
   sessionStore.loadSessions().catch(() => {});
   document.addEventListener("keydown", onGlobalKeydown);
   document.addEventListener("fullscreenchange", onFullscreenChange);
@@ -294,7 +311,7 @@ function openFilePanelTo(_path: string) {
             >
               <div class="px-3 py-1.5 text-[10px] font-medium" style="color: var(--text-muted)">{{ $t('header.recentWorkspaces') }}</div>
               <button
-                v-for="ws in recentWorkspaces"
+                v-for="ws in settings.recentWorkspaces"
                 :key="ws"
                 @click="switchToWorkspace(ws)"
                 class="w-full text-left px-3 py-1.5 text-[11px] font-mono transition-colors hover:bg-[var(--bg-hover)] flex items-center gap-2"
@@ -303,7 +320,7 @@ function openFilePanelTo(_path: string) {
                 <span class="text-[10px] shrink-0" :style="{ color: ws === cwd ? 'var(--accent)' : 'var(--text-muted)' }">{{ ws === cwd ? '●' : '○' }}</span>
                 <span class="truncate">{{ ws }}</span>
               </button>
-              <div v-if="recentWorkspaces.length === 0" class="px-3 py-2 text-[11px]" style="color: var(--text-muted); opacity: 0.6">{{ $t('header.noRecentWorkspaces') }}</div>
+              <div v-if="settings.recentWorkspaces.length === 0" class="px-3 py-2 text-[11px]" style="color: var(--text-muted); opacity: 0.6">{{ $t('header.noRecentWorkspaces') }}</div>
               <div class="mx-3 my-1" style="border-top: 1px solid var(--border-dim)"></div>
               <button
                 @click="switchWorkspace(); showWorkspaceMenu = false"

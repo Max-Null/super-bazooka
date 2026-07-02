@@ -12,12 +12,44 @@ const i18n = createI18n({
   messages: {
     en: {
       settings: {
-        title: "Settings", apiConfig: "API Config", ccGuiSettings: "cc-gui Settings",
-        baseUrl: "Base URL", apiKey: "API Key", model: "Model",
-        test: "Test Connection", testing: "Testing…",
-        language: "Language", theme: "Theme", defaultMode: "Permission Mode", defaultEffort: "Effort Level",
-        themeDark: "Dark", themeLight: "Light", themeSystem: "System",
-        aboutDesc: "Tauri 2 + Vue 3 + TypeScript",
+        title: "Settings",
+        ccConfig: "CC Config",
+        ccGuiSettings: "cc-gui Settings",
+        baseUrl: "API Base URL",
+        apiKey: "API Key",
+        model: "Model",
+        test: "Test Connection",
+        testing: "Testing…",
+        language: "Language",
+        theme: "Theme",
+        defaultMode: "Permission Mode",
+        defaultEffort: "Effort Level",
+        themeDark: "Dark",
+        themeLight: "Light",
+        themeSystem: "System",
+        provider: "Provider",
+        fontSize: "Font Size",
+        fontSizeSmall: "Small",
+        fontSizeMedium: "Medium",
+        fontSizeLarge: "Large",
+        ponytailMode: "Lean mode",
+        llmApiUrl: "LLM API URL",
+        llmApiUrlPlaceholder: "Full URL",
+        llmApiUrlLookup: "Lookup",
+        claudePath: "Claude Path",
+        claudePathDetected: "Detected",
+        claudePathNotFound: "Not found",
+        claudePathOverride: "Override",
+        claudePathOverridePlaceholder: "Full path",
+        installCC: "Install CC",
+        installingCC: "Installing…",
+        fromSettingsJson: "From settings.json",
+        ponytailOff: "Off",
+        ponytailLite: "Lite",
+        ponytailFull: "Full",
+        ponytailUltra: "Ultra",
+        installPonytail: "Install Ponytail",
+        changelog: "Changelog",
       },
       mode: {
         askBefore: "Ask before edits", editAuto: "Edit auto",
@@ -25,7 +57,8 @@ const i18n = createI18n({
         bypass: "Bypass", dontAsk: "Don't Ask",
         effort: { low: "Low", medium: "Med", high: "High", xhigh: "XHigh", max: "Max", ultracode: "Ultra" },
       },
-      chat: { aboutVersion: "v0.1.0" },
+      provider: { anthropic: "Anthropic", deepseek: "DeepSeek", openrouter: "OpenRouter", siliconflow: "SiliconFlow", zhipu: "Zhipu", kimi: "Kimi", minimax: "MiniMax", custom: "Custom" },
+      app: { title: "Super Bazooka" },
     },
   },
 });
@@ -115,24 +148,24 @@ describe("SettingsPanel", () => {
 
   // ── Dropdown triggers ──
 
-  it("has four unified settings dropdown triggers", () => {
+  it("has settings dropdown triggers", () => {
     const wrapper = mountPanel();
     const triggers = wrapper.findAll(".settings-dropdown");
-    expect(triggers.length).toBe(5); // lang + theme + model + perm + effort
+    expect(triggers.length).toBe(7); // provider + model + lang + theme + font + perm + effort (ponytail hidden: hasPonytail=null)
   });
 
   // ── Layout ──
 
   it("renders both sections", () => {
     const wrapper = mountPanel();
-    expect(wrapper.text()).toContain("API Config");
+    expect(wrapper.text()).toContain("CC Config");
     expect(wrapper.text()).toContain("cc-gui Settings");
   });
 
   it("renders about footer", () => {
     const wrapper = mountPanel();
-    expect(wrapper.text()).toContain("Tauri 2 + Vue 3 + TypeScript");
-    expect(wrapper.text()).toContain("v0.1.0");
+    expect(wrapper.text()).toContain("Super Bazooka");
+    expect(wrapper.text()).toContain("v0.2.0");
   });
 
   // ── Connection test ──

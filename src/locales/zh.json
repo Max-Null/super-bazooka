@@ -114,9 +114,9 @@
     "ponytailMode": "精简模式",
     "claudePath": "Claude CLI 路径",
     "claudePathDetected": "✓ 已检测: {path}",
-    "claudePathNotFound": "⚠ 未检测到 claude，请手动指定路径",
+    "claudePathNotFound": "⚠ 未检测到 claude.exe，请手动指定位置",
     "claudePathOverride": "手动覆盖（可选）",
-    "claudePathOverridePlaceholder": "留空则使用自动检测路径",
+    "claudePathOverridePlaceholder": "输入 claude.exe 的完整路径，留空则自动检测",
     "llmApiUrl": "聊天 API 地址",
     "chatApi": "聊天",
     "llmApiUrlPlaceholder": "完整地址（含路径），用于翻译/优化。留空则自动推导",
@@ -295,7 +295,7 @@
 
   "error": {
     "retry": "重试",
-    "claudeNotFound": "找不到 Claude Code CLI。请先安装：npm install -g {'@anthropic-ai/claude-code'}，或在设置中手动指定 claude 路径",
+    "claudeNotFound": "找不到 Claude Code CLI（错误: {detail}）。请确认 claude 已安装，或在设置中手动指定 claude.exe 路径",
     "spawnFailed": "启动 Claude 失败: {error}",
     "fileReadError": "读取文件失败: {error}",
     "fileWriteError": "写入文件失败: {error}",

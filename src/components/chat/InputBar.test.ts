@@ -1,6 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { mount } from "@vue/test-utils";
 import { createI18n } from "vue-i18n";
+import { setActivePinia, createPinia } from "pinia";
 import InputBar from "./InputBar.vue";
 
 const i18n = createI18n({
@@ -16,8 +17,15 @@ const i18n = createI18n({
 function mountInputBar(props: Record<string, unknown> = {}) {
   return mount(InputBar, {
     props: { disabled: false, ...props },
-    global: { plugins: [i18n] },
+    global: { plugins: [i18n, createPinia()] },
   });
+}
+
+/** InputBar contains: optimize, stop/send. Send button is the last one (paper-plane icon). */
+function findSendBtn(wrapper: ReturnType<typeof mountInputBar>) {
+  const buttons = wrapper.findAll("button");
+  // send button: last button, has viewBox="0 0 24 24" with polygon
+  return buttons[buttons.length - 1];
 }
 
 describe("InputBar", () => {
@@ -26,7 +34,7 @@ describe("InputBar", () => {
 
     const textarea = wrapper.find("textarea");
     await textarea.setValue("  Hello World  ");
-    await wrapper.find("button").trigger("click");
+    await findSendBtn(wrapper).trigger("click");
 
     expect(wrapper.emitted("send")).toBeTruthy();
     expect(wrapper.emitted("send")![0]).toEqual(["Hello World"]);
@@ -75,28 +83,24 @@ describe("InputBar", () => {
     const textarea = wrapper.find("textarea");
     await textarea.setValue("Should not send");
     // The send button is hidden when disabled (stop button is shown instead)
-    // verify no send emitted
     expect(wrapper.emitted("send")).toBeFalsy();
   });
 
   it("does not emit empty message", async () => {
     const wrapper = mountInputBar();
 
-    await wrapper.find("button").trigger("click");
+    await findSendBtn(wrapper).trigger("click");
     expect(wrapper.emitted("send")).toBeFalsy();
 
     await wrapper.find("textarea").setValue("   ");
-    await wrapper.find("button").trigger("click");
+    await findSendBtn(wrapper).trigger("click");
     expect(wrapper.emitted("send")).toBeFalsy();
   });
 
   it("disables send button when input is empty", () => {
     const wrapper = mountInputBar();
-    const sendBtn = wrapper.find("button[title='']");  // send has no title attr
-    // The button rendered is send button (not stop), and it should be disabled
-    const buttons = wrapper.findAll("button");
-    // Find send button: svg with viewBox contains "22 2"
-    expect(buttons.length).toBeGreaterThan(0);
+    // verify send button exists
+    expect(findSendBtn(wrapper).exists()).toBe(true);
   });
 
   // ── Drag & drop ──
