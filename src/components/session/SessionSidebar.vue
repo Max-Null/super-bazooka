@@ -6,6 +6,7 @@ import { useSessionStore } from "@/stores/session";
 import { useChatStore } from "@/stores/chat";
 import { useSettingsStore } from "@/stores/settings";
 
+import { stopSession } from "@/lib/tauri-bridge";
 import { useNewSession } from "@/composables/useNewSession";
 import { useSessionSwitch } from "@/composables/useSessionSwitch";
 import { formatTokenCount } from "@/lib/utils";
@@ -62,6 +63,8 @@ async function finishRename(id: string) {
 function cancelRename() { editingId.value = null; }
 async function handleDelete(id: string) {
   const wasActive = activeId.value === id;
+  // 先终止该会话的 CC 进程（若有），避免后台残留进程
+  try { await stopSession(id); } catch { /* 无进程则忽略 */ }
   await sessionStore.deleteSession(id);  // store 内赋值 activeSessionId 到下一个会话
   // 竞态 guard：异步期间可能已切到其他会话，重新判断
   if (wasActive && activeId.value === id) {

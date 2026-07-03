@@ -8,6 +8,7 @@
     "thinking": "Thinking...",
     "thinkingDone": "Thinking",
     "stopped": "Stopped",
+    "completed": "Completed",
     "loading": "Loading...",
     "export": "Export",
     "exportTitle": "Export session as Markdown",

@@ -187,7 +187,7 @@ function formatJSON(obj: unknown): string {
           v-for="(block, i) in message.contentBlocks"
           :key="i"
           class="sb-timeline-block"
-          :class="'tl-' + block.type"
+          :class="['tl-' + block.type, { 'tl-last': i === message.contentBlocks.length - 1 && !message.isStreaming }]"
         >
           <!-- 时间线圆点 -->
           <div class="sb-timeline-dot">
@@ -197,11 +197,13 @@ function formatJSON(obj: unknown): string {
           </div>
 
           <!-- 思考块（默认折叠） -->
-          <details v-if="block.type === 'thinking'" class="tl-thinking" :open="message.isStreaming && i === message.contentBlocks!.length - 1">
+          <details v-if="block.type === 'thinking'" class="tl-thinking">
             <summary class="tl-thinking-summary">
-              💭 {{ message.isStreaming ? $t('chat.thinking') : $t('chat.thinkingDone') }}
-              <span v-if="!message.isStreaming && block.content" class="tl-thinking-snippet">{{ block.content.slice(0, 60) }}{{ block.content.length > 60 ? '…' : '' }}</span>
-              <span v-if="message.isStreaming" class="w-1.5 h-1.5 rounded-full animate-pulse ml-1" style="background:var(--accent); display:inline-block"></span>
+              💭 {{ (message.isStreaming && i === message.contentBlocks!.length - 1) ? $t('chat.thinking') : $t('chat.thinkingDone') }}
+              <!-- 思考耗时：后一个工具块上记录的 thinkingDurationMs -->
+              <span v-if="message.contentBlocks[i+1]?.type === 'tool_use' && message.contentBlocks[i+1]?.toolUse?.thinkingDurationMs" class="tl-stat">🧠{{ ((message.contentBlocks[i+1]!.toolUse!.thinkingDurationMs!) / 1000).toFixed(1) }}s</span>
+              <span v-if="!(message.isStreaming && i === message.contentBlocks!.length - 1) && block.content" class="tl-thinking-snippet">{{ block.content.slice(0, 60) }}{{ block.content.length > 60 ? '…' : '' }}</span>
+              <span v-if="message.isStreaming && i === message.contentBlocks!.length - 1" class="w-1.5 h-1.5 rounded-full animate-pulse ml-1" style="background:var(--accent); display:inline-block"></span>
             </summary>
             <div class="tl-thinking-body">{{ block.content }}</div>
           </details>
@@ -213,7 +215,6 @@ function formatJSON(obj: unknown): string {
           >
             <summary>
               <span class="tl-tool-name">{{ toolLabel(block.toolUse.name) }}</span>
-              <span v-if="block.toolUse.thinkingDurationMs" class="tl-stat">🧠{{ (block.toolUse.thinkingDurationMs / 1000).toFixed(1) }}s</span>
               <span v-if="block.toolUse.executionDurationMs" class="tl-stat" :class="{ 'tl-slow': block.toolUse.executionDurationMs > 5000 }">⚡{{ (block.toolUse.executionDurationMs / 1000).toFixed(1) }}s</span>
               <span v-if="!block.toolUse.executionDurationMs && block.toolUse.startedAt && message.isStreaming" class="tl-stat tl-live">⚡{{ ((now - block.toolUse.startedAt) / 1000).toFixed(1) }}s</span>
               <span class="tl-input-preview">{{ summarizeInput(block.toolUse.input) }}</span>
@@ -226,35 +227,31 @@ function formatJSON(obj: unknown): string {
             <MarkdownRenderer :content="block.content" />
           </div>
         </div>
-        <!-- 流式光标：最后一条消息且仍在处理中 -->
+        <!-- 流式光标 -->
         <span v-if="message.isStreaming" class="stream-cursor" style="margin-left:20px"></span>
-      </div>
 
-      <!-- ═══ 旧排版（contentBlocks 不可用时兜底） ═══ -->
-      <template v-else>
-      <!-- Tool cards (BEFORE content — tools are called first) -->
-      <div v-if="message.toolUses.length > 0" class="space-y-1.5">
-        <details
-          v-for="tu in message.toolUses"
-          :key="tu.id"
-          class="rounded-md text-xs font-mono group"
-          style="background:var(--bg-root); border:1px solid var(--border-dim)"
+        <!-- 已完成指示：未在流式且最后一个块不是文本时，加一个"已完成"文本块 -->
+        <div
+          v-if="!message.isStreaming && message.contentBlocks?.length"
+          class="text-xs"
+          style="padding-left: 26px; padding-top: 2px; color: var(--text-muted); opacity: 0.5"
+        >— {{ $t('chat.completed') }} —</div>
+
+        <!-- 统计行：耗时 / token / cost -->
+        <div
+          v-if="elapsedLabel || tokenLabel || message.costUSD !== undefined"
+          class="flex items-center gap-2 text-[11px] mt-2"
+          style="color: var(--text-muted); padding-left: 26px"
         >
-          <summary class="px-2.5 py-1.5 cursor-pointer select-none transition-colors hover:bg-[var(--bg-hover)]" style="color:var(--text-secondary)">
-            <span class="font-medium" style="color:var(--violet)">{{ toolLabel(tu.name) }}</span>
-            <span v-if="tu.thinkingDurationMs" class="ml-1" style="color:var(--text-muted)">🧠{{ (tu.thinkingDurationMs / 1000).toFixed(1) }}s</span>
-            <span v-if="tu.executionDurationMs" class="ml-1" :style="{ color: tu.executionDurationMs > 5000 ? 'var(--coral)' : 'var(--text-muted)' }">⚡{{ (tu.executionDurationMs / 1000).toFixed(1) }}s</span>
-            <!-- 流式期间最后一个工具无 executionDurationMs → 显示实时执行计时 -->
-            <span v-if="!tu.executionDurationMs && tu.startedAt && message.isStreaming && tu === message.toolUses[message.toolUses.length-1]" class="ml-1 animate-pulse" style="color:var(--accent)">⚡{{ ((now - tu.startedAt) / 1000).toFixed(1) }}s</span>
-            <span class="ml-2" style="color:var(--text-muted)">
-              {{ summarizeInput(tu.input) }}
-            </span>
-          </summary>
-          <pre class="px-3 py-2 m-0 text-[11px] leading-relaxed overflow-x-auto whitespace-pre" style="border-top:1px solid var(--border-dim); color:var(--text-muted); max-height:240px">{{ formatJSON(tu.input) }}</pre>
-        </details>
+          <span v-if="elapsedLabel && !message.wasStopped" class="font-mono tabular-nums">⏱ {{ elapsedLabel }}</span>
+          <span v-if="message.wasStopped" class="font-mono tabular-nums" :style="{ color: 'var(--coral)' }">⏹ {{ $t('chat.stopped') }}</span>
+          <template v-if="!message.isStreaming">
+            <span v-if="tokenLabel">⏐ {{ tokenLabel }}</span>
+            <span v-if="message.costUSD !== undefined">${{ message.costUSD.toFixed(4) }}</span>
+          </template>
+        </div>
       </div>
 
-      <!-- Content (answer text AFTER tools) -->
       <!-- Edit mode: inline textarea for user messages -->
       <div v-if="isEditing" class="w-full">
         <textarea
@@ -290,25 +287,17 @@ function formatJSON(obj: unknown): string {
         </div>
       </div>
 
+      <!-- 用户消息纯文本（无 contentBlocks） -->
       <div
-        v-else-if="message.content"
-        :class="[
-          'prose text-sm leading-relaxed',
-          message.role === 'user'
-            ? 'px-3.5 py-2.5 rounded-2xl rounded-tr-md user-text'
-            : 'rounded-lg'
-        ]"
-        :style="message.role === 'user'
-          ? { background: 'linear-gradient(135deg, rgba(59,130,246,0.15), rgba(99,102,241,0.10))', border: '1px solid rgba(59,130,246,0.15)', color: 'var(--text-bright)' }
-          : {}
-        "
+        v-else-if="message.role === 'user' && message.content"
+        class="px-3.5 py-2.5 rounded-2xl rounded-tr-md user-text prose text-sm leading-relaxed"
+        :style="{ background: 'linear-gradient(135deg, rgba(59,130,246,0.15), rgba(99,102,241,0.10))', border: '1px solid rgba(59,130,246,0.15)', color: 'var(--text-bright)' }"
       >
-        <MarkdownRenderer v-if="message.content" :content="message.content" />
-        <span v-if="message.isStreaming" class="stream-cursor"></span>
+        <MarkdownRenderer :content="message.content" />
 
         <!-- Attachments in user message -->
         <div
-          v-if="message.role === 'user' && message.attachments?.length"
+          v-if="message.attachments?.length"
           class="flex flex-wrap gap-1 mt-2 pt-2"
           :style="{ borderTop: '1px solid rgba(59,130,246,0.15)' }"
         >
@@ -331,40 +320,6 @@ function formatJSON(obj: unknown): string {
           </div>
         </div>
       </div>
-
-      <!-- Thinking (collapsed by default) — 思考摘要行已包含时间/token/cost，无需额外统计条 -->
-      <details v-if="message.thinking" class="group" :open="message.isStreaming && !message.content">
-        <summary class="text-xs cursor-pointer select-none px-2.5 py-1.5 rounded-md transition-colors hover:bg-[var(--bg-elevated)]" style="color:var(--amber-dim)">
-          <span class="inline-flex items-center gap-1.5">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-            {{ message.isStreaming ? $t('chat.thinking') : $t('chat.thinkingDone') }}
-            <span v-if="message.wasStopped" class="text-[10px] ml-0.5" :style="{ color: 'var(--coral)' }">· {{ $t('chat.stopped') }}</span>
-            <span v-if="elapsedSeconds && !message.wasStopped" class="text-[10px] tabular-nums" style="font-variant-numeric: tabular-nums">· {{ elapsedLabel }}</span>
-            <span v-if="!message.isStreaming && tokenLabel" class="text-[10px] tabular-nums opacity-70">· {{ tokenLabel }}</span>
-            <span v-if="!message.isStreaming && message.costUSD !== undefined" class="text-[10px] tabular-nums opacity-70">· ${{ message.costUSD.toFixed(3) }}</span>
-            <span v-if="message.isStreaming" class="w-1.5 h-1.5 rounded-full animate-pulse ml-1" style="background:var(--accent)"></span>
-          </span>
-        </summary>
-        <div class="mt-1.5 px-2.5 py-2 rounded-md text-xs leading-relaxed whitespace-pre-wrap" style="background:var(--amber-glow); color:var(--text-secondary); border-left:2px solid var(--amber)">
-          {{ message.thinking }}
-        </div>
-      </details>
-      </template> <!-- 旧排版结束 -->
-
-      <!-- Inline stats（新旧布局共用） -->
-      <div
-        v-if="!message.thinking && (message.isStreaming || message.durationMs || message.inputTokens)"
-        class="flex items-center gap-2 text-[11px] px-0.5"
-        style="color: var(--text-muted)"
-      >
-        <span v-if="elapsedLabel && !message.wasStopped" class="font-mono tabular-nums">⏱ {{ elapsedLabel }}</span>
-        <span v-if="message.wasStopped" class="font-mono tabular-nums" :style="{ color: 'var(--coral)' }">⏹ {{ $t('chat.stopped') }}</span>
-        <span v-if="message.isStreaming" class="w-1.5 h-1.5 rounded-full animate-pulse" style="background:var(--accent)"></span>
-        <template v-if="!message.isStreaming">
-          <span v-if="tokenLabel">⏐ {{ tokenLabel }}</span>
-          <span v-if="message.costUSD !== undefined">${{ message.costUSD.toFixed(4) }}</span>
-        </template>
-      </div>
     </div>
   </div>
 </template>
@@ -380,7 +335,7 @@ function formatJSON(obj: unknown): string {
   padding-left: 26px;
   margin-bottom: 8px;
 }
-.sb-timeline-block:last-child {
+.sb-timeline-block.tl-last {
   margin-bottom: 0;
 }
 /* 每块画线段穿过圆点中心到下一块，末块不画 */
@@ -394,7 +349,7 @@ function formatJSON(obj: unknown): string {
   background: var(--border-dim);
   border-radius: 1px;
 }
-.sb-timeline-block:last-child::after {
+.sb-timeline-block.tl-last::after {
   display: none;
 }
 

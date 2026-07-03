@@ -71,6 +71,21 @@ export function useStreamProcessor() {
     lastToolUse = tool;
   }
 
+  /** 将 toolUses 数组中的计时信息同步到 contentBlocks 的 tool_use 条目 */
+  function syncBlockTimings(msg: import("@/stores/chat").Message | null) {
+    if (!msg?.contentBlocks) return;
+    const toolUses = msg.toolUses;
+    for (const block of msg.contentBlocks) {
+      if (block.type !== "tool_use" || !block.toolUse) continue;
+      const match = toolUses.find(tu => tu.id === block.toolUse!.id);
+      if (match) {
+        block.toolUse.thinkingDurationMs = match.thinkingDurationMs;
+        block.toolUse.executionDurationMs = match.executionDurationMs;
+        block.toolUse.startedAt = match.startedAt;
+      }
+    }
+  }
+
   /**
    * 将 CC content_blocks 原始数据合并为有序 ContentBlock 数组。
    *
@@ -202,13 +217,15 @@ export function useStreamProcessor() {
               markToolExecStart(toolUse);
             }
           }
-          // 构建 contentBlocks 时间线（保持 CC 原始块顺序）
+          // 构建 contentBlocks 时间线。始终传入 existing，靠块内 startsWith 去重自行判断替换/追加
           if (data.content_blocks && chat.currentAssistantMsg) {
-            // 判断是全量事件还是增量事件：若已有内容且新文本以其开头 → 全量（重建）
-            const currentText = chat.currentAssistantMsg.content;
-            const isFullState = !!(currentText && data.text && data.text.startsWith(currentText));
-            const blocks = buildContentBlocks(data.content_blocks, isFullState ? undefined : chat.currentAssistantMsg.contentBlocks);
+            const blocks = buildContentBlocks(data.content_blocks, chat.currentAssistantMsg.contentBlocks);
             chat.setContentBlocks(blocks);
+          }
+          // 计时同步必须在 contentBlocks 构建之后、且每次 assistant 事件都执行，
+          // 因为 markThinkingStart 可能在无 content_blocks 的事件中更新 executionDurationMs
+          if (chat.currentAssistantMsg) {
+            syncBlockTimings(chat.currentAssistantMsg);
           }
 
           // assistant 事件携带 message.usage——实时更新 token 统计（DeepSeek 后端 result 可能不含 usage）
@@ -272,6 +289,8 @@ export function useStreamProcessor() {
             const last = msg.toolUses[msg.toolUses.length - 1];
             last.thinkingDurationMs = (last.thinkingDurationMs || 0) + finalThinking;
           }
+          // 最终计时同步（结算后 contentBlocks 可能还没拿到最终计时）
+          if (msg) syncBlockTimings(msg);
           chat.finishAssistantMessage(
             data.duration_ms,
             data.input_tokens ?? msg?.inputTokens,

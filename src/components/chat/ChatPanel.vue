@@ -235,9 +235,12 @@ watch(() => chatCommand.value.ts, async (ts) => {
       break;
     }
     case "delete-session": {
-      const active = session.sessions.find(s => s.id === session.activeSessionId);
+      const sid = session.activeSessionId;
+      const active = session.sessions.find(s => s.id === sid);
       if (active && confirm(t('session.confirmDelete', { title: active.title }))) {
-        session.deleteSession(session.activeSessionId);
+        // 先终止 CC 进程，防止后台残留
+        try { await stopSession(sid); } catch { /* 无进程 */ }
+        await session.deleteSession(sid);
         chat.clearMessages();
         showStatus(t('status.sessionDeleted'));
       }

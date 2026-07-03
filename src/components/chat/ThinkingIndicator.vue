@@ -33,26 +33,24 @@ const elapsed = computed(() => {
 
 <template>
   <div
-    class="flex items-center gap-2.5 px-3 py-1.5 rounded-md select-none"
+    class="flex items-center gap-2 px-3 py-1.5 rounded-md select-none"
     style="background: var(--accent-glow); border: 1px solid var(--accent-dim)"
   >
-    <!-- 动画点 -->
-    <span class="inline-flex items-center gap-1">
-      <span class="inline-block w-2 h-2 rounded-full animate-pulse" style="background:var(--accent)" />
-      <span class="inline-block w-2 h-2 rounded-full animate-pulse" style="background:var(--accent); animation-delay:0.15s" />
-      <span class="inline-block w-2 h-2 rounded-full animate-pulse" style="background:var(--accent); animation-delay:0.3s" />
-    </span>
+    <!-- 动画点（直接放 flex 容器内，去掉多余嵌套） -->
+    <span class="w-2 h-2 rounded-full animate-pulse shrink-0" style="background:var(--accent)" />
+    <span class="w-2 h-2 rounded-full animate-pulse shrink-0" style="background:var(--accent); animation-delay:0.15s" />
+    <span class="w-2 h-2 rounded-full animate-pulse shrink-0" style="background:var(--accent); animation-delay:0.3s" />
 
     <!-- 阶段文字 -->
-    <span v-if="toolName" class="text-xs font-medium" style="color: var(--accent)">
+    <span v-if="toolName" class="text-xs font-medium shrink-0" style="color: var(--accent)">
       ⚡ {{ toolName }}
     </span>
-    <span v-else class="text-xs font-medium" style="color: var(--accent)">
+    <span v-else class="text-xs font-medium shrink-0" style="color: var(--accent)">
       {{ $t('chat.thinking') }}
     </span>
 
     <!-- 耗时 -->
-    <span v-if="elapsed" class="text-[11px] font-mono tabular-nums opacity-60" style="color: var(--accent)">
+    <span v-if="elapsed" class="text-[11px] font-mono tabular-nums opacity-60 shrink-0 leading-none" style="color: var(--accent)">
       {{ elapsed }}
     </span>
   </div>

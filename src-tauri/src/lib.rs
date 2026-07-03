@@ -1478,7 +1478,6 @@ pub fn run() {
             optimize_prompt,
             zen_send_message,
             check_skill_installed,
-            convert_md_to_docx,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -1609,53 +1608,6 @@ fn check_skill_installed(name: String) -> Result<bool, String> {
     }
 
     Ok(false)
-}
-
-/// 使用 pandoc 将 Markdown 转换为 docx，不经过 CC，不污染工作空间
-#[tauri::command]
-async fn convert_md_to_docx(input_path: String) -> Result<String, String> {
-    // 先 canonicalize（解析 ../ 和符号链接），再校验扩展名，防止 symlink 绕过
-    // innocent.md → /etc/passwd 这类符号链接：canonicalize 后扩展名不再是 .md
-    let input = std::fs::canonicalize(&input_path)
-        .map_err(|e| format!("无法解析路径: {}", e))?;
-    if !input.extension().map(|e| e.eq_ignore_ascii_case("md")).unwrap_or(false) {
-        return Err("仅支持 .md 文件转换为 docx".into());
-    }
-
-    // 输出路径：同目录下 .md → .docx
-    let output = input.with_extension("docx");
-    let output_str = output.to_string_lossy().to_string();
-
-    // 检查 pandoc 是否可用
-    let pandoc_check = std::process::Command::new("pandoc")
-        .arg("--version")
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status();
-
-    match pandoc_check {
-        Ok(status) if status.success() => {
-            let input_str = input.to_string_lossy().to_string();
-            let result = tokio::process::Command::new("pandoc")
-                .arg(&input_str)
-                .arg("-o")
-                .arg(&output_str)
-                .output()
-                .await
-                .map_err(|e| format!("pandoc 执行失败: {}", e))?;
-
-            if result.status.success() {
-                Ok(output_str)
-            } else {
-                let stderr = String::from_utf8_lossy(&result.stderr);
-                Err(format!("pandoc 转换失败: {}", stderr.trim()))
-            }
-        }
-        _ => {
-            // pandoc 不可用 → 提示安装
-            Err("pandoc 未安装。请安装 pandoc：\n  Windows: choco install pandoc  或  winget install pandoc\n  macOS: brew install pandoc\n  Linux: apt install pandoc".into())
-        }
-    }
 }
 
 // 非 Windows 平台返回明确的错误信息

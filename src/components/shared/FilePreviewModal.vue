@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, computed, onMounted, onUnmounted } from "vue";
 
-import { readFileContent, readFileBase64, checkSkillInstalled, convertMdToDocx } from "@/lib/tauri-bridge";
+import { readFileContent, readFileBase64, checkSkillInstalled } from "@/lib/tauri-bridge";
 import { highlightCode } from "@/composables/useHighlight";
 import { isImageFile, mimeType } from "@/composables/useFilePreview";
 import { emitChatCommand } from "@/composables/useCommandPalette";
@@ -41,38 +41,26 @@ onUnmounted(() => window.removeEventListener("message", onIframeMessage));
 
 const { t } = useI18n();
 const converting = ref(false);
-const convertStatus = ref("");  // 成功消息
-const convertError = ref("");   // 错误消息
-const canFallbackToCC = ref(false);  // pandoc 不可用但 docx skill 已安装
+const convertMsg = ref("");  // 提示消息
 
-/** MD → docx 转换（pandoc 直转优先，不可用时通过 CC /docx skill fallback） */
+/** MD → docx：检测 docx skill → 安装或直接发送给 CC */
 async function sendConvertDocx() {
   if (!props.file) return;
   converting.value = true;
-  convertStatus.value = "";
-  convertError.value = "";
-  canFallbackToCC.value = false;
-  try {
-    const outputPath = await convertMdToDocx(props.file.path);
-    convertStatus.value = t("file.convertSuccess", { path: outputPath });
-  } catch (e: any) {
-    convertError.value = typeof e === "string" ? e : (e?.message || String(e));
-    // 检查 docx skill 是否安装作为 fallback
-    canFallbackToCC.value = await checkSkillInstalled("docx");
-    if (canFallbackToCC.value) {
-      convertError.value += "\n\n" + t("file.docxSkillAvailable");
-    }
-  } finally {
-    converting.value = false;
+  convertMsg.value = "";
+  const hasSkill = await checkSkillInstalled("docx");
+  if (hasSkill) {
+    // 已安装 → 直接发 /docx 指令给 CC
+    const cmd = `请使用 /docx 命令将 \`${props.file.path}\` 转换为 docx 格式，输出到原文件同级位置，中间文件请使用临时目录，完成后清理临时文件`;
+    emitChatCommand(`md-convert:${cmd}`);
+    emit("close");
+  } else {
+    // 未安装 → 让 CC 先全局安装 skill 再转换
+    const cmd = `请先全局安装 docx skill：npx skills add https://github.com/anthropics/skills --skill docx，安装完成后将 \`${props.file.path}\` 转换为 docx 格式，输出到原文件同级位置，中间文件请使用临时目录并清理`;
+    emitChatCommand(`md-convert:${cmd}`);
+    emit("close");
   }
-}
-
-/** Fallback: 通过 CC /docx 命令转换 */
-function sendViaCC() {
-  if (!props.file) return;
-  const msg = `请使用 /docx 命令将 \`${props.file.path}\` 转换为 docx 格式，输出到原文件同级位置，中间文件请使用临时目录`;
-  emitChatCommand(`md-convert:${msg}`);
-  emit("close");
+  converting.value = false;
 }
 
 function sendDomToChat() {
@@ -164,9 +152,7 @@ watch(() => props.file, async (f) => {
   content.value = "";
   previewHtml.value = "";
   error.value = "";
-  convertStatus.value = "";
-  convertError.value = "";
-  canFallbackToCC.value = false;
+  convertMsg.value = "";
   imageSrc.value = "";
   loading.value = true;
 
@@ -306,19 +292,6 @@ function extToLang(filename: string): string {
             class="w-7 h-7 flex items-center justify-center rounded-md transition-colors hover:bg-[var(--bg-hover)] shrink-0"
             style="color: var(--text-muted)"
           >&times;</button>
-        </div>
-
-        <!-- 转换成功 -->
-        <div v-if="convertStatus" class="text-xs px-4 py-2 whitespace-pre-wrap" style="background: var(--bg-elevated); color: #22c55e; border-bottom: 1px solid var(--border-dim)">{{ convertStatus }}</div>
-        <!-- 转换失败 -->
-        <div v-if="convertError" class="text-xs px-4 py-2 whitespace-pre-wrap flex items-start gap-3" style="background: var(--bg-elevated); color: var(--coral); border-bottom: 1px solid var(--border-dim)">
-          <span class="flex-1">{{ convertError }}</span>
-          <button
-            v-if="canFallbackToCC"
-            @click="sendViaCC"
-            class="text-[11px] px-2.5 py-1 rounded font-medium transition-colors hover:opacity-80 shrink-0"
-            style="background: var(--accent); color: var(--bg-root)"
-          >通过 CC 转换</button>
         </div>
 
         <!-- Body -->
