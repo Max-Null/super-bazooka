@@ -81,6 +81,23 @@ npm run test:quick             # 快速测试（跳过 e2e）
 2. 更新 CLAUDE.md / docs/（如有设计变更）
 3. Git commit（Conventional Commits: `feat(模块):` / `fix(模块):`）
 
+## 颜色系统
+
+全部颜色通过 CSS 变量管理（`src/assets/main.css`），禁止硬编码色值。
+
+| 变量 | 用途 | 暗色 | 亮色 |
+|------|------|------|------|
+| `--accent` | 主色调（按钮/链接/焦点/思考中状态） | `#06d6a0` | `#059669` |
+| `--accent-dim` | 主色调暗色（边框/分隔线） | `#048a66` | `#047857` |
+| `--accent-glow` | 主色调发光（选中背景） | `rgba(6,214,160,.10)` | `rgba(5,150,105,.08)` |
+| `--amber` | 琥珀色（思考块边框/图标） | `#f5a623` | `#d97706` |
+| `--coral` | 珊瑚色（错误/已停止/橙点） | `#ff5e5b` | `#dc2626` |
+| `--violet` | 紫罗兰（工具名/MCP） | `#a78bfa` | `#7c3aed` |
+| `--blue` | 蓝色（未读蓝点） | `#3b82f6` | `#2563eb` |
+| `--bg-*` | 背景层级（root/surface/elevated/hover/active） | 暗灰系 | 浅灰系 |
+| `--border-*` | 边框（dim/default/bright） | | |
+| `--text-*` | 文字（muted/secondary/primary/bright） | | |
+
 ## Git 提交规范
 
 `feat|fix|refactor|chore(模块): 描述` — 模块: chat, files, session, settings, rust, test, docs, ui, i18n

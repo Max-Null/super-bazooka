@@ -37,6 +37,8 @@ html[data-font-size="large"]  { font-size: 22px; }
 
   --violet: #a78bfa;
 
+  --blue: #3b82f6;
+
   --font-mono: "JetBrains Mono", "Cascadia Code", "Fira Code", "Consolas", monospace;
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
 
@@ -68,6 +70,7 @@ html[data-font-size="large"]  { font-size: 22px; }
   --coral: #dc2626;
   --coral-glow: rgba(220, 38, 38, 0.08);
   --violet: #7c3aed;
+  --blue: #2563eb;
 }
 [data-theme="light"] .prose {
   --tw-prose-body: #23242c;

@@ -710,7 +710,9 @@ async function handleStop() {
     chat.finishAssistantMessage();
     return;
   }
-  // 先发 interrupt 控制请求，让 CC 优雅中断
+  // 先标记停止（必须在 interrupt 之前，否则 CC 的 result 事件会先触发 finish 清掉 currentAssistantMsg）
+  chat.markStopped();
+  // 发 interrupt 控制请求，让 CC 优雅中断
   try {
     await sendStdin(sid, JSON.stringify({
       type: "control_request",
@@ -721,7 +723,6 @@ async function handleStop() {
   // 等待 3 秒让 CC 优雅退出，超时再强杀
   await new Promise(r => setTimeout(r, 3000));
   try { await stopSession(sid); } catch {}
-  chat.markStopped();
   chat.finishAssistantMessage();
 }
 
@@ -836,10 +837,9 @@ watch(
           />
         </TransitionGroup>
 
-        <!-- 处理中指示器：始终显示，思考阶段 → 工具执行阶段 -->
+        <!-- 处理中指示器：仅在消息还没内容时显示（有内容后时间线底部状态行接管） -->
         <ThinkingIndicator
-          v-if="chat.isProcessing"
-          :start-timestamp="chat.currentAssistantMsg?.timestamp"
+          v-if="chat.isProcessing && !chat.currentAssistantMsg?.content && !chat.currentAssistantMsg?.thinking"
           :tool-name="activeToolName"
         />
       </div>

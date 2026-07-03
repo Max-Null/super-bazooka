@@ -64,7 +64,7 @@ function switchToWorkspace(path: string) {
   settings.addRecentWorkspace(path);
   emitChatCommand(`switch-workspace:${path}`);
   showWorkspaceMenu.value = false;
-  fileNavCounter.value++;
+  filePanelForceClose.value++;  // 切工作区时收起文件面板
 }
 
 function onBodyClickForWs(e: MouseEvent) {
@@ -610,14 +610,14 @@ function openFilePanelTo(_path: string) {
   border: 1px solid var(--bg-surface);
 }
 .dot-processing {
-  background: #22c55e;
+  background: var(--accent);
   animation: dot-blink 1s ease-in-out infinite;
 }
 .dot-unread {
-  background: #3b82f6;
+  background: var(--blue);
 }
 .dot-blocked {
-  background: #f97316;
+  background: var(--coral);
   animation: dot-blink 0.6s ease-in-out infinite;
 }
 @keyframes dot-blink {

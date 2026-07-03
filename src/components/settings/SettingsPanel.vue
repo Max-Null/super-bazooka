@@ -415,7 +415,7 @@ async function saveSettingsJson() {
           </div>
           <button @click="handleTest" :disabled="isTesting || !settings.apiKey"
             class="w-full py-2.5 rounded-lg text-sm font-medium transition-all duration-150"
-            :style="{ background: isTesting ? 'var(--bg-elevated)' : 'var(--accent)', color: isTesting ? 'var(--text-muted)' : '#09090b', opacity: (!settings.apiKey) ? 0.3 : 1 }">
+            :style="{ background: isTesting ? 'var(--bg-elevated)' : 'var(--accent)', color: isTesting ? 'var(--text-muted)' : 'var(--bg-root)', opacity: (!settings.apiKey) ? 0.3 : 1 }">
             {{ isTesting ? $t('settings.testing') : $t('settings.test') }}
           </button>
           <div v-if="testResult" class="space-y-1">

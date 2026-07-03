@@ -81,12 +81,14 @@ watch(() => props.navCounter, async () => {
   if (!path) return;
   collapsed.value = false;
   rootPath.value = path;
+  clearPreview();
   try { files.value = await listDir(path); } catch {}
 });
 // navPath 变更 → 同步文件面板（覆盖刷新后 settings 从 SQLite 恢复的场景）
 watch(() => props.navPath, async (path) => {
   if (!path || path === rootPath.value) return;
   rootPath.value = path;
+  clearPreview();
   try { files.value = await listDir(path); } catch {}
 });
 watch(() => props.forceClose, () => { collapsed.value = true; });
@@ -94,6 +96,13 @@ watch(() => props.forceClose, () => { collapsed.value = true; });
 watch(collapsed, async (v) => {
   if (!v && rootPath.value) { try { files.value = await listDir(rootPath.value); } catch {} }
 });
+
+/** 清空文件预览状态 */
+function clearPreview() {
+  selectedFile.value = null;
+  selectedFilePath.value = "";
+  previewContent.value = "";
+}
 
 function goRoot() {
   navigateTo(workspaceRoot.value);

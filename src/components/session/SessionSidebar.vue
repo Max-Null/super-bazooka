@@ -153,7 +153,7 @@ async function handleDelete(id: string) {
           @click.stop
           class="flex-1 bg-transparent border-0 outline-0 text-[13px]"
           :style="{ color: 'var(--text-bright)', borderBottom: '1px solid var(--accent)' }"
-          maxlength="100"
+          maxlength="50"
         />
         <div v-else class="truncate flex-1 min-w-0">
           <!-- "New Chat" 是 Rust 后端默认标题，前端按 i18n 显示 -->
@@ -203,14 +203,14 @@ async function handleDelete(id: string) {
   border-radius: 50%;
 }
 .dot-processing {
-  background: #22c55e;
+  background: var(--accent);
   animation: dot-blink 1s ease-in-out infinite;
 }
 .dot-unread {
-  background: #3b82f6;
+  background: var(--blue);
 }
 .dot-blocked {
-  background: #f97316;
+  background: var(--coral);
   animation: dot-blink 0.6s ease-in-out infinite;
 }
 @keyframes dot-blink {

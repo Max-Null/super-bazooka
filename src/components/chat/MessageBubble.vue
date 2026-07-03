@@ -73,23 +73,26 @@ function onEditKeydown(e: KeyboardEvent) {
 function totalThinkingMs(): number {
   return props.message.toolUses.reduce((sum, tu) => sum + (tu.thinkingDurationMs || 0), 0);
 }
-// ── Elapsed display（思考时间，不含工具执行）──
-const elapsedSeconds = computed(() => {
-  // 各段 tool_use 前思考时间求和（精确，流式和结束后统一）
-  const thinking = totalThinkingMs();
-  if (thinking > 0) {
-    return (thinking / 1000).toFixed(1);
-  }
-  // 纯文本回复（无工具调用）fallback 到 CC 报告的耗时
+// ── 总耗时（思考 + 工具执行）──
+const totalSeconds = computed(() => {
   if (props.message.durationMs) {
     return (props.message.durationMs / 1000).toFixed(1);
+  }
+  if (props.message.isStreaming && props.message.timestamp) {
+    return ((now.value - props.message.timestamp) / 1000).toFixed(1);
   }
   return null;
 });
 
-const elapsedLabel = computed(() => {
-  const s = elapsedSeconds.value;
-  return s ? `${s}s` : "";
+const totalLabel = computed(() => {
+  const s = totalSeconds.value;
+  return s ? `⏱${s}s` : "";
+});
+
+// ── 纯思考时间 ──
+const thinkingLabel = computed(() => {
+  const ms = totalThinkingMs();
+  return ms > 0 ? `🧠${(ms / 1000).toFixed(1)}s` : "";
 });
 
 // ── Token display ──
@@ -230,21 +233,27 @@ function formatJSON(obj: unknown): string {
         <!-- 流式光标 -->
         <span v-if="message.isStreaming" class="stream-cursor" style="margin-left:20px"></span>
 
-        <!-- 已完成指示：未在流式且最后一个块不是文本时，加一个"已完成"文本块 -->
+        <!-- 状态行：流式中「思考中」→ 完成后「已完成」 -->
         <div
-          v-if="!message.isStreaming && message.contentBlocks?.length"
-          class="text-xs"
-          style="padding-left: 26px; padding-top: 2px; color: var(--text-muted); opacity: 0.5"
-        >— {{ $t('chat.completed') }} —</div>
+          v-if="message.isStreaming || (message.contentBlocks?.length && !message.isStreaming)"
+          class="text-xs select-none"
+          style="padding-top: 2px; color: var(--text-muted); opacity: 0.6"
+        >
+          <span v-if="message.isStreaming" class="tl-status-thinking">
+            —&nbsp;<template v-for="(c, ci) in $t('chat.thinking')" :key="ci"><span class="tl-wave-char" :style="{ animationDelay: ci * 0.15 + 's' }">{{ c }}</span></template>&nbsp;—
+          </span>
+          <span v-else-if="message.wasStopped" :style="{ color: 'var(--coral)' }">— {{ $t('chat.stopped') }} —</span>
+          <span v-else>— {{ $t('chat.completed') }} —</span>
+        </div>
 
         <!-- 统计行：耗时 / token / cost -->
         <div
-          v-if="elapsedLabel || tokenLabel || message.costUSD !== undefined"
+          v-if="totalLabel || thinkingLabel || tokenLabel || message.costUSD !== undefined"
           class="flex items-center gap-2 text-[11px] mt-2"
-          style="color: var(--text-muted); padding-left: 26px"
+          style="color: var(--text-muted)"
         >
-          <span v-if="elapsedLabel && !message.wasStopped" class="font-mono tabular-nums">⏱ {{ elapsedLabel }}</span>
-          <span v-if="message.wasStopped" class="font-mono tabular-nums" :style="{ color: 'var(--coral)' }">⏹ {{ $t('chat.stopped') }}</span>
+          <span v-if="totalLabel" class="font-mono tabular-nums">{{ totalLabel }}</span>
+          <span v-if="thinkingLabel" class="font-mono tabular-nums" style="opacity: 0.7">{{ thinkingLabel }}</span>
           <template v-if="!message.isStreaming">
             <span v-if="tokenLabel">⏐ {{ tokenLabel }}</span>
             <span v-if="message.costUSD !== undefined">${{ message.costUSD.toFixed(4) }}</span>
@@ -456,4 +465,18 @@ function formatJSON(obj: unknown): string {
   line-height: 1.65;
 }
 .tl-text :deep(p) { margin: 0.25em 0; }
+
+/* 思考中波浪闪烁 */
+.tl-status-thinking {
+  color: var(--accent);
+  opacity: 0.9;
+}
+.tl-wave-char {
+  display: inline-block;
+  animation: think-wave 1.2s ease-in-out infinite;
+}
+@keyframes think-wave {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 1; }
+}
 </style>
