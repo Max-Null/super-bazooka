@@ -66,7 +66,8 @@ const activeToolName = computed(() => {
   if (!msg?.toolUses.length) return undefined;
   // 最后一个 tool_use 没有 result 说明正在执行中
   const last = msg.toolUses[msg.toolUses.length - 1];
-  return last.result === undefined ? toolLabel(last.name) : undefined;
+  // executionDurationMs 在下一段思考/文本开始时由 markThinkingStart 赋值
+  return last.executionDurationMs === undefined ? toolLabel(last.name) : undefined;
 });
 
 // 复制 debug 日志

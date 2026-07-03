@@ -46,19 +46,20 @@ const converting = ref(false);
 async function sendConvertDocx() {
   if (!props.file) return;
   converting.value = true;
-  const hasSkill = await checkSkillInstalled("docx");
-  if (hasSkill) {
-    // 已安装 → 直接发 /docx 指令给 CC
-    const cmd = `请使用 /docx 命令将 \`${props.file.path}\` 转换为 docx 格式，输出到原文件同级位置，中间文件请使用临时目录，完成后清理临时文件`;
-    emitChatCommand(`md-convert:${cmd}`);
-    emit("close");
-  } else {
-    // 未安装 → 让 CC 先全局安装 skill 再转换
-    const cmd = `请先全局安装 docx skill：npx skills add https://github.com/anthropics/skills --skill docx，安装完成后将 \`${props.file.path}\` 转换为 docx 格式，输出到原文件同级位置，中间文件请使用临时目录并清理`;
-    emitChatCommand(`md-convert:${cmd}`);
-    emit("close");
+  try {
+    const hasSkill = await checkSkillInstalled("docx");
+    if (hasSkill) {
+      const cmd = `请使用 /docx 命令将 \`${props.file.path}\` 转换为 docx 格式，输出到原文件同级位置，中间文件请使用临时目录，完成后清理临时文件`;
+      emitChatCommand(`md-convert:${cmd}`);
+      emit("close");
+    } else {
+      const cmd = `请先全局安装 docx skill：npx skills add https://github.com/anthropics/skills --skill docx，安装完成后将 \`${props.file.path}\` 转换为 docx 格式，输出到原文件同级位置，中间文件请使用临时目录并清理`;
+      emitChatCommand(`md-convert:${cmd}`);
+      emit("close");
+    }
+  } finally {
+    converting.value = false;
   }
-  converting.value = false;
 }
 
 function sendDomToChat() {

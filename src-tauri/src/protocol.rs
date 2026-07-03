@@ -267,13 +267,8 @@ impl StreamLine {
                             }
                             _ => {}
                         }
-                        // 按原始顺序记录块类型和内容
-                        ordered_blocks.push(match block["type"].as_str() {
-                            Some("text") => serde_json::json!({"type":"text","text":block["text"]}),
-                            Some("thinking") => serde_json::json!({"type":"thinking","thinking":block["thinking"]}),
-                            Some("tool_use") => block.clone(),
-                            _ => block.clone(),
-                        });
+                        // 按原始顺序记录块（直接 clone CC 事件中的 block，统一序列化路径）
+                        ordered_blocks.push(block.clone());
                     }
                 }
                 let has_blocks = !ordered_blocks.is_empty();

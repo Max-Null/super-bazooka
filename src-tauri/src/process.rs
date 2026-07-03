@@ -66,37 +66,6 @@ impl ProcessManager {
         self.processes.remove(id);
     }
 
-    /// Kill a session process gracefully (send kill_tx), then wait for exit_notify.
-    /// 分两阶段：锁内只取 kill_tx + exit_notify 的 clone，锁外发信号和等待，
-    /// 避免长时间持有 ProcessManager 锁阻塞 send_message 等其他操作。
-    pub async fn kill(&mut self, id: &str) -> Result<(), String> {
-        // 第一阶段：锁内取 kill_tx 和 exit_notify（短暂持锁）
-        let (tx, notify) = {
-            let proc = self
-                .processes
-                .get(id)
-                .ok_or_else(|| format!("Session {} not found", id))?;
-            let mut proc = proc.lock().await;
-            let tx = proc.take_kill_tx();
-            let notify = proc.exit_notify.clone();
-            (tx, notify)
-        }; // ManagedProcess 锁在此释放
-
-        // 第二阶段：无锁发送 kill 信号
-        if let Some(tx) = tx {
-            let _ = tx.send(());
-        }
-
-        // 第三阶段：无锁等待进程退出（最多 5 秒）
-        tokio::time::timeout(std::time::Duration::from_secs(5), notify.notified())
-            .await
-            .map_err(|_| "Kill timeout".to_string())?;
-
-        // 第四阶段：清理（重新获取 ProcessManager 锁）
-        self.processes.remove(id);
-
-        Ok(())
-    }
 }
 
 // ── StdinManager ──

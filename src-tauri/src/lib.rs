@@ -245,15 +245,17 @@ async fn stop_session(
         .await
         .map_err(|_| "Kill timeout".to_string())?;
 
-    // 第四阶段：重新获取锁，清理进程注册
+    // 第四阶段：先更新 DB 状态再清理进程注册，防止竞态
+    // （若先 remove 再 set_status，send_message 可能在间隙中用同一 session_id 新建进程，
+    //   然后被这里的 set_status 错误覆盖为 "completed"）
+    {
+        let session = state.session_manager.lock().await;
+        let _ = session.set_session_status(&session_id, "completed");
+    }
     {
         let mut pm = state.process_manager.lock().await;
         pm.remove(&session_id);
     }
-
-    // Update status in DB
-    let session = state.session_manager.lock().await;
-    let _ = session.set_session_status(&session_id, "completed");
     Ok(())
 }
 
@@ -1262,7 +1264,7 @@ async fn zen_send_message(
                     let _ = handle.emit("stream-event", serde_json::json!({
                         "type": "error",
                         "session_id": sid,
-                        "error": "流读取超时（120秒无响应）",
+                        "error": "Stream read timeout (120s no response)",
                         "is_final": true,
                     }));
                     let _ = handle.emit("process-exited", serde_json::json!({
@@ -1571,43 +1573,46 @@ async fn install_claude_code() -> Result<i32, String> {
 
 /// 检查 skill 是否已安装（自定义 skills 目录 + 插件缓存），与 ManagePanel 检测逻辑一致
 #[tauri::command]
-fn check_skill_installed(name: String) -> Result<bool, String> {
+async fn check_skill_installed(name: String) -> Result<bool, String> {
     // 安全校验：skill 名只允许字母数字下划线连字符，拒绝路径穿越
     if name.is_empty() || !name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
         return Err(format!("无效的 skill 名称: {}", name));
     }
-    let home = dirs::home_dir().ok_or("无法获取用户目录")?;
-    let claude_dir = home.join(".claude");
+    // spawn_blocking 避免同步目录 IO 阻塞 Tauri 主线程
+    tokio::task::spawn_blocking(move || {
+        let home = dirs::home_dir().ok_or("无法获取用户目录")?;
+        let claude_dir = home.join(".claude");
 
-    // 1. 检查自定义 skills：~/.claude/skills/<name>/SKILL.md
-    let custom_path = claude_dir.join("skills").join(&name).join("SKILL.md");
-    if custom_path.exists() {
-        return Ok(true);
-    }
+        let custom_path = claude_dir.join("skills").join(&name).join("SKILL.md");
+        if custom_path.exists() {
+            return Ok(true);
+        }
 
-    // 2. 检查插件提供的 skills：~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/skills/<name>/
-    let plugins_cache = claude_dir.join("plugins").join("cache");
-    if let Ok(marketplaces) = std::fs::read_dir(&plugins_cache) {
-        for mp in marketplaces.flatten() {
-            if !mp.path().is_dir() { continue; }
-            if let Ok(plugins) = std::fs::read_dir(mp.path()) {
-                for plugin in plugins.flatten() {
-                    if !plugin.path().is_dir() { continue; }
-                    if let Ok(versions) = std::fs::read_dir(plugin.path()) {
-                        for ver in versions.flatten() {
-                            if !ver.path().is_dir() { continue; }
-                            let skill_md = ver.path().join("skills").join(&name).join("SKILL.md");
-                            if skill_md.exists() {
-                                return Ok(true);
+        let plugins_cache = claude_dir.join("plugins").join("cache");
+        if let Ok(marketplaces) = std::fs::read_dir(&plugins_cache) {
+            for mp in marketplaces.flatten() {
+                if !mp.path().is_dir() { continue; }
+                if let Ok(plugins) = std::fs::read_dir(mp.path()) {
+                    for plugin in plugins.flatten() {
+                        if !plugin.path().is_dir() { continue; }
+                        if let Ok(versions) = std::fs::read_dir(plugin.path()) {
+                            for ver in versions.flatten() {
+                                if !ver.path().is_dir() { continue; }
+                                let skill_md = ver.path().join("skills").join(&name).join("SKILL.md");
+                                if skill_md.exists() {
+                                    return Ok(true);
+                                }
                             }
                         }
                     }
                 }
             }
         }
-    }
 
-    Ok(false)
+        Ok(false)
+    })
+    .await
+    .map_err(|e| format!("skill 检测失败: {}", e))?
 }
 
 // 非 Windows 平台返回明确的错误信息

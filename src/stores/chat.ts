@@ -150,6 +150,10 @@ export const useChatStore = defineStore("chat", () => {
         last.inputTokens = event.input_tokens ?? last.inputTokens;
         last.outputTokens = event.output_tokens ?? last.outputTokens;
         last.costUSD = event.cost_usd ?? last.costUSD;
+        // 后台会话可能没有 content_blocks，从旧字段合成
+        if (!last.contentBlocks?.length) {
+          last.contentBlocks = synthesizeBlocks(last.thinking, last.toolUses, last.content);
+        }
       }
     } else if (event.type === 'error') {
       if (last && last.isStreaming) {

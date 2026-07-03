@@ -302,6 +302,15 @@ function formatJSON(obj: unknown): string {
         </div>
       </div>
 
+      <!-- Assistant 消息兜底（无 contentBlocks 时显示纯文本） -->
+      <div
+        v-else-if="message.role === 'assistant' && message.content"
+        class="prose text-sm leading-relaxed rounded-lg"
+      >
+        <MarkdownRenderer :content="message.content" />
+        <span v-if="message.isStreaming" class="stream-cursor"></span>
+      </div>
+
       <!-- 用户消息纯文本（无 contentBlocks） -->
       <div
         v-else-if="message.role === 'user' && message.content"
