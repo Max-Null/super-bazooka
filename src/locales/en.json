@@ -26,6 +26,7 @@
     "planContinueDesign": "Continue Design",
     "planStop": "Stop Plan",
     "planExport": "Export Plan",
+    "planError": "Plan approval communication failed. Check CC process status and retry.",
     "planOther": "Feedback",
     "viewPlan": "View Plan",
     "remove": "Remove",

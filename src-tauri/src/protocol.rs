@@ -163,6 +163,7 @@ impl StreamLine {
                                     is_final: false,
                                     error: None,
                                     duration_ms: None, input_tokens: None, output_tokens: None, cost_usd: None,
+                                    content_blocks: None,
                                 }
                             }
                             Some("input_json_delta") => {
@@ -177,6 +178,7 @@ impl StreamLine {
                                     is_final: false,
                                     error: None,
                                     duration_ms: None, input_tokens: None, output_tokens: None, cost_usd: None,
+                                    content_blocks: None,
                                 }
                             }
                             _ => StreamFrontendEvent::empty(event_type, session_id),
@@ -198,6 +200,7 @@ impl StreamLine {
                                 is_final: false,
                                 error: None,
                                 duration_ms: None, input_tokens: None, output_tokens: None, cost_usd: None,
+                                    content_blocks: None,
                             }
                         } else {
                             StreamFrontendEvent::empty(event_type, session_id)
@@ -219,6 +222,7 @@ impl StreamLine {
                             input_tokens: usage["input_tokens"].as_u64().map(|v| v as u32),
                             output_tokens: usage["output_tokens"].as_u64().map(|v| v as u32),
                             cost_usd: None,
+                                    content_blocks: None,
                         }
                     }
                     _ => StreamFrontendEvent::empty(event_type, session_id),
@@ -243,6 +247,7 @@ impl StreamLine {
                 let mut texts = Vec::new();
                 let mut thinkings = Vec::new();
                 let mut tool_uses = Vec::new();
+                let mut ordered_blocks: Vec<Value> = Vec::new();
 
                 if let Some(content) = self.inner["message"]["content"].as_array() {
                     for block in content {
@@ -262,8 +267,16 @@ impl StreamLine {
                             }
                             _ => {}
                         }
+                        // 按原始顺序记录块类型和内容
+                        ordered_blocks.push(match block["type"].as_str() {
+                            Some("text") => serde_json::json!({"type":"text","text":block["text"]}),
+                            Some("thinking") => serde_json::json!({"type":"thinking","thinking":block["thinking"]}),
+                            Some("tool_use") => block.clone(),
+                            _ => block.clone(),
+                        });
                     }
                 }
+                let has_blocks = !ordered_blocks.is_empty();
 
                 StreamFrontendEvent {
                     event_type: "assistant".to_string(),
@@ -283,6 +296,7 @@ impl StreamLine {
                     input_tokens: self.inner["message"]["usage"]["input_tokens"].as_u64().map(|v| v as u32),
                     output_tokens: self.inner["message"]["usage"]["output_tokens"].as_u64().map(|v| v as u32),
                     cost_usd: self.inner["total_cost_usd"].as_f64(),
+                    content_blocks: if has_blocks { Some(ordered_blocks) } else { None },
                 }
             }
             "result" => {
@@ -302,6 +316,7 @@ impl StreamLine {
                     input_tokens: usage["input_tokens"].as_u64().map(|v| v as u32),
                     output_tokens: usage["output_tokens"].as_u64().map(|v| v as u32),
                     cost_usd,
+                                    content_blocks: None,
                 }
             },
             "control_request" => {
@@ -344,6 +359,7 @@ impl StreamLine {
                     input_tokens: None,
                     output_tokens: None,
                     cost_usd: None,
+                                    content_blocks: None,
                 }
             }
             _ => StreamFrontendEvent {
@@ -359,6 +375,7 @@ impl StreamLine {
                 input_tokens: None,
                 output_tokens: None,
                 cost_usd: None,
+                                    content_blocks: None,
             },
         }
     }
@@ -387,6 +404,7 @@ impl StreamFrontendEvent {
             error: None,
             duration_ms: None, input_tokens: None,
             output_tokens: None, cost_usd: None,
+                                    content_blocks: None,
         }
     }
 }
@@ -397,7 +415,9 @@ pub struct StreamFrontendEvent {
     #[serde(rename = "type")]
     pub event_type: String,
     pub session_id: String,
+    /// Deprecated: 合并后的纯文本（保留向后兼容），新代码请用 content_blocks
     pub text: String,
+    /// Deprecated: 合并后的思考文本，新代码请用 content_blocks
     pub thinking: String,
     pub tool_use: Option<Vec<Value>>,
     pub control_request: Option<ControlRequest>,
@@ -407,4 +427,7 @@ pub struct StreamFrontendEvent {
     pub input_tokens: Option<u32>,
     pub output_tokens: Option<u32>,
     pub cost_usd: Option<f64>,
+    /// 保持 CC 原始 content 块顺序的数组，解决"文字全堆在工具调用后面"的问题
+    #[serde(default)]
+    pub content_blocks: Option<Vec<Value>>,
 }

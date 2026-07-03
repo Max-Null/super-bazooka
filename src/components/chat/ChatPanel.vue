@@ -246,7 +246,15 @@ watch(() => chatCommand.value.ts, async (ts) => {
     case "slash-clear": handleSend("/clear"); break;
     case "install-ponytail": handleSend("请帮我安装 Ponytail 插件（ponytail@claude-plugins-official）"); break;
     default:
-      if (action.startsWith("attach-dom:")) {
+      if (action.startsWith("md-convert:")) {
+        // MD → docx fallback：通过 CC /docx skill 转换
+        const msg = action.slice("md-convert:".length);
+        if (chat.isProcessing) {
+          inputBar.value?.setText(msg);
+        } else {
+          handleSend(msg);
+        }
+      } else if (action.startsWith("attach-dom:")) {
         // 来自 FilePreview DOM 选择器 — 存为卡片，随下次消息一起发送
         const data = action.slice("attach-dom:".length);
         const lines = data.split("\n");
@@ -626,42 +634,55 @@ function isPlanPending() {
 async function approvePlan() {
   const cr = chat.pendingControlRequest; if (!cr) return;
   const sid = session.activeSessionId;
+  if (!sid) return;
   savePlan();
-  // 批准 ExitPlanMode
-  await sendStdin(sid, JSON.stringify({
-    type: "control_response",
-    response: {
-      subtype: "success",
-      request_id: cr.request_id || "",
-      response: { behavior: "allow", updatedInput: cr.tool_input },
-    },
-  }));
-  // 切换到 acceptEdits 模式执行计划（绕过 CC SDK 已知 bug：plan→acceptEdits 无限循环）
-  await sendStdin(sid, JSON.stringify({
-    type: "control_request",
-    request_id: `setmode_${Date.now()}`,
-    request: { subtype: "set_permission_mode", mode: "acceptEdits" },
-  }));
-  settings.planMode = false;
-  settings.permissionMode = "acceptEdits";
-  planFeedback.value = "";
-  chat.resolveControlRequest("allow");
+  try {
+    // 批准 ExitPlanMode
+    await sendStdin(sid, JSON.stringify({
+      type: "control_response",
+      response: {
+        subtype: "success",
+        request_id: cr.request_id || "",
+        response: { behavior: "allow", updatedInput: cr.tool_input },
+      },
+    }));
+    // 切换到 acceptEdits 模式执行计划（绕过 CC SDK 已知 bug：plan→acceptEdits 无限循环）
+    await sendStdin(sid, JSON.stringify({
+      type: "control_request",
+      request_id: `setmode_${Date.now()}`,
+      request: { subtype: "set_permission_mode", mode: "acceptEdits" },
+    }));
+    settings.planMode = false;
+    settings.permissionMode = "acceptEdits";
+    planFeedback.value = "";
+    chat.resolveControlRequest("allow");
+  } catch (e) {
+    console.error("Plan approval failed:", e);
+    showStatus(t("chat.planError") || "计划执行失败，请重试");
+    chat.resolveControlRequest("deny");
+  }
 }
 
 async function rejectPlan(message: string) {
   const cr = chat.pendingControlRequest; if (!cr) return;
+  const sid = session.activeSessionId;
+  if (!sid) return;
   savePlan();
-  const payload = {
-    type: "control_response",
-    response: {
-      subtype: "success",
-      request_id: cr.request_id || "",
-      response: { behavior: "deny", message: message || "Plan rejected" },
-    },
-  };
-  await sendStdin(session.activeSessionId, JSON.stringify(payload));
-  planFeedback.value = "";
-  chat.resolveControlRequest("deny");
+  try {
+    await sendStdin(sid, JSON.stringify({
+      type: "control_response",
+      response: {
+        subtype: "success",
+        request_id: cr.request_id || "",
+        response: { behavior: "deny", message: message || "Plan rejected" },
+      },
+    }));
+  } catch (e) {
+    console.error("Plan rejection failed:", e);
+  } finally {
+    planFeedback.value = "";
+    chat.resolveControlRequest("deny");
+  }
 }
 
 async function exportPlan() {

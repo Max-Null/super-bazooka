@@ -10,6 +10,15 @@ export interface StreamEvent {
     name: string;
     input: Record<string, unknown>;
   }>;
+  /** CC content 块原始顺序（text/thinking/tool_use 交替），用于按时间线渲染 */
+  content_blocks?: Array<{
+    type: string;
+    text?: string;
+    thinking?: string;
+    id?: string;
+    name?: string;
+    input?: Record<string, unknown>;
+  }>;
   control_request?: {
     subtype: string;
     tool_name?: string;

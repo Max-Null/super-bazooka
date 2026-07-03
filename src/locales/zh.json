@@ -26,6 +26,7 @@
     "planContinueDesign": "继续设计",
     "planStop": "停止计划",
     "planExport": "输出计划",
+    "planError": "计划审批通信失败，请检查 CC 进程状态后重试",
     "planOther": "反馈",
     "viewPlan": "查看计划",
     "remove": "移除",

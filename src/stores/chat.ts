@@ -12,6 +12,8 @@ export interface Message {
   content: string;
   thinking: string;
   toolUses: ToolUse[];
+  /** 保持 CC 原始块顺序的数组（text/thinking/tool_use 交替），用于按时间线渲染 */
+  contentBlocks?: ContentBlock[];
   timestamp: number;
   isStreaming: boolean;
   durationMs?: number;
@@ -35,6 +37,15 @@ export interface ToolUse {
   executionDurationMs?: number;
   /** 工具开始执行的时间戳（Date.now()），用于流式期间显示实时计时 */
   startedAt?: number;
+}
+
+/** CC 内容块（保持原始顺序），解决"文字全堆在工具调用后面"的问题 */
+export interface ContentBlock {
+  type: "text" | "thinking" | "tool_use";
+  /** text/thinking 块的文本内容 */
+  content?: string;
+  /** tool_use 块的工具信息 */
+  toolUse?: ToolUse;
 }
 
 export interface ControlRequest {
@@ -155,6 +166,15 @@ export const useChatStore = defineStore("chat", () => {
     sessionCache.set(sessionId, cached);
   }
 
+  /**
+   * 将 CC content_blocks 合并到消息的 contentBlocks 时间线。
+   * CC 的完整 assistant 事件包含所有块的最新状态，直接覆盖。
+   */
+  function setContentBlocks(blocks: ContentBlock[]) {
+    if (!currentAssistantMsg.value) return;
+    currentAssistantMsg.value.contentBlocks = blocks;
+  }
+
   function addUserMessage(content: string, attachments?: AttachedFile[]): string {
     const id = genId();
     messages.value.push({
@@ -219,11 +239,18 @@ export const useChatStore = defineStore("chat", () => {
 
   function finishAssistantMessage(durationMs?: number, inputTokens?: number, outputTokens?: number, costUSD?: number) {
     if (currentAssistantMsg.value) {
-      currentAssistantMsg.value.isStreaming = false;
-      currentAssistantMsg.value.durationMs = durationMs;
-      currentAssistantMsg.value.inputTokens = inputTokens;
-      currentAssistantMsg.value.outputTokens = outputTokens;
-      currentAssistantMsg.value.costUSD = costUSD;
+      const msg = currentAssistantMsg.value;
+      // 空消息（无内容、无思考、无工具调用）→ 删除，不留残留气泡
+      if (!msg.content && !msg.thinking && !msg.toolUses.length) {
+        const idx = messages.value.indexOf(msg);
+        if (idx !== -1) messages.value.splice(idx, 1);
+      } else {
+        msg.isStreaming = false;
+        msg.durationMs = durationMs;
+        msg.inputTokens = inputTokens;
+        msg.outputTokens = outputTokens;
+        msg.costUSD = costUSD;
+      }
     }
     currentAssistantMsg.value = null;
     isProcessing.value = false;
@@ -328,6 +355,20 @@ export const useChatStore = defineStore("chat", () => {
     return lines.join('\n');
   }
 
+  /**
+   * 从旧格式字段重建 contentBlocks 时间线（thinking → tools → text）。
+   * 用于无 content_blocks 的历史消息和新协议未启用的后端。
+   */
+  function synthesizeBlocks(thinking: string, toolUses: ToolUse[], text: string): ContentBlock[] {
+    const blocks: ContentBlock[] = [];
+    if (thinking) blocks.push({ type: "thinking", content: thinking });
+    for (const tu of toolUses) {
+      blocks.push({ type: "tool_use", toolUse: tu });
+    }
+    if (text) blocks.push({ type: "text", content: text });
+    return blocks;
+  }
+
   /** Restore messages from database records */
   function loadMessages(records: Array<{ id: string; role: string; content: string; created_at: string }>) {
     clearMessages();
@@ -342,6 +383,7 @@ export const useChatStore = defineStore("chat", () => {
 
       // Try to parse JSON for assistant messages (new format)
       let attachments: AttachedFile[] | undefined;
+      let contentBlocks: ContentBlock[] | undefined;
 
       // Try JSON parse for both user and assistant messages
       try {
@@ -355,6 +397,8 @@ export const useChatStore = defineStore("chat", () => {
             inputTokens = parsed.inputTokens;
             outputTokens = parsed.outputTokens;
             costUSD = parsed.costUSD;
+            // 新存档已有 contentBlocks，旧存档从现有字段重建时间线
+            contentBlocks = parsed.contentBlocks || synthesizeBlocks(thinking, toolUses, textContent);
           } else if (rec.role === "user" && Array.isArray(parsed.attachments)) {
             textContent = parsed.text || "";
             attachments = parsed.attachments;
@@ -363,6 +407,10 @@ export const useChatStore = defineStore("chat", () => {
       } catch {
         // Old format: plain text, use as-is
       }
+      // 纯文本旧格式也重建时间线
+      if (rec.role === "assistant" && !contentBlocks) {
+        contentBlocks = synthesizeBlocks(thinking, toolUses, textContent);
+      }
 
       messages.value.push({
         id: rec.id,
@@ -370,6 +418,7 @@ export const useChatStore = defineStore("chat", () => {
         content: textContent,
         thinking,
         toolUses,
+        contentBlocks,
         timestamp: new Date(rec.created_at + "Z").getTime(),
         isStreaming: false,
         durationMs,
@@ -392,6 +441,7 @@ export const useChatStore = defineStore("chat", () => {
     appendText,
     appendThinking,
     addToolUse,
+    setContentBlocks,
     addControlRequest,
     resolveControlRequest,
     markStopped,

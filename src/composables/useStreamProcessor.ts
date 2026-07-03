@@ -1,6 +1,6 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useI18n } from "vue-i18n";
-import { useChatStore, type ToolUse } from "@/stores/chat";
+import { useChatStore, type ToolUse, type ContentBlock } from "@/stores/chat";
 import { useSessionStore } from "@/stores/session";
 import { useSettingsStore } from "@/stores/settings";
 import { useDebugLog } from "@/composables/useDebugLog";
@@ -69,6 +69,58 @@ export function useStreamProcessor() {
     toolExecStart = Date.now();
     tool.startedAt = toolExecStart;  // 供 MessageBubble 显示实时计时
     lastToolUse = tool;
+  }
+
+  /**
+   * 将 CC content_blocks 原始数据合并为有序 ContentBlock 数组。
+   *
+   * CC 2.1+ 协议：assistant 事件的 message.content[] 始终是该时刻的完整状态，
+   * 与后端（Anthropic/DeepSeek/OpenRouter）无关。stream_event delta 先到，
+   * 完整 assistant 后到，后者携带全量 content_blocks。
+   *
+   * - existing 为空：Anthropic 全量事件 → 从 raw 全新构建
+   * - existing 非空：DeepSeek 增量事件 → 合并到已有数组末尾
+   *
+   * 合并策略：同类型块若新内容以旧内容开头（全量更新），替换旧内容；
+   * 否则追加新内容。tool_use 按 ID 去重。
+   */
+  function buildContentBlocks(
+    raw: StreamEvent["content_blocks"],
+    existing?: ContentBlock[],
+  ): ContentBlock[] {
+    if (!raw?.length) return existing || [];
+    const result: ContentBlock[] = existing ? [...existing] : [];
+    for (const block of raw) {
+      if (block.type === "text" || block.type === "thinking") {
+        const txt: string = (block as any).text || (block as any).thinking || "";
+        const last = result[result.length - 1];
+        if (last?.type === block.type) {
+          const old = last.content || "";
+          // 新内容以旧内容开头 → 全量更新（Anthropic/CC 完整事件）
+          if (txt.startsWith(old)) {
+            last.content = txt;
+          } else {
+            // 不相关的新内容 → 追加（DeepSeek 增量事件）
+            last.content = old + txt;
+          }
+        } else {
+          result.push({ type: block.type as "text" | "thinking", content: txt });
+        }
+      } else if (block.type === "tool_use") {
+        const tuId = (block as any).id || "";
+        // 去重：同 ID tool_use 已存在则跳过
+        if (tuId && result.some(b => b.type === "tool_use" && b.toolUse?.id === tuId)) continue;
+        result.push({
+          type: "tool_use",
+          toolUse: {
+            id: tuId,
+            name: (block as any).name || "",
+            input: (block as any).input || {},
+          },
+        });
+      }
+    }
+    return result;
   }
 
   async function startListening() {
@@ -150,6 +202,15 @@ export function useStreamProcessor() {
               markToolExecStart(toolUse);
             }
           }
+          // 构建 contentBlocks 时间线（保持 CC 原始块顺序）
+          if (data.content_blocks && chat.currentAssistantMsg) {
+            // 判断是全量事件还是增量事件：若已有内容且新文本以其开头 → 全量（重建）
+            const currentText = chat.currentAssistantMsg.content;
+            const isFullState = !!(currentText && data.text && data.text.startsWith(currentText));
+            const blocks = buildContentBlocks(data.content_blocks, isFullState ? undefined : chat.currentAssistantMsg.contentBlocks);
+            chat.setContentBlocks(blocks);
+          }
+
           // assistant 事件携带 message.usage——实时更新 token 统计（DeepSeek 后端 result 可能不含 usage）
           if (chat.currentAssistantMsg) {
             if (data.input_tokens != null) chat.currentAssistantMsg.inputTokens = data.input_tokens;
@@ -189,6 +250,7 @@ export function useStreamProcessor() {
               text: msg.content,
               thinking: msg.thinking,
               toolUses: msg.toolUses,
+              contentBlocks: msg.contentBlocks,  // 保留时间线顺序供下次加载
               durationMs: data.duration_ms,
               // event 可能不含 token（如 DeepSeek result），fallback 到 message 对象上的值
               inputTokens: data.input_tokens ?? msg.inputTokens,

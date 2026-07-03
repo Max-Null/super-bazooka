@@ -43,26 +43,36 @@ const { t } = useI18n();
 const converting = ref(false);
 const convertStatus = ref("");  // 成功消息
 const convertError = ref("");   // 错误消息
+const canFallbackToCC = ref(false);  // pandoc 不可用但 docx skill 已安装
 
-/** MD → docx 转换（pandoc 直接转，不经过 CC，不污染工作空间） */
+/** MD → docx 转换（pandoc 直转优先，不可用时通过 CC /docx skill fallback） */
 async function sendConvertDocx() {
   if (!props.file) return;
   converting.value = true;
   convertStatus.value = "";
   convertError.value = "";
+  canFallbackToCC.value = false;
   try {
     const outputPath = await convertMdToDocx(props.file.path);
     convertStatus.value = t("file.convertSuccess", { path: outputPath });
   } catch (e: any) {
     convertError.value = typeof e === "string" ? e : (e?.message || String(e));
-    // 检查 docx skill 是否安装（fallback: 可通过 CC 用 /docx 转）
-    const hasDocxSkill = await checkSkillInstalled("docx");
-    if (hasDocxSkill) {
+    // 检查 docx skill 是否安装作为 fallback
+    canFallbackToCC.value = await checkSkillInstalled("docx");
+    if (canFallbackToCC.value) {
       convertError.value += "\n\n" + t("file.docxSkillAvailable");
     }
   } finally {
     converting.value = false;
   }
+}
+
+/** Fallback: 通过 CC /docx 命令转换 */
+function sendViaCC() {
+  if (!props.file) return;
+  const msg = `请使用 /docx 命令将 \`${props.file.path}\` 转换为 docx 格式，输出到原文件同级位置，中间文件请使用临时目录`;
+  emitChatCommand(`md-convert:${msg}`);
+  emit("close");
 }
 
 function sendDomToChat() {
@@ -154,6 +164,9 @@ watch(() => props.file, async (f) => {
   content.value = "";
   previewHtml.value = "";
   error.value = "";
+  convertStatus.value = "";
+  convertError.value = "";
+  canFallbackToCC.value = false;
   imageSrc.value = "";
   loading.value = true;
 
@@ -298,7 +311,15 @@ function extToLang(filename: string): string {
         <!-- 转换成功 -->
         <div v-if="convertStatus" class="text-xs px-4 py-2 whitespace-pre-wrap" style="background: var(--bg-elevated); color: #22c55e; border-bottom: 1px solid var(--border-dim)">{{ convertStatus }}</div>
         <!-- 转换失败 -->
-        <div v-if="convertError" class="text-xs px-4 py-2 whitespace-pre-wrap" style="background: var(--bg-elevated); color: var(--coral); border-bottom: 1px solid var(--border-dim)">{{ convertError }}</div>
+        <div v-if="convertError" class="text-xs px-4 py-2 whitespace-pre-wrap flex items-start gap-3" style="background: var(--bg-elevated); color: var(--coral); border-bottom: 1px solid var(--border-dim)">
+          <span class="flex-1">{{ convertError }}</span>
+          <button
+            v-if="canFallbackToCC"
+            @click="sendViaCC"
+            class="text-[11px] px-2.5 py-1 rounded font-medium transition-colors hover:opacity-80 shrink-0"
+            style="background: var(--accent); color: var(--bg-root)"
+          >通过 CC 转换</button>
+        </div>
 
         <!-- Body -->
         <div class="flex flex-col" style="background: var(--bg-root); height: calc(88vh - 48px)">

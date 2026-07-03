@@ -181,6 +181,57 @@ function formatJSON(obj: unknown): string {
         </button>
       </div>
 
+      <!-- ═══ 按时间线渲染（contentBlocks 可用时） ═══ -->
+      <div v-if="message.contentBlocks?.length" class="sb-timeline">
+        <div
+          v-for="(block, i) in message.contentBlocks"
+          :key="i"
+          class="sb-timeline-block"
+          :class="'tl-' + block.type"
+        >
+          <!-- 时间线圆点 -->
+          <div class="sb-timeline-dot">
+            <span v-if="block.type === 'thinking'">💭</span>
+            <span v-else-if="block.type === 'tool_use'">🔧</span>
+            <span v-else>💬</span>
+          </div>
+
+          <!-- 思考块（默认折叠） -->
+          <details v-if="block.type === 'thinking'" class="tl-thinking" :open="message.isStreaming && i === message.contentBlocks!.length - 1">
+            <summary class="tl-thinking-summary">
+              💭 {{ message.isStreaming ? $t('chat.thinking') : $t('chat.thinkingDone') }}
+              <span v-if="!message.isStreaming && block.content" class="tl-thinking-snippet">{{ block.content.slice(0, 60) }}{{ block.content.length > 60 ? '…' : '' }}</span>
+              <span v-if="message.isStreaming" class="w-1.5 h-1.5 rounded-full animate-pulse ml-1" style="background:var(--accent); display:inline-block"></span>
+            </summary>
+            <div class="tl-thinking-body">{{ block.content }}</div>
+          </details>
+
+          <!-- 工具调用块 -->
+          <details
+            v-else-if="block.type === 'tool_use' && block.toolUse"
+            class="tl-tool"
+          >
+            <summary>
+              <span class="tl-tool-name">{{ toolLabel(block.toolUse.name) }}</span>
+              <span v-if="block.toolUse.thinkingDurationMs" class="tl-stat">🧠{{ (block.toolUse.thinkingDurationMs / 1000).toFixed(1) }}s</span>
+              <span v-if="block.toolUse.executionDurationMs" class="tl-stat" :class="{ 'tl-slow': block.toolUse.executionDurationMs > 5000 }">⚡{{ (block.toolUse.executionDurationMs / 1000).toFixed(1) }}s</span>
+              <span v-if="!block.toolUse.executionDurationMs && block.toolUse.startedAt && message.isStreaming" class="tl-stat tl-live">⚡{{ ((now - block.toolUse.startedAt) / 1000).toFixed(1) }}s</span>
+              <span class="tl-input-preview">{{ summarizeInput(block.toolUse.input) }}</span>
+            </summary>
+            <pre>{{ formatJSON(block.toolUse.input) }}</pre>
+          </details>
+
+          <!-- 文本块 -->
+          <div v-else-if="block.type === 'text' && block.content" class="tl-text">
+            <MarkdownRenderer :content="block.content" />
+          </div>
+        </div>
+        <!-- 流式光标：最后一条消息且仍在处理中 -->
+        <span v-if="message.isStreaming" class="stream-cursor" style="margin-left:20px"></span>
+      </div>
+
+      <!-- ═══ 旧排版（contentBlocks 不可用时兜底） ═══ -->
+      <template v-else>
       <!-- Tool cards (BEFORE content — tools are called first) -->
       <div v-if="message.toolUses.length > 0" class="space-y-1.5">
         <details
@@ -298,8 +349,9 @@ function formatJSON(obj: unknown): string {
           {{ message.thinking }}
         </div>
       </details>
+      </template> <!-- 旧排版结束 -->
 
-      <!-- Inline stats when no thinking section exists (streaming or done without thinking) -->
+      <!-- Inline stats（新旧布局共用） -->
       <div
         v-if="!message.thinking && (message.isStreaming || message.durationMs || message.inputTokens)"
         class="flex items-center gap-2 text-[11px] px-0.5"
@@ -316,3 +368,137 @@ function formatJSON(obj: unknown): string {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* ── 时间线 ── */
+.sb-timeline {
+  position: relative;
+}
+
+.sb-timeline-block {
+  position: relative;
+  padding-left: 26px;
+  margin-bottom: 8px;
+}
+.sb-timeline-block:last-child {
+  margin-bottom: 0;
+}
+/* 每块画线段穿过圆点中心到下一块，末块不画 */
+.sb-timeline-block::after {
+  content: '';
+  position: absolute;
+  left: 10px;
+  top: 12px;        /* 当前圆点中心（top 4 + 8） */
+  bottom: -20px;     /* 延伸到下一块圆点中心（margin 8 + top 4 + 8） */
+  width: 2px;
+  background: var(--border-dim);
+  border-radius: 1px;
+}
+.sb-timeline-block:last-child::after {
+  display: none;
+}
+
+.sb-timeline-dot {
+  position: absolute;
+  left: 3px;
+  top: 4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  line-height: 1;
+  background: var(--bg-surface);
+  border: 1.5px solid var(--border-dim);
+  z-index: 1;
+}
+.tl-thinking .sb-timeline-dot  { border-color: var(--amber); }
+.tl-tool_use .sb-timeline-dot  { border-color: var(--violet); }
+.tl-text .sb-timeline-dot      { border-color: var(--border-bright); }
+
+/* ── 各块 ── */
+.tl-thinking {
+  border-radius: 6px;
+  background: var(--amber-glow);
+}
+.tl-thinking-summary {
+  padding: 5px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--amber);
+  transition: background 150ms;
+  list-style: none;
+}
+.tl-thinking-summary::-webkit-details-marker { display: none; }
+.tl-thinking-summary:hover { background: rgba(255,255,255,0.03); }
+.tl-thinking-snippet {
+  font-size: 11px;
+  color: var(--text-muted);
+  opacity: 0.6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 320px;
+  margin-left: 8px;
+}
+.tl-thinking-body {
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  color: var(--text-secondary);
+  border-top: 1px solid rgba(255,255,255,0.05);
+}
+
+.tl-tool {
+  font-size: 12px;
+  font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, monospace;
+  border-radius: 6px;
+  background: var(--bg-root);
+  border: 1px solid var(--border-dim);
+}
+.tl-tool summary {
+  padding: 6px 10px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--text-secondary);
+  transition: background 150ms;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.tl-tool summary:hover { background: var(--bg-hover); }
+.tl-tool-name  { font-weight: 600; color: var(--violet); }
+.tl-stat       { font-size: 10px; color: var(--text-muted); white-space: nowrap; }
+.tl-stat.tl-slow { color: var(--coral); }
+.tl-stat.tl-live { color: var(--accent); animation: pulse 1s ease-in-out infinite; }
+.tl-input-preview {
+  color: var(--text-muted);
+  opacity: 0.7;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px;
+}
+.tl-tool pre {
+  padding: 8px 10px;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: pre;
+  border-top: 1px solid var(--border-dim);
+  color: var(--text-muted);
+  max-height: 240px;
+}
+
+.tl-text {
+  font-size: 14px;
+  line-height: 1.65;
+}
+.tl-text :deep(p) { margin: 0.25em 0; }
+</style>
