@@ -64,7 +64,7 @@ async function startLookupUrl() {
   isLookingUpUrl.value = true;
   let sid = sessionStore.activeSessionId;
   if (!sid) {
-    sid = await sessionStore.createSession(settings.model);
+    sid = await sessionStore.createSession(settings.model, undefined, undefined, settings.locale);
     chat.clearMessages();  // 新建会话时清空旧消息记录
   }
   chat.addUserMessage(prompt);

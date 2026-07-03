@@ -184,7 +184,9 @@
     "backToRoot": "回到工作区根目录",
     "openPreview": "在预览窗口中打开",
     "closePreview": "关闭预览",
-    "refresh": "刷新"
+    "refresh": "刷新",
+    "convertSuccess": "✓ 已转换为 {path}",
+    "docxSkillAvailable": "检测到 docx skill 已安装，可通过 CC 用 /docx 命令转换"
   },
 
   "preview": {

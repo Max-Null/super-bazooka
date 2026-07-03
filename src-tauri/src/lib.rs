@@ -224,8 +224,33 @@ async fn stop_session(
     state: State<'_, AppState>,
     session_id: String,
 ) -> Result<(), String> {
-    let mut pm = state.process_manager.lock().await;
-    pm.kill(&session_id).await?;
+    // 第一阶段：锁内提取 kill_tx 和 exit_notify（短暂持锁）
+    let (tx, notify) = {
+        let pm = state.process_manager.lock().await;
+        let proc = pm.get(&session_id)
+            .ok_or_else(|| format!("Session {} not found", session_id))?;
+        let mut managed = proc.lock().await;
+        let tx = managed.take_kill_tx();
+        let notify = managed.exit_notify.clone();
+        (tx, notify)
+    }; // ProcessManager 锁在此释放
+
+    // 第二阶段：无锁发 kill 信号
+    if let Some(tx) = tx {
+        let _ = tx.send(());
+    }
+
+    // 第三阶段：无锁等待进程退出
+    tokio::time::timeout(std::time::Duration::from_secs(5), notify.notified())
+        .await
+        .map_err(|_| "Kill timeout".to_string())?;
+
+    // 第四阶段：重新获取锁，清理进程注册
+    {
+        let mut pm = state.process_manager.lock().await;
+        pm.remove(&session_id);
+    }
+
     // Update status in DB
     let session = state.session_manager.lock().await;
     let _ = session.set_session_status(&session_id, "completed");
@@ -1155,8 +1180,10 @@ async fn zen_send_message(
     {
         let session = state.session_manager.lock().await;
         let msg_id = format!("{}-u", chrono_now());
-        let _ = session.save_message(&msg_id, &session_id, "user", &message, "{}");
-        let _ = session.auto_title_from_first_message(&session_id, &message);
+        // 统一使用 JSON 包装格式，与 CC 模式一致（避免纯文本恰好为合法 JSON 时误解析）
+        let content = serde_json::json!({"text": message}).to_string();
+        let _ = session.save_message(&msg_id, &session_id, "user", &content, "{}");
+        let _ = session.auto_title_from_first_message(&session_id, &content);
         let _ = session.set_session_status(&session_id, "running");
 
         // 加载历史消息构建多轮对话（不含刚存的——它已经是最新用户消息）
@@ -1184,7 +1211,11 @@ async fn zen_send_message(
         api_messages.push(serde_json::json!({"role": "user", "content": message}));
     }
 
-    let client = reqwest::Client::new();
+    // 设置连接超时（10s）和流读取整体超时（10min），防止网络挂起导致永久阻塞
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))?;
     let body = serde_json::json!({
         "model": model,
         "messages": api_messages,
@@ -1221,9 +1252,45 @@ async fn zen_send_message(
 
         // SSE 按行解析：每个 data: {...} 是一个事件
         // ponytail: 假设每个 bytes chunk 包含完整行，不做跨 chunk 拼接——data 行通常 < 1KB，不会被截断
-        while let Some(chunk) = stream.next().await {
-            match chunk {
-                Ok(bytes) => {
+        // 对每个 chunk 设置 120 秒超时，防止网络断开后流永久挂起
+        let chunk_timeout = std::time::Duration::from_secs(120);
+        loop {
+            let chunk_result = tokio::time::timeout(chunk_timeout, stream.next()).await;
+            match chunk_result {
+                Err(_elapsed) => {
+                    // 120 秒无新数据 → 超时
+                    let _ = handle.emit("stream-event", serde_json::json!({
+                        "type": "error",
+                        "session_id": sid,
+                        "error": "流读取超时（120秒无响应）",
+                        "is_final": true,
+                    }));
+                    let _ = handle.emit("process-exited", serde_json::json!({
+                        "session_id": sid,
+                        "exit_code": 1,
+                        "success": false,
+                    }));
+                    // 更新 DB 状态为 error
+                    let session = session_mgr.lock().await;
+                    let _ = session.set_session_status(&sid, "error");
+                    return;
+                }
+                Ok(None) => break, // 流正常结束
+                Ok(Some(Err(e))) => {
+                    let _ = handle.emit("stream-event", serde_json::json!({
+                        "type": "error",
+                        "session_id": sid,
+                        "error": format!("流读取错误: {}", e),
+                        "is_final": true,
+                    }));
+                    let _ = handle.emit("process-exited", serde_json::json!({
+                        "session_id": sid,
+                        "exit_code": 1,
+                        "success": false,
+                    }));
+                    return;
+                }
+                Ok(Some(Ok(bytes))) => {
                     let text = String::from_utf8_lossy(&bytes);
                     for line in text.lines() {
                         let line = line.trim();
@@ -1251,23 +1318,9 @@ async fn zen_send_message(
                             }
                         }
                     }
-                }
-                Err(e) => {
-                    let _ = handle.emit("stream-event", serde_json::json!({
-                        "type": "error",
-                        "session_id": sid,
-                        "error": format!("流读取错误: {}", e),
-                        "is_final": true,
-                    }));
-                    let _ = handle.emit("process-exited", serde_json::json!({
-                        "session_id": sid,
-                        "exit_code": 1,
-                        "success": false,
-                    }));
-                    return;
-                }
-            }
-        }
+                } // Ok(Some(Ok(bytes)))
+            } // match chunk_result
+        } // loop
 
         let duration_ms = start.elapsed().as_millis() as u64;
 
@@ -1424,6 +1477,8 @@ pub fn run() {
             install_claude_code,
             optimize_prompt,
             zen_send_message,
+            check_skill_installed,
+            convert_md_to_docx,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -1512,6 +1567,94 @@ async fn install_claude_code() -> Result<i32, String> {
     match result {
         Ok(status) => Ok(status.code().unwrap_or(-1)),
         Err(e) => Err(format!("启动安装程序失败: {e}")),
+    }
+}
+
+/// 检查 skill 是否已安装（自定义 skills 目录 + 插件缓存），与 ManagePanel 检测逻辑一致
+#[tauri::command]
+fn check_skill_installed(name: String) -> Result<bool, String> {
+    // 安全校验：skill 名只允许字母数字下划线连字符，拒绝路径穿越
+    if name.is_empty() || !name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
+        return Err(format!("无效的 skill 名称: {}", name));
+    }
+    let home = dirs::home_dir().ok_or("无法获取用户目录")?;
+    let claude_dir = home.join(".claude");
+
+    // 1. 检查自定义 skills：~/.claude/skills/<name>/SKILL.md
+    let custom_path = claude_dir.join("skills").join(&name).join("SKILL.md");
+    if custom_path.exists() {
+        return Ok(true);
+    }
+
+    // 2. 检查插件提供的 skills：~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/skills/<name>/
+    let plugins_cache = claude_dir.join("plugins").join("cache");
+    if let Ok(marketplaces) = std::fs::read_dir(&plugins_cache) {
+        for mp in marketplaces.flatten() {
+            if !mp.path().is_dir() { continue; }
+            if let Ok(plugins) = std::fs::read_dir(mp.path()) {
+                for plugin in plugins.flatten() {
+                    if !plugin.path().is_dir() { continue; }
+                    if let Ok(versions) = std::fs::read_dir(plugin.path()) {
+                        for ver in versions.flatten() {
+                            if !ver.path().is_dir() { continue; }
+                            let skill_md = ver.path().join("skills").join(&name).join("SKILL.md");
+                            if skill_md.exists() {
+                                return Ok(true);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(false)
+}
+
+/// 使用 pandoc 将 Markdown 转换为 docx，不经过 CC，不污染工作空间
+#[tauri::command]
+async fn convert_md_to_docx(input_path: String) -> Result<String, String> {
+    // 先 canonicalize（解析 ../ 和符号链接），再校验扩展名，防止 symlink 绕过
+    // innocent.md → /etc/passwd 这类符号链接：canonicalize 后扩展名不再是 .md
+    let input = std::fs::canonicalize(&input_path)
+        .map_err(|e| format!("无法解析路径: {}", e))?;
+    if !input.extension().map(|e| e.eq_ignore_ascii_case("md")).unwrap_or(false) {
+        return Err("仅支持 .md 文件转换为 docx".into());
+    }
+
+    // 输出路径：同目录下 .md → .docx
+    let output = input.with_extension("docx");
+    let output_str = output.to_string_lossy().to_string();
+
+    // 检查 pandoc 是否可用
+    let pandoc_check = std::process::Command::new("pandoc")
+        .arg("--version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+
+    match pandoc_check {
+        Ok(status) if status.success() => {
+            let input_str = input.to_string_lossy().to_string();
+            let result = tokio::process::Command::new("pandoc")
+                .arg(&input_str)
+                .arg("-o")
+                .arg(&output_str)
+                .output()
+                .await
+                .map_err(|e| format!("pandoc 执行失败: {}", e))?;
+
+            if result.status.success() {
+                Ok(output_str)
+            } else {
+                let stderr = String::from_utf8_lossy(&result.stderr);
+                Err(format!("pandoc 转换失败: {}", stderr.trim()))
+            }
+        }
+        _ => {
+            // pandoc 不可用 → 提示安装
+            Err("pandoc 未安装。请安装 pandoc：\n  Windows: choco install pandoc  或  winget install pandoc\n  macOS: brew install pandoc\n  Linux: apt install pandoc".into())
+        }
     }
 }
 

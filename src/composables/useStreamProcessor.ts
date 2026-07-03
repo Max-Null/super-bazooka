@@ -2,6 +2,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useI18n } from "vue-i18n";
 import { useChatStore, type ToolUse } from "@/stores/chat";
 import { useSessionStore } from "@/stores/session";
+import { useSettingsStore } from "@/stores/settings";
 import { useDebugLog } from "@/composables/useDebugLog";
 import { useStderrLog } from "@/composables/useStderrLog";
 import { storeClaudeSession, saveMessage, saveSessionDebugLog, saveSessionStderrLog, type StreamEvent, type ProcessExitedEvent } from "@/lib/tauri-bridge";
@@ -39,6 +40,7 @@ interface SessionCreatedPayload {
 export function useStreamProcessor() {
   const chat = useChatStore();
   const session = useSessionStore();
+  const settings = useSettingsStore();
   const debugLog = useDebugLog();
   const stderrLog = useStderrLog();
   const { t } = useI18n();
@@ -74,11 +76,12 @@ export function useStreamProcessor() {
 
     unlisten = await listen<StreamEvent>("stream-event", (event) => {
       const data = event.payload;
-      debugLog.add(`📨 event: ${data.type} | sid=${data.session_id} | text=${(data.text||'').slice(0,50)} | thinking=${(data.thinking||'').slice(0,50)} | final=${data.is_final}`);
+      debugLog.add(`📨 event: ${data.type} | sid=${data.session_id} | text=${(data.text||'').slice(0,50)} | thinking=${(data.thinking||'').slice(0,50)} | final=${data.is_final}`, data.session_id);
 
-      // 事件是否属于当前活跃会话（CC 或 Zen）
-      const isActive = data.session_id === session.activeSessionId
-        || data.session_id === session.zenActiveId;
+      // 事件是否属于当前模式下的活跃会话（CC 模式只看 activeSessionId，Zen 模式只看 zenActiveId）
+      const isActive = settings.zenMode
+        ? data.session_id === session.zenActiveId
+        : data.session_id === session.activeSessionId;
 
       // 事件属于后台会话 → 写入缓存，更新 activity 指示器
       if (data.session_id && !isActive) {
@@ -110,7 +113,12 @@ export function useStreamProcessor() {
             // 说明之前已通过 text_delta 增量事件接收过，只追加新后缀。
             // 对于不发送增量事件的后端（DeepSeek），currentContent 为空，
             // 完整事件的文本会被完整使用。
-            const currentContent = chat.currentAssistantMsg?.content || "";
+            // 兜底：若 currentAssistantMsg 已置 null（result 已处理），取最后一条已完成 assistant
+            // 消息的内容做 startsWith 比较，防止迟到事件创建重复消息。
+            const currentContent = chat.currentAssistantMsg?.content
+              || (chat.messages.length > 0 && chat.messages[chat.messages.length - 1].role === "assistant"
+                ? chat.messages[chat.messages.length - 1].content
+                : "");
             if (currentContent && data.text.startsWith(currentContent)) {
               const newPart = data.text.slice(currentContent.length);
               if (newPart) chat.appendText(newPart);
@@ -260,15 +268,18 @@ export function useStreamProcessor() {
       session.setClaudeSessionId(ourId, claudeSessionId);
       storeClaudeSession(ourId, claudeSessionId); // → Rust SessionManager
       if (mcpServers) session.connectedMcpServers = [...mcpServers];
-      debugLog.add(`🔗 session: ${ourId} → claude:${claudeSessionId}`);
+      debugLog.add(`🔗 session: ${ourId} → claude:${claudeSessionId}`, ourId);
     });
 
-    // Process exited: 仅当是活跃会话时才更新 UI 状态
+    // Process exited: 仅当退出的是当前模式的活跃会话时才更新 UI 状态
     unlistenProcessExit = await listen<ProcessExitedEvent>("process-exited", (event) => {
       const { session_id, exit_code, success } = event.payload;
-      debugLog.add(`🏁 process exited: ${session_id} code=${exit_code} ok=${success}`);
-      const isActiveExit = session_id === session.activeSessionId
-        || session_id === session.zenActiveId;
+      debugLog.add(`🏁 process exited: ${session_id} code=${exit_code} ok=${success}`, session_id);
+      // 仅判断当前模式的活跃会话（CC 模式只看 activeSessionId，Zen 模式只看 zenActiveId）
+      // 防止后台的另一个模式会话退出时错误清除 isProcessing
+      const isActiveExit = settings.zenMode
+        ? session_id === session.zenActiveId
+        : session_id === session.activeSessionId;
       if (session_id && !isActiveExit) {
         // 后台会话退出：若未正常 result，强制结束缓存中的流式消息
         if (!success) {

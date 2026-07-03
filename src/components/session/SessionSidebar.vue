@@ -22,7 +22,12 @@ const chatStore = useChatStore();
 const settings = useSettingsStore();
 
 const { handleNew } = useNewSession();
-const { switchTo } = useSessionSwitch();
+const { switchTo, zenSwitchTo } = useSessionSwitch();
+
+/** 按当前模式选择正确的切换函数 */
+function switchByMode(id: string) {
+  return settings.zenMode ? zenSwitchTo(id) : switchTo(id);
+}
 
 // 当前模式下的活跃会话 ID（禅模式用 zenActiveId，CC 用 activeSessionId）
 const activeId = computed(() =>
@@ -45,7 +50,7 @@ const filteredSessions = computed(() => {
 onMounted(async () => { await sessionStore.loadSessions(); });
 
 async function handleSelect(id: string) {
-  await switchTo(id);
+  await switchByMode(id);
 }
 
 function startRename(id: string, title: string) { editingId.value = id; editingTitle.value = title; }
@@ -57,11 +62,16 @@ async function finishRename(id: string) {
 function cancelRename() { editingId.value = null; }
 async function handleDelete(id: string) {
   const wasActive = activeId.value === id;
-  await sessionStore.deleteSession(id);
-  // 删除当前会话 → 清空消息，回到首页
-  if (wasActive) {
-    chatStore.clearMessages();
-    router.push("/chat");
+  await sessionStore.deleteSession(id);  // store 内赋值 activeSessionId 到下一个会话
+  // 竞态 guard：异步期间可能已切到其他会话，重新判断
+  if (wasActive && activeId.value === id) {
+    const nextId = sessionStore.sessions[0]?.id;
+    if (nextId) {
+      await switchByMode(nextId);
+    } else {
+      chatStore.clearMessages();
+      router.push("/chat");
+    }
   }
 }
 </script>

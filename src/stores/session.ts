@@ -8,16 +8,9 @@ import {
   type SessionData,
 } from "@/lib/tauri-bridge";
 
-/** 根据当前 locale 返回默认会话标题 */
-function defaultTitle(): string {
-  try {
-    const raw = localStorage.getItem("sb-ui-settings");
-    if (raw) {
-      const ui = JSON.parse(raw);
-      if (ui.locale === "en") return "New Chat";
-    }
-  } catch {}
-  return "新会话"; // 默认中文
+/** 根据 locale 返回默认会话标题 */
+export function defaultTitle(locale?: string): string {
+  return locale?.startsWith("en") ? "New Chat" : "新会话";
 }
 
 export interface Session {
@@ -72,9 +65,9 @@ export const useSessionStore = defineStore("session", () => {
     }
   }
 
-  /** Create a new session via backend，可指定 CWD 和 mode */
-  async function createSession(model?: string, cwd?: string, mode?: string): Promise<string> {
-    const title = defaultTitle();
+  /** Create a new session via backend，可指定 CWD 和 mode。locale 用于本地化默认标题 */
+  async function createSession(model?: string, cwd?: string, mode?: string, locale?: string): Promise<string> {
+    const title = defaultTitle(locale);
     try {
       const s = await createSessionBackend(model, cwd, mode, title);
       sessions.value.unshift(toLocalSession(s));

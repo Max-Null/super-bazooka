@@ -64,17 +64,28 @@ export const useChatStore = defineStore("chat", () => {
 
   // 会话消息缓存：切换会话时保留进行中的流式消息（DB 只有已完成的消息）
   const sessionCache = new Map<string, Message[]>();
+  const MAX_CACHE_SIZE = 20; // LRU 淘汰上限
 
   /** 将当前消息深拷贝存入缓存（切换会话前调用） */
   function saveSessionCache(sessionId: string) {
     if (!sessionId) return;
-    // JSON 深拷贝，避免引用污染（ponytail: WebView2 不保证 structuredClone）
     sessionCache.set(sessionId, JSON.parse(JSON.stringify(messages.value)));
+    // LRU 淘汰：超出上限时删除最旧条目
+    if (sessionCache.size > MAX_CACHE_SIZE) {
+      const firstKey = sessionCache.keys().next().value;
+      if (firstKey) sessionCache.delete(firstKey);
+    }
   }
 
-  /** 从缓存恢复消息；缓存无数据则返回 null */
+  /** 从缓存恢复消息；缓存无数据则返回 null。命中时将条目移到 LRU 末尾 */
   function loadFromCache(sessionId: string): Message[] | null {
-    return sessionCache.get(sessionId) ?? null;
+    const cached = sessionCache.get(sessionId);
+    if (cached) {
+      // LRU: 删除后重新插入，使其成为最新条目
+      sessionCache.delete(sessionId);
+      sessionCache.set(sessionId, cached);
+    }
+    return cached ?? null;
   }
 
   /**

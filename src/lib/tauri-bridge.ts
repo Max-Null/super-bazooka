@@ -352,6 +352,16 @@ export async function readFileBase64(path: string): Promise<string> {
   return invoke("read_file_base64", { path });
 }
 
+/** 检查 skill 是否已安装（Rust 后端扫描 ~/.claude/skills/ + 插件缓存） */
+export async function checkSkillInstalled(name: string): Promise<boolean> {
+  return invoke("check_skill_installed", { name });
+}
+
+/** 使用 pandoc 将 Markdown 转换为 docx，返回输出文件路径 */
+export async function convertMdToDocx(inputPath: string): Promise<string> {
+  return invoke("convert_md_to_docx", { inputPath });
+}
+
 /** 持久化会话 debug 日志 */
 export async function saveSessionDebugLog(sessionId: string, linesJson: string): Promise<void> {
   return invoke("save_session_debug_log", { sessionId, linesJson });

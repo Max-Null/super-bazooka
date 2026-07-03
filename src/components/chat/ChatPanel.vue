@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, nextTick, watch, onMounted } from "vue";
+import { ref, computed, nextTick, watch, onMounted } from "vue";
 import { useChatStore, type AttachedFile } from "@/stores/chat";
 import { useSessionStore } from "@/stores/session";
 import { useDebugLog } from "@/composables/useDebugLog";
@@ -58,6 +58,16 @@ function toolLabel(name: string): string {
   const translated = t(key);
   return translated !== key ? translated : name;
 }
+
+// 当前正在执行且未完成的工具名（用于 ThinkingIndicator）
+const activeToolName = computed(() => {
+  if (!chat.isProcessing) return undefined;
+  const msg = chat.currentAssistantMsg;
+  if (!msg?.toolUses.length) return undefined;
+  // 最后一个 tool_use 没有 result 说明正在执行中
+  const last = msg.toolUses[msg.toolUses.length - 1];
+  return last.result === undefined ? toolLabel(last.name) : undefined;
+});
 
 // 复制 debug 日志
 function copyDebugLog() {
@@ -200,7 +210,7 @@ register({ id: "rename-session", group: "session", labelKey: "command.renameSess
 register({ id: "delete-session", group: "session", labelKey: "command.deleteSession", keys: "Del", icon: "🗑️" });
 register({ id: "export-session", group: "session", labelKey: "command.exportSession", descKey: "command.exportSessionDesc", icon: "📤" });
 register({ id: "attach-file", group: "tools", labelKey: "command.attachFile", descKey: "command.attachFileDesc", icon: "📎" });
-watch(() => chatCommand.value.ts, (ts) => {
+watch(() => chatCommand.value.ts, async (ts) => {
   if (!ts) return;
   const action = chatCommand.value.action;
   switch (action) {
@@ -236,15 +246,7 @@ watch(() => chatCommand.value.ts, (ts) => {
     case "slash-clear": handleSend("/clear"); break;
     case "install-ponytail": handleSend("请帮我安装 Ponytail 插件（ponytail@claude-plugins-official）"); break;
     default:
-      if (action.startsWith("md-convert:")) {
-        // 来自 FilePreviewModal 的 MD → docx 转换指令
-        const msg = action.slice("md-convert:".length);
-        if (chat.isProcessing) {
-          inputBar.value?.setText(msg);
-        } else {
-          handleSend(msg);
-        }
-      } else if (action.startsWith("attach-dom:")) {
+      if (action.startsWith("attach-dom:")) {
         // 来自 FilePreview DOM 选择器 — 存为卡片，随下次消息一起发送
         const data = action.slice("attach-dom:".length);
         const lines = data.split("\n");
@@ -258,17 +260,30 @@ watch(() => chatCommand.value.ts, (ts) => {
           html: data,
         };
       } else if (action.startsWith("switch-workspace:")) {
-        // 处理中不切工作区，防止消息区域突然清空
-        if (chat.isProcessing) break;
         const newPath = action.slice("switch-workspace:".length);
+        // 先停止当前会话的 CC 进程（避免旧 cwd 的进程继续 emit 事件到新会话）
+        const sid = session.activeSessionId;
+        if (sid) {
+          try {
+            await sendStdin(sid, JSON.stringify({
+              type: "control_request",
+              request_id: `interrupt_${Date.now()}`,
+              request: { subtype: "interrupt" },
+            }));
+          } catch {}
+          // 给 CC 1 秒优雅退出，超时则强杀
+          await new Promise(r => setTimeout(r, 1000));
+          try { await stopSession(sid); } catch {}
+        }
         chat.clearMessages();
         isNearBottom.value = true;
         autoScroll.value = true;
-        session.createSession(settings.model, newPath).then(() => {
+        try {
+          await session.createSession(settings.model, newPath, undefined, settings.locale);
           showStatus(t('status.workspaceSwitched', { path: newPath }));
-        }).catch(() => {
+        } catch {
           showStatus(t('status.sessionCreateFailed'));
-        });
+        }
       } else {
         // 通用文本 → 作为普通消息发送给 CC
         handleSend(action);
@@ -373,14 +388,14 @@ async function handleSend(text: string) {
     sid = session.zenActiveId;
     if (!sid) {
       chat.clearMessages();
-      sid = await session.createSession(settings.model, undefined, "zen");
+      sid = await session.createSession(settings.model, undefined, "zen", settings.locale);
       session.zenActiveId = sid;
     }
   } else {
     sid = session.activeSessionId;
     if (!sid) {
       chat.clearMessages();  // 新建会话时清空旧消息记录
-      sid = await session.createSession(settings.model);
+      sid = await session.createSession(settings.model, undefined, undefined, settings.locale);
     }
   }
 
@@ -797,10 +812,11 @@ watch(
           />
         </TransitionGroup>
 
-        <!-- Processing indicator (initial phase, before any content arrives) -->
+        <!-- 处理中指示器：始终显示，思考阶段 → 工具执行阶段 -->
         <ThinkingIndicator
-          v-if="chat.isProcessing && !chat.currentAssistantMsg?.content && !chat.currentAssistantMsg?.thinking"
+          v-if="chat.isProcessing"
           :start-timestamp="chat.currentAssistantMsg?.timestamp"
+          :tool-name="activeToolName"
         />
       </div>
     </div>

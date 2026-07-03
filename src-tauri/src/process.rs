@@ -29,6 +29,13 @@ pub struct ManagedProcess {
     pub exit_notify: Arc<Notify>,
 }
 
+impl ManagedProcess {
+    /// 取出 kill 信号发送端（消费后无法再次发送），供外部调用方发送 kill 信号
+    pub fn take_kill_tx(&mut self) -> Option<oneshot::Sender<()>> {
+        self.kill_tx.take()
+    }
+}
+
 pub struct ProcessManager {
     processes: HashMap<String, Arc<Mutex<ManagedProcess>>>,
 }
@@ -54,26 +61,38 @@ impl ProcessManager {
         self.processes.get(id).cloned()
     }
 
-    /// Kill a session process gracefully (send kill_tx), then wait for exit_notify.
-    /// 会自动从 HashMap 清除，防止 send_message 往已关闭管道写入。
-    pub async fn kill(&mut self, id: &str) -> Result<(), String> {
-        let proc = self
-            .processes
-            .get(id)
-            .ok_or_else(|| format!("Session {} not found", id))?;
-        let mut proc = proc.lock().await;
+    /// 从管理器中移除进程注册（通常在进程已退出后调用）
+    pub fn remove(&mut self, id: &str) {
+        self.processes.remove(id);
+    }
 
-        if let Some(tx) = proc.kill_tx.take() {
+    /// Kill a session process gracefully (send kill_tx), then wait for exit_notify.
+    /// 分两阶段：锁内只取 kill_tx + exit_notify 的 clone，锁外发信号和等待，
+    /// 避免长时间持有 ProcessManager 锁阻塞 send_message 等其他操作。
+    pub async fn kill(&mut self, id: &str) -> Result<(), String> {
+        // 第一阶段：锁内取 kill_tx 和 exit_notify（短暂持锁）
+        let (tx, notify) = {
+            let proc = self
+                .processes
+                .get(id)
+                .ok_or_else(|| format!("Session {} not found", id))?;
+            let mut proc = proc.lock().await;
+            let tx = proc.take_kill_tx();
+            let notify = proc.exit_notify.clone();
+            (tx, notify)
+        }; // ManagedProcess 锁在此释放
+
+        // 第二阶段：无锁发送 kill 信号
+        if let Some(tx) = tx {
             let _ = tx.send(());
         }
 
-        // Wait for process exit (with timeout)
-        tokio::time::timeout(std::time::Duration::from_secs(5), proc.exit_notify.notified())
+        // 第三阶段：无锁等待进程退出（最多 5 秒）
+        tokio::time::timeout(std::time::Duration::from_secs(5), notify.notified())
             .await
             .map_err(|_| "Kill timeout".to_string())?;
 
-        // 进程已退出，从管理器中移除（否则 send_message 会误判进程仍存活）
-        drop(proc);
+        // 第四阶段：清理（重新获取 ProcessManager 锁）
         self.processes.remove(id);
 
         Ok(())

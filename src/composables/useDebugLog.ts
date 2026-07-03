@@ -22,13 +22,14 @@ export function createSessionLog(maxLines: number) {
       version.value++;
     }
 
-    function add(line: string) {
-      if (!currentSessionId) return;
-      if (!store[currentSessionId]) store[currentSessionId] = [];
-      const arr = store[currentSessionId];
+    function add(line: string, sid?: string) {
+      const targetId = sid || currentSessionId;
+      if (!targetId) return;
+      if (!store[targetId]) store[targetId] = [];
+      const arr = store[targetId];
       arr.push(line);
       if (arr.length > maxLines) {
-        store[currentSessionId] = arr.slice(-maxLines);
+        store[targetId] = arr.slice(-maxLines);
       }
       version.value++;
     }

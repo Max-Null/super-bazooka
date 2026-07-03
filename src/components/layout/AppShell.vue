@@ -36,7 +36,7 @@ const railActiveId = computed(() =>
 
 async function onRailNewSession() {
   if (settings.zenMode) {
-    const id = await sessionStore.createSession(settings.model, undefined, "zen");
+    const id = await sessionStore.createSession(settings.model, undefined, "zen", settings.locale);
     zenSwitchTo(id);
   } else {
     handleCommand("new-session");
@@ -104,7 +104,7 @@ function handleCommand(action: string) {
           zenSwitchTo(sessionStore.zenActiveId);
         } else {
           // 无禅模式会话则新建
-          sessionStore.createSession(settings.model, undefined, "zen").then(id => {
+          sessionStore.createSession(settings.model, undefined, "zen", settings.locale).then(id => {
             zenSwitchTo(id);
           });
         }

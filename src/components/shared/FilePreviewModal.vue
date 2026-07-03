@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { ref, watch, computed, onMounted, onUnmounted } from "vue";
 
-import { readFileContent, readFileBase64, getClaudeDir } from "@/lib/tauri-bridge";
+import { readFileContent, readFileBase64, checkSkillInstalled, convertMdToDocx } from "@/lib/tauri-bridge";
 import { highlightCode } from "@/composables/useHighlight";
 import { isImageFile, mimeType } from "@/composables/useFilePreview";
+import { emitChatCommand } from "@/composables/useCommandPalette";
 import MarkdownRenderer from "./MarkdownRenderer.vue";
 import mammoth from "mammoth";
 import DOMPurify from "dompurify";
-import { emitChatCommand } from "@/composables/useCommandPalette";
+import { useI18n } from "vue-i18n";
 
 const props = defineProps<{ file: { name: string; path: string } | null }>();
 const emit = defineEmits<{ close: [] }>();
@@ -38,27 +39,30 @@ function onIframeMessage(e: MessageEvent) {
 onMounted(() => window.addEventListener("message", onIframeMessage));
 onUnmounted(() => window.removeEventListener("message", onIframeMessage));
 
-/** 检查全局 docx skill 是否已安装（~/.claude/skills/docx/SKILL.md） */
-async function checkDocxSkill(): Promise<boolean> {
-  try {
-    const dir = await getClaudeDir();
-    const skillPath = dir.replace(/\.claude[\\/]?$/, "") + "skills/docx/SKILL.md";
-    await readFileContent(skillPath);
-    return true;
-  } catch {
-    return false;
-  }
-}
+const { t } = useI18n();
+const converting = ref(false);
+const convertStatus = ref("");  // 成功消息
+const convertError = ref("");   // 错误消息
 
-/** MD 文件 → 发送转 docx 指令（无 skill 则先安装） */
+/** MD → docx 转换（pandoc 直接转，不经过 CC，不污染工作空间） */
 async function sendConvertDocx() {
   if (!props.file) return;
-  const hasSkill = await checkDocxSkill();
-  const msg = hasSkill
-    ? `将 \`${props.file.path}\` 转换为 docx 格式，输出到原文件同级位置`
-    : `请先全局安装 docx skill：npx skills add https://github.com/anthropics/skills --skill docx，然后执行：将 \`${props.file.path}\` 转换为 docx 格式，输出到原文件同级位置`;
-  emitChatCommand(`md-convert:${msg}`);
-  emit("close");
+  converting.value = true;
+  convertStatus.value = "";
+  convertError.value = "";
+  try {
+    const outputPath = await convertMdToDocx(props.file.path);
+    convertStatus.value = t("file.convertSuccess", { path: outputPath });
+  } catch (e: any) {
+    convertError.value = typeof e === "string" ? e : (e?.message || String(e));
+    // 检查 docx skill 是否安装（fallback: 可通过 CC 用 /docx 转）
+    const hasDocxSkill = await checkSkillInstalled("docx");
+    if (hasDocxSkill) {
+      convertError.value += "\n\n" + t("file.docxSkillAvailable");
+    }
+  } finally {
+    converting.value = false;
+  }
 }
 
 function sendDomToChat() {
@@ -273,14 +277,16 @@ function extToLang(filename: string): string {
               }"
             >{{ t === 'edit' ? '编辑' : '预览' }}</button>
           </div>
-          <!-- MD → docx -->
+          <!-- MD → docx（pandoc 直接转换） -->
           <button
             v-if="fileKind === 'markdown'"
             @click="sendConvertDocx"
-            class="text-[11px] px-2.5 py-1 rounded font-medium transition-colors hover:opacity-80 shrink-0"
+            :disabled="converting"
+            class="text-[11px] px-2.5 py-1 rounded font-medium transition-colors shrink-0"
+            :class="converting ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-80'"
             style="background: var(--accent); color: var(--bg-root)"
-            title="发送转换指令到 CC"
-          >转 docx</button>
+            :title="converting ? '转换中…' : 'pandoc 直接转 docx（不经过 CC）'"
+          >{{ converting ? '⏳' : '转 docx' }}</button>
           <!-- 关闭 -->
           <button
             @click="emit('close')"
@@ -288,6 +294,11 @@ function extToLang(filename: string): string {
             style="color: var(--text-muted)"
           >&times;</button>
         </div>
+
+        <!-- 转换成功 -->
+        <div v-if="convertStatus" class="text-xs px-4 py-2 whitespace-pre-wrap" style="background: var(--bg-elevated); color: #22c55e; border-bottom: 1px solid var(--border-dim)">{{ convertStatus }}</div>
+        <!-- 转换失败 -->
+        <div v-if="convertError" class="text-xs px-4 py-2 whitespace-pre-wrap" style="background: var(--bg-elevated); color: var(--coral); border-bottom: 1px solid var(--border-dim)">{{ convertError }}</div>
 
         <!-- Body -->
         <div class="flex flex-col" style="background: var(--bg-root); height: calc(88vh - 48px)">

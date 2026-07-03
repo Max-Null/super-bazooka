@@ -184,7 +184,9 @@
     "backToRoot": "Back to workspace root",
     "openPreview": "Open in preview window",
     "closePreview": "Close preview",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "convertSuccess": "✓ Converted to {path}",
+    "docxSkillAvailable": "docx skill is installed. Use /docx command via CC as fallback."
   },
 
   "preview": {

@@ -16,7 +16,7 @@ export function useNewSession() {
   const settings = useSettingsStore();
 
   async function handleNew() {
-    await sessionStore.createSession(settings.model);
+    await sessionStore.createSession(settings.model, undefined, undefined, settings.locale);
     chatStore.clearMessages();
     debugLog.clear();
     router.push("/chat");

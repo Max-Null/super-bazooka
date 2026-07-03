@@ -69,7 +69,8 @@ function onSplitDragStart(e: MouseEvent) {
 onMounted(async () => {
   try {
     workspaceRoot.value = await getWorkspaceRoot();
-    rootPath.value = workspaceRoot.value;
+    // 优先使用外部传入的工作区路径（从 settings/SQLite 恢复），其次用自动检测的根目录
+    rootPath.value = props.navPath || workspaceRoot.value;
     files.value = await listDir(rootPath.value);
   } catch { workspaceRoot.value = ""; }
 });
@@ -79,6 +80,12 @@ watch(() => props.navCounter, async () => {
   const path = props.navPath;
   if (!path) return;
   collapsed.value = false;
+  rootPath.value = path;
+  try { files.value = await listDir(path); } catch {}
+});
+// navPath 变更 → 同步文件面板（覆盖刷新后 settings 从 SQLite 恢复的场景）
+watch(() => props.navPath, async (path) => {
+  if (!path || path === rootPath.value) return;
   rootPath.value = path;
   try { files.value = await listDir(path); } catch {}
 });

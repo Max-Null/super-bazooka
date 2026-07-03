@@ -74,7 +74,8 @@ describe("useStreamProcessor", () => {
   it("saves result to session_id from event, not activeSessionId", async () => {
     const chat = useChatStore();
     const session = useSessionStore();
-    session.setActiveSession("active-session");
+    // 事件必须匹配当前模式的活跃会话才能走 active 处理器（非 active 事件走后台缓存）
+    session.setActiveSession("event-session");
 
     chat.addUserMessage("hello");
     chat.startAssistantMessage();
