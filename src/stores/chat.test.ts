@@ -128,6 +128,7 @@ describe("chat store", () => {
     const chat = useChatStore();
     chat.addUserMessage("Hi");
     chat.startAssistantMessage();
+    chat.appendText("reply");  // 空消息会被 finishAssistantMessage 删除，需有内容
     chat.finishAssistantMessage();
     expect(chat.messages[1].durationMs).toBeUndefined();
     expect(chat.messages[1].inputTokens).toBeUndefined();

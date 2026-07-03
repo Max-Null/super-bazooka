@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { mount } from "@vue/test-utils";
+import { createPinia, setActivePinia } from "pinia";
 import { createI18n } from "vue-i18n";
 import MessageBubble from "./MessageBubble.vue";
 import type { Message } from "@/stores/chat";
@@ -19,6 +20,8 @@ const i18n = createI18n({
   },
 });
 
+beforeEach(() => setActivePinia(createPinia()));
+
 function makeMsg(overrides: Partial<Message> = {}): Message {
   return {
     id: "test-1",
@@ -26,6 +29,7 @@ function makeMsg(overrides: Partial<Message> = {}): Message {
     content: "",
     thinking: "",
     toolUses: [],
+    contentBlocks: [],
     timestamp: Date.now(),
     isStreaming: false,
     ...overrides,
@@ -47,7 +51,7 @@ describe("MessageBubble", () => {
   it("renders assistant message with C avatar", () => {
     const wrapper = mount(MessageBubble, {
       props: {
-        message: makeMsg({ role: "assistant", content: "Hello human" }),
+        message: makeMsg({ role: "assistant", content: "Hello human", contentBlocks: [{ type: "text", content: "Hello human" }] }),
       },
       global: { plugins: [i18n] },
     });
@@ -60,8 +64,8 @@ describe("MessageBubble", () => {
       props: {
         message: makeMsg({
           role: "assistant",
-          content: "Answer",
           thinking: "Step 1: analyze...",
+          contentBlocks: [{ type: "thinking", content: "Step 1: analyze..." }],
         }),
       },
       global: { plugins: [i18n] },
@@ -72,7 +76,7 @@ describe("MessageBubble", () => {
   it("does not show thinking section when empty", () => {
     const wrapper = mount(MessageBubble, {
       props: {
-        message: makeMsg({ role: "assistant", content: "Answer", thinking: "" }),
+        message: makeMsg({ role: "assistant", thinking: "", contentBlocks: [] }),
       },
       global: { plugins: [i18n] },
     });
@@ -85,14 +89,7 @@ describe("MessageBubble", () => {
       props: {
         message: makeMsg({
           role: "assistant",
-          toolUses: [
-            {
-              id: "tu_1",
-              name: "Bash",
-              input: { command: "ls" },
-              result: "file1.txt\nfile2.txt",
-            },
-          ],
+          contentBlocks: [{ type: "tool_use", toolUse: { id: "tu_1", name: "Bash", input: { command: "ls" } } }],
         }),
       },
       global: { plugins: [i18n] },
@@ -104,7 +101,7 @@ describe("MessageBubble", () => {
   it("shows streaming cursor when isStreaming", () => {
     const wrapper = mount(MessageBubble, {
       props: {
-        message: makeMsg({ role: "assistant", content: "partial", isStreaming: true }),
+        message: makeMsg({ role: "assistant", content: "partial", isStreaming: true, contentBlocks: [{ type: "text", content: "partial" }] }),
       },
       global: { plugins: [i18n] },
     });
@@ -114,7 +111,7 @@ describe("MessageBubble", () => {
   it("does not show streaming cursor when finished", () => {
     const wrapper = mount(MessageBubble, {
       props: {
-        message: makeMsg({ role: "assistant", content: "done", isStreaming: false }),
+        message: makeMsg({ role: "assistant", content: "done", isStreaming: false, contentBlocks: [{ type: "text", content: "done" }] }),
       },
       global: { plugins: [i18n] },
     });
@@ -133,7 +130,7 @@ describe("MessageBubble", () => {
           durationMs: 2345,
           inputTokens: 150,
           outputTokens: 80,
-          costUSD: 0.0042,
+          contentBlocks: [{ type: "text", content: "Done." }],
         }),
       },
       global: { plugins: [i18n] },
@@ -141,16 +138,16 @@ describe("MessageBubble", () => {
     expect(wrapper.text()).toContain("2.3s");
     expect(wrapper.text()).toContain("150");
     expect(wrapper.text()).toContain("80");
-    expect(wrapper.text()).toContain("0.0042");
   });
 
   it("shows stats only when finished, not streaming", () => {
-    // Streaming: no stats
+    // Streaming: no stats in the token row (only in timeline)
     const streaming = mount(MessageBubble, {
       props: {
         message: makeMsg({
           role: "assistant", content: "partial",
           isStreaming: true, durationMs: 500, inputTokens: 10,
+          contentBlocks: [{ type: "text", content: "partial" }],
         }),
       },
       global: { plugins: [i18n] },
@@ -160,13 +157,13 @@ describe("MessageBubble", () => {
       props: {
         message: makeMsg({
           role: "assistant", content: "done",
-          isStreaming: false, durationMs: 2345, inputTokens: 150, outputTokens: 80, costUSD: 0.0042,
+          isStreaming: false, durationMs: 2345, inputTokens: 150, outputTokens: 80,
+          contentBlocks: [{ type: "text", content: "done" }],
         }),
       },
       global: { plugins: [i18n] },
     });
     expect(finished.text()).toContain("2.3s");
-    expect(finished.text()).toContain("0.0042");
   });
 
   it("does not show token stats when no data", () => {

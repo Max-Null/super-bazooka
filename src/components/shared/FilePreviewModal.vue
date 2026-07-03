@@ -41,13 +41,11 @@ onUnmounted(() => window.removeEventListener("message", onIframeMessage));
 
 const { t } = useI18n();
 const converting = ref(false);
-const convertMsg = ref("");  // 提示消息
 
 /** MD → docx：检测 docx skill → 安装或直接发送给 CC */
 async function sendConvertDocx() {
   if (!props.file) return;
   converting.value = true;
-  convertMsg.value = "";
   const hasSkill = await checkSkillInstalled("docx");
   if (hasSkill) {
     // 已安装 → 直接发 /docx 指令给 CC
@@ -152,7 +150,6 @@ watch(() => props.file, async (f) => {
   content.value = "";
   previewHtml.value = "";
   error.value = "";
-  convertMsg.value = "";
   imageSrc.value = "";
   loading.value = true;
 
@@ -284,7 +281,7 @@ function extToLang(filename: string): string {
             class="text-[11px] px-2.5 py-1 rounded font-medium transition-colors shrink-0"
             :class="converting ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-80'"
             style="background: var(--accent); color: var(--bg-root)"
-            :title="converting ? '转换中…' : 'pandoc 直接转 docx（不经过 CC）'"
+            :title="converting ? '转换中…' : '通过 CC /docx skill 转为 docx'"
           >{{ converting ? '⏳' : '转 docx' }}</button>
           <!-- 关闭 -->
           <button

@@ -164,7 +164,7 @@ async function handleDelete(id: string) {
             :style="{ color: 'var(--text-muted)' }"
           >
             {{ formatTokenCount(s.totalTokens) }}
-            <span v-if="s.totalCost" class="ml-1">· ${{ s.totalCost.toFixed(3) }}</span>
+            <span v-if="settings.providerId === 'anthropic' && s.totalCost" class="ml-1">· ${{ s.totalCost.toFixed(3) }}</span>
           </span>
         </div>
 

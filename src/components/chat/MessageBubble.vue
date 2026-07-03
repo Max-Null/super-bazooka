@@ -2,12 +2,14 @@
 import type { Message } from "@/stores/chat";
 import { ref, computed, nextTick, onMounted, onUnmounted } from "vue";
 import { useI18n } from "vue-i18n";
+import { useSettingsStore } from "@/stores/settings";
 
 import { isImageFile, useFilePreview } from "@/composables/useFilePreview";
 import { formatNum } from "@/lib/utils";
 import MarkdownRenderer from "../shared/MarkdownRenderer.vue";
 
 const { t } = useI18n();
+const settings = useSettingsStore();
 const { getThumbnail, thumbnails } = useFilePreview();
 
 function toolLabel(name: string): string {
@@ -88,6 +90,9 @@ const totalLabel = computed(() => {
   const s = totalSeconds.value;
   return s ? `⏱${s}s` : "";
 });
+
+// 非 Anthropic 提供商的费用估算无意义
+const showCost = computed(() => settings.providerId === "anthropic");
 
 // ── 纯思考时间 ──
 const thinkingLabel = computed(() => {
@@ -248,15 +253,16 @@ function formatJSON(obj: unknown): string {
 
         <!-- 统计行：耗时 / token / cost -->
         <div
-          v-if="totalLabel || thinkingLabel || tokenLabel || message.costUSD !== undefined"
+          v-if="totalLabel || thinkingLabel || tokenLabel || (showCost && message.costUSD !== undefined)"
           class="flex items-center gap-2 text-[11px] mt-2"
           style="color: var(--text-muted)"
         >
           <span v-if="totalLabel" class="font-mono tabular-nums">{{ totalLabel }}</span>
           <span v-if="thinkingLabel" class="font-mono tabular-nums" style="opacity: 0.7">{{ thinkingLabel }}</span>
           <template v-if="!message.isStreaming">
-            <span v-if="tokenLabel">⏐ {{ tokenLabel }}</span>
-            <span v-if="message.costUSD !== undefined">${{ message.costUSD.toFixed(4) }}</span>
+            <span v-if="tokenLabel" style="opacity:0.5">·</span>
+            <span v-if="tokenLabel">{{ tokenLabel }}</span>
+            <span v-if="showCost && message.costUSD !== undefined">${{ message.costUSD.toFixed(4) }}</span>
           </template>
         </div>
       </div>
