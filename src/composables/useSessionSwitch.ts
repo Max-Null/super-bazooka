@@ -80,7 +80,9 @@ export function useSessionSwitch() {
 
     // 最终 guard：避免在已切换后还 push router
     if (currentActiveId(isZen) !== id) return;
-    router.push("/chat");
+    // 确保导航完成后再发事件（否则 ChatPanel 可能尚未挂载，监听器未注册）
+    await router.push("/chat").catch(() => {});
+    window.dispatchEvent(new CustomEvent("session-switched"));
   }
 
   async function switchTo(id: string) {

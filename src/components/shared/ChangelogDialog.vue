@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { ref, computed } from "vue";
 import { useI18n } from "vue-i18n";
 import ModalShell from "./ModalShell.vue";
 import { findEntry, getLastSeenVersion, markVersionSeen, APP_VERSION, localizedSections } from "@/data/changelog";
@@ -9,12 +9,13 @@ const { t, locale } = useI18n();
 const emit = defineEmits<{ close: [] }>();
 
 const entry = findEntry(APP_VERSION);
-const lastSeen = getLastSeenVersion();
-const show = computed(() => !!entry && lastSeen !== APP_VERSION);
+const lastSeen = ref(getLastSeenVersion());
+const show = computed(() => !!entry && lastSeen.value !== APP_VERSION);
 const sections = computed(() => entry ? localizedSections(entry, locale.value) : []);
 
 function onClose() {
   markVersionSeen(APP_VERSION);
+  lastSeen.value = APP_VERSION;
   emit("close");
 }
 </script>
@@ -51,14 +52,16 @@ function onClose() {
       </div>
     </div>
 
-    <div class="mt-5 pt-3 flex justify-end" :style="{ borderTop: '1px solid var(--border-dim)' }">
-      <button
-        @click="onClose"
-        class="px-4 py-1.5 rounded-lg text-sm font-medium transition-colors"
-        :style="{ background: 'var(--accent)', color: 'var(--bg-root)' }"
-      >
-        {{ $t('chat.close') }}
-      </button>
-    </div>
+    <template #footer>
+      <div class="flex justify-end">
+        <button
+          @click="onClose"
+          class="px-4 py-1.5 rounded-lg text-sm font-medium transition-colors"
+          :style="{ background: 'var(--accent)', color: 'var(--bg-root)' }"
+        >
+          {{ $t('chat.close') }}
+        </button>
+      </div>
+    </template>
   </ModalShell>
 </template>

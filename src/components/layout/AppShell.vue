@@ -219,14 +219,27 @@ watch(() => globalCommand.value.ts, () => {
   if (globalCommand.value.action) handleCommand(globalCommand.value.action);
 });
 
+const initializing = ref(true);
+
 onMounted(async () => {
-  // 工作区：store 已从 SQLite / localStorage 恢复，无记录才取默认根目录
-  if (!settings.cwd) {
-    try { settings.cwd = await getWorkspaceRoot(); } catch {}
+  // 并行初始化所有持久化数据：会话列表 + settings + 工作区
+  try {
+    await Promise.all([
+      sessionStore.loadSessions(),
+      settings.initFromDb(),
+      (async () => {
+        if (!settings.cwd) {
+          try { settings.cwd = await getWorkspaceRoot(); } catch {}
+        }
+      })(),
+    ]);
+  } catch {
+    // 所有子任务已有独立 catch，此处仅兜底——不会到达，但确保 initializing 必然复位
+  } finally {
+    initializing.value = false;
+    document.addEventListener("keydown", onGlobalKeydown);
+    document.addEventListener("fullscreenchange", onFullscreenChange);
   }
-  sessionStore.loadSessions().catch(() => {});
-  document.addEventListener("keydown", onGlobalKeydown);
-  document.addEventListener("fullscreenchange", onFullscreenChange);
 });
 
 onUnmounted(() => {
@@ -260,7 +273,13 @@ function openFilePanelTo(_path: string) {
 </script>
 
 <template>
-  <div class="h-screen flex flex-col" style="background:var(--bg-root)">
+  <!-- 启动画面：数据加载完成前显示 -->
+  <div v-if="initializing" class="h-screen flex flex-col items-center justify-center gap-4" style="background:var(--bg-root)">
+    <img src="/logo.svg" alt="90火" class="w-24 h-24" />
+    <span class="text-xs animate-pulse" style="color:var(--text-muted)">{{ $t('chat.loading') }}</span>
+  </div>
+
+  <div v-else class="h-screen flex flex-col" style="background:var(--bg-root)">
     <!-- Navbar -->
     <header
       class="sb-header flex items-center h-11 px-4 shrink-0 select-none"

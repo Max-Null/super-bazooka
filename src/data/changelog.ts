@@ -31,49 +31,87 @@ export const APP_VERSION: string = appPackage.version;
 // 按版本降序排列（最新在第一个）
 export const changelog: ChangelogEntry[] = [
   {
-    version: "0.4.1",
+    version: "0.5.0",
     date: "2026-07-04",
     sections: [
       {
-        titleZh: "文件面板右键菜单",
-        titleEn: "File Panel Context Menu",
+        titleZh: "文件面板右键菜单 + 文件操作",
+        titleEn: "File Panel Context Menu & Operations",
         itemsZh: [
           "右键菜单 9 项：复制 / 剪切 / 粘贴 / 删除 / 重命名 / 新建文件夹 / 在资源管理器中打开 / 复制路径 / 复制文件名",
-          "内联重命名：点击文件名直接编辑，Enter 确认",
-          "剪贴板跨目录共享，支持复制后粘贴到其他文件夹",
-          "操作完成后自动刷新目录列表",
-        ],
-        itemsEn: [
-          "9 context menu items: Copy / Cut / Paste / Delete / Rename / New Folder / Reveal in Explorer / Copy Path / Copy Name",
-          "Inline rename: click to edit filename, Enter to confirm",
-          "Cross-directory clipboard sharing",
-          "Auto-refresh after file operations",
-        ],
-      },
-      {
-        titleZh: "消息工具结果渲染",
-        titleEn: "Message Tool Result Rendering",
-        itemsZh: [
-          "CC 工具执行结果不再丢弃——展示在工具调用卡内部（成功 ✓ / 失败 ⚠️）",
+          "内联重命名 + 跨目录剪贴板共享，操作完成后自动刷新",
           "CC 修改工作区文件后自动通知文件面板刷新",
         ],
         itemsEn: [
-          "CC tool results are now displayed inside tool call cards (success ✓ / failure ⚠️)",
+          "9 context menu items: Copy / Cut / Paste / Delete / Rename / New Folder / Reveal in Explorer / Copy Path / Copy Name",
+          "Inline rename + cross-directory clipboard, auto-refresh after operations",
           "Auto-refresh file panel when CC modifies workspace files",
         ],
       },
       {
-        titleZh: "流处理修复",
-        titleEn: "Stream Processing Fixes",
+        titleZh: "消息工具结果渲染 + 流处理修复",
+        titleEn: "Tool Result Rendering & Stream Fixes",
         itemsZh: [
+          "CC 工具执行结果展示在工具调用卡内部（成功 ✓ / 失败 ⚠️）",
           "修复思考内容重复（跨 tool_use 的 thinking 累积去重）",
           "修复消息内容重复渲染（v-if 链被 isEditing 打断）",
           "兼容旧版 CC system/result 事件",
         ],
         itemsEn: [
+          "CC tool results displayed inside tool call cards (success ✓ / failure ⚠️)",
           "Fixed duplicate thinking content (cross-tool_use dedup)",
           "Fixed duplicate message rendering (broken v-if chain by isEditing)",
           "Legacy CC system/result event compatibility",
+        ],
+      },
+      {
+        titleZh: "文件编辑器 CodeMirror 可编辑",
+        titleEn: "Editable CodeMirror in File Preview",
+        itemsZh: [
+          "文件预览弹窗的「编辑」tab 改为真正的 CodeMirror 6 编辑器",
+          "Ctrl+S 保存、脏状态指示、关闭时未保存确认",
+        ],
+        itemsEn: [
+          "Edit tab in file preview now uses real CodeMirror 6 editor",
+          "Ctrl+S save, dirty state indicator, unsaved changes confirmation on close",
+        ],
+      },
+      {
+        titleZh: "版本更新弹窗",
+        titleEn: "What's New Dialog",
+        itemsZh: [
+          "启动时自动检测新版本，弹出更新内容摘要",
+          "中英双语，关闭后记录已读版本，同版本不重复弹出",
+        ],
+        itemsEn: [
+          "Auto-detect new version on startup and show changelog dialog",
+          "Bilingual, marks version as seen, won't show again for same version",
+        ],
+      },
+      {
+        titleZh: "设置页 UI 优化",
+        titleEn: "Settings Page UI Polish",
+        itemsZh: [
+          "Header 和 footer 固定，中间配置区域独立滚动",
+          "Footer 新增作者名 + GitHub 链接",
+        ],
+        itemsEn: [
+          "Sticky header and footer, scrollable content area",
+          "Author name + GitHub link in footer",
+        ],
+      },
+      {
+        titleZh: "启动体验优化",
+        titleEn: "Startup Experience",
+        itemsZh: [
+          "启动画面：数据加载期间显示 Logo + 加载动画，避免空白等待",
+          "并行初始化设置和会话，缩短启动时间",
+          "切换会话后自动滚动到聊天底部",
+        ],
+        itemsEn: [
+          "Splash screen with logo during data loading, no more blank wait",
+          "Parallel initialization of settings and sessions for faster startup",
+          "Auto-scroll to bottom when switching sessions",
         ],
       },
     ],

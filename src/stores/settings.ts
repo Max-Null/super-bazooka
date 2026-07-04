@@ -89,8 +89,6 @@ export const useSettingsStore = defineStore("settings", () => {
 
   // ── Provider 配置持久化 — SQLite ──
   const providerConfigs = ref<Record<string, ProviderConfig>>({});
-  // 启动时异步加载
-  loadProviderConfigs().then(cfgs => { providerConfigs.value = cfgs || {}; }).catch(() => {});
 
   /** 保存当前 provider 的配置到 SQLite */
   async function saveCurrentConfig() {
@@ -154,10 +152,14 @@ export const useSettingsStore = defineStore("settings", () => {
   }
 
   // 启动时获取自动检测的 claude 路径
-  resolveClaudePath().then(p => resolvedClaudePath.value = p).catch(() => {});
-
-  // 从 SQLite 恢复 UI 设置（不受 Tauri identifier 变更影响），优先于 localStorage
-  loadUiSettingsDb().then(json => {
+  // 启动时从 SQLite + settings.json 恢复所有配置（统一入口，供 AppShell await）
+  async function initFromDb() {
+    // 并行加载，哪个先到就用哪个
+    const tasks = [
+      loadProviderConfigs().then(cfgs => { providerConfigs.value = cfgs || {}; }).catch(() => {}),
+      resolveClaudePath().then(p => resolvedClaudePath.value = p).catch(() => {}),
+      // 从 SQLite 恢复 UI 设置（不受 Tauri identifier 变更影响），优先于 localStorage
+      loadUiSettingsDb().then(json => {
     try {
       const db = JSON.parse(json);
       if (db.optimizeApiUrl) optimizeApiUrl.value = db.optimizeApiUrl;
@@ -169,10 +171,9 @@ export const useSettingsStore = defineStore("settings", () => {
       if (db.cwd) cwd.value = db.cwd;
       if (db.recentWorkspaces) recentWorkspaces.value = db.recentWorkspaces;
     } catch {}
-  }).catch(() => {});
-
-  // 启动时从 ~/.claude/settings.json 加载配置
-  getClaudeSettings().then(s => {
+      }).catch(() => {}),
+      // 启动时从 ~/.claude/settings.json 加载配置
+      getClaudeSettings().then(s => {
     apiKey.value = s.api_key;
     baseUrl.value = s.base_url;
     model.value = s.model;
@@ -200,7 +201,10 @@ export const useSettingsStore = defineStore("settings", () => {
           permissionMode.value = s.permission_mode as PermissionMode;
         }
     }
-  }).catch(() => {});
+      }).catch(() => {}),
+    ];
+    await Promise.all(tasks);
+  }
 
   // 权限模式 → 解析为 settings.json 的 permissions.defaultMode
   function resolvePermissionMode(): string {
@@ -282,5 +286,5 @@ export const useSettingsStore = defineStore("settings", () => {
     else localStorage.removeItem("sb-current-workspace");
   });
 
-  return { apiKey, baseUrl, model, providerId, models, planMode, autoMode, permissionMode, effort, ponytailMode, theme, locale, fontSize, claudePath, optimizeApiUrl, zenMode, resolvedClaudePath, saveCurrentConfig, restoreConfig, cwd, recentWorkspaces, addRecentWorkspace };
+  return { apiKey, baseUrl, model, providerId, models, planMode, autoMode, permissionMode, effort, ponytailMode, theme, locale, fontSize, claudePath, optimizeApiUrl, zenMode, resolvedClaudePath, saveCurrentConfig, restoreConfig, cwd, recentWorkspaces, addRecentWorkspace, initFromDb };
 });

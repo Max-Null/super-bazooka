@@ -189,11 +189,18 @@ flowchart TB
 
 | Version | Date | Highlights |
 |---------|------|------------|
-| [0.4.1](docs/变更记录.md) | 2026-07-04 | File panel context menu, tool result rendering, stream fixes |
+| [0.5.0](docs/变更记录.md) | 2026-07-04 | File panel context menu, tool result rendering, CodeMirror editor, changelog dialog, settings UI polish |
 | [0.4.0](docs/变更记录.md) | 2026-07-04 | Message timeline, session audit, MD→docx |
 | [0.3.0](docs/变更记录.md) | 2026-07-03 | Core features, multi-provider, i18n |
 
 [Full changelog →](docs/变更记录.md)
+
+---
+
+## 🔮 Roadmap
+
+- **Memory management** — A better interface for browsing, editing, and managing Claude Code project memory
+- **Git integration** — Built-in git status, diff, commit, and branch operations
 
 ---
 

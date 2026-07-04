@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, nextTick, watch, onMounted } from "vue";
+import { ref, computed, nextTick, watch, onMounted, onUnmounted } from "vue";
 import { useChatStore, type AttachedFile } from "@/stores/chat";
 import { useSessionStore } from "@/stores/session";
 import { useDebugLog } from "@/composables/useDebugLog";
@@ -166,6 +166,12 @@ const autoModeActive = ref(settings.autoMode);
 onMounted(async () => {
   try { autoModeActive.value = await getAutoModeStatus(); }
   catch { autoModeActive.value = settings.autoMode; }
+  // 切换会话后自动滚到底部
+  window.addEventListener("session-switched", scrollToBottomInstant);
+});
+
+onUnmounted(() => {
+  window.removeEventListener("session-switched", scrollToBottomInstant);
 });
 
 // Sync on store change
