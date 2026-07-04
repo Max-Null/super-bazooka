@@ -239,6 +239,11 @@ export async function writeFile(path: string, content: string): Promise<void> {
   return invoke("write_file", { path, content });
 }
 
+/** 保存文件内容（无路径限制，供编辑保存使用） */
+export async function saveFileContent(path: string, content: string): Promise<void> {
+  return invoke("save_file_content", { path, content });
+}
+
 /** 删除文件或目录 */
 export async function deleteFile(path: string): Promise<void> {
   return invoke("delete_file", { path });

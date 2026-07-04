@@ -12,7 +12,9 @@ Super Bazooka is a clean, fast, developer‑friendly desktop interface for [Clau
 
 ![Chat interface](scripts/英文截图1.png)
 
-![Management panel](scripts/英文截图2.png)
+![CC management](scripts/英文截图2.png)
+
+![Markdown editor](scripts/英文截图3.png)
 
 ---
 
@@ -180,6 +182,18 @@ flowchart TB
     FRONTEND <-->|Tauri IPC| RUST
     RUST -->|spawn stdin/stdout/stderr| CLI
 ```
+
+---
+
+## 📋 Version History
+
+| Version | Date | Highlights |
+|---------|------|------------|
+| [0.4.1](docs/变更记录.md) | 2026-07-04 | File panel context menu, tool result rendering, stream fixes |
+| [0.4.0](docs/变更记录.md) | 2026-07-04 | Message timeline, session audit, MD→docx |
+| [0.3.0](docs/变更记录.md) | 2026-07-03 | Core features, multi-provider, i18n |
+
+[Full changelog →](docs/变更记录.md)
 
 ---
 

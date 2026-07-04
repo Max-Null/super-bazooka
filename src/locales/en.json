@@ -202,11 +202,19 @@
     "newFolderPrompt": "Enter folder name",
     "confirmDelete": "Are you sure you want to delete \"{name}\"? This cannot be undone.",
     "emptyDir": "Empty directory",
+    "unsavedChanges": "You have unsaved changes. Close anyway?",
     "convertSuccess": "✓ Converted to {path}",
     "docxSkillAvailable": "docx skill is installed. Use /docx command via CC as fallback."
   },
 
   "preview": {
+    "edit": "Edit",
+    "previewTab": "Preview",
+    "save": "Save",
+    "toDocx": "To docx",
+    "converting": "Converting…",
+    "convertDocx": "Convert to docx via CC /docx skill",
+    "noPreview": "No preview available",
     "loading": "Loading...",
     "unsupported": "Preview not available for this file type",
     "unsupportedHint": "Binary / proprietary format — open externally"

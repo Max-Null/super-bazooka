@@ -302,17 +302,17 @@ async function saveSettingsJson() {
 
 <template>
   <ErrorBoundary name="SettingsPanel">
-    <div class="sb-settings-panel flex flex-col" style="flex:1;min-height:0;overflow-y:auto;padding:2rem">
-      <!-- Header -->
-      <div class="flex items-center gap-3 mb-8">
+    <div class="sb-settings-panel flex flex-col" style="flex:1;min-height:0">
+      <!-- Header（固定顶部） -->
+      <div class="flex items-center gap-3 shrink-0 px-5 pt-3 pb-2">
         <button @click="router.push('/chat')" class="w-7 h-7 flex items-center justify-center rounded-md transition-colors hover:bg-[var(--bg-hover)]" style="color:var(--text-secondary)">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m15 18-6-6 6-6"/></svg>
         </button>
         <h2 class="text-lg font-semibold tracking-tight" style="color:var(--text-bright)">{{ $t('settings.title') }}</h2>
       </div>
 
-      <!-- 三区平铺 -->
-      <div class="flex flex-wrap gap-8 flex-1">
+      <!-- 三区平铺（可滚动） -->
+      <div class="flex flex-wrap gap-8 flex-1 overflow-y-auto px-5 pb-4">
 
         <!-- CC 配置 -->
         <section class="space-y-4 w-[300px] shrink-0">
@@ -730,10 +730,22 @@ async function saveSettingsJson() {
         </section>
       </div>
 
-      <!-- Footer：关于 -->
-      <footer class="mt-8 pt-4" style="border-top:1px solid var(--border-dim)">
+      <!-- Footer：关于（固定底部） -->
+      <footer class="shrink-0 px-5 py-2.5" style="border-top:1px solid var(--border-dim)">
         <div class="flex items-center justify-between text-[10px]" :style="{ color: 'var(--text-muted)' }">
-          <span>{{ $t('app.title') }}</span>
+          <div class="flex items-center gap-2">
+            <span>{{ $t('app.title') }}</span>
+            <span style="opacity:0.4">by MaxNull</span>
+            <a
+              href="https://github.com/MaxNull/cc-gui"
+              target="_blank"
+              class="hover:text-[var(--accent)] transition-colors"
+              :style="{ color: 'var(--text-muted)' }"
+              title="GitHub"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+            </a>
+          </div>
           <div class="flex items-center gap-3">
             <button
               class="hover:underline transition-colors"

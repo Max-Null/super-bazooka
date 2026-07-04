@@ -1,14 +1,29 @@
 <script setup lang="ts">
-import { ref, watch, computed, onMounted, onUnmounted } from "vue";
+import { ref, watch, computed, onMounted, onUnmounted, shallowRef, nextTick } from "vue";
 
-import { readFileContent, readFileBase64, checkSkillInstalled } from "@/lib/tauri-bridge";
-import { highlightCode } from "@/composables/useHighlight";
+import { readFileContent, readFileBase64, saveFileContent, checkSkillInstalled } from "@/lib/tauri-bridge";
 import { isImageFile, mimeType } from "@/composables/useFilePreview";
 import { emitChatCommand } from "@/composables/useCommandPalette";
 import MarkdownRenderer from "./MarkdownRenderer.vue";
 import mammoth from "mammoth";
 import DOMPurify from "dompurify";
 import { useI18n } from "vue-i18n";
+// CodeMirror 6（编辑 tab）
+import { EditorView, keymap, lineNumbers, highlightActiveLine } from "@codemirror/view";
+import { EditorState, Prec } from "@codemirror/state";
+import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
+import { syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language";
+import { oneDark } from "@codemirror/theme-one-dark";
+import { javascript } from "@codemirror/lang-javascript";
+import { python } from "@codemirror/lang-python";
+import { rust } from "@codemirror/lang-rust";
+import { css } from "@codemirror/lang-css";
+import { html } from "@codemirror/lang-html";
+import { json } from "@codemirror/lang-json";
+import { markdown } from "@codemirror/lang-markdown";
+import { sql } from "@codemirror/lang-sql";
+import { xml } from "@codemirror/lang-xml";
+import { yaml } from "@codemirror/lang-yaml";
 
 const props = defineProps<{ file: { name: string; path: string } | null }>();
 const emit = defineEmits<{ close: [] }>();
@@ -208,35 +223,119 @@ function onBackdrop(e: MouseEvent) {
 }
 
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === "Escape") emit("close");
+  if (e.key === "Escape") {
+    if (dirty.value) { confirmClose(); } else { emit("close"); }
+  }
 }
 
-/** 编辑 tab 的语法高亮内容 */
-const highlightedContent = computed(() => {
-  if (!props.file || !content.value) return "";
-  const lang = extToLang(props.file.name);
-  return lang ? highlightCode(content.value, lang) : content.value;
+// ── CodeMirror 编辑器 ──
+
+const editorContainer = ref<HTMLElement | null>(null);
+const editorView = shallowRef<EditorView | null>(null);
+const dirty = ref(false);
+const saving = ref(false);
+
+function cmLang(filename: string) {
+  const ext = filename.split(".").pop()?.toLowerCase();
+  switch (ext) {
+    case "ts": case "tsx": case "js": case "jsx": return javascript();
+    case "py": return python();
+    case "rs": return rust();
+    case "css": return css();
+    case "vue": case "svelte": return html();
+    case "json": return json();
+    case "md": return markdown();
+    case "sql": return sql();
+    case "xml": case "svg": return xml();
+    case "yaml": case "yml": return yaml();
+    default: return null;
+  }
+}
+
+function createEditor(doc: string) {
+  if (!editorContainer.value || !props.file) return;
+  editorView.value?.destroy();
+  const extensions = [
+    lineNumbers(),
+    highlightActiveLine(),
+    history(),
+    syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+    oneDark,
+    keymap.of([...defaultKeymap, ...historyKeymap]),
+    // Ctrl+S 通过 CodeMirror keymap 注册（而非 DOM @keydown，避免被编辑器吞事件）
+    Prec.high(keymap.of([{ key: "Mod-s", run: () => { saveFile(); return true; } }])),
+    EditorView.updateListener.of((update) => {
+      if (update.docChanged) dirty.value = true;
+    }),
+  ];
+  const lang = cmLang(props.file.name);
+  if (lang) extensions.push(lang);
+  editorView.value = new EditorView({
+    state: EditorState.create({ doc, extensions }),
+    parent: editorContainer.value,
+  });
+}
+
+function destroyEditor() {
+  editorView.value?.destroy();
+  editorView.value = null;
+}
+
+// 需要初始化/重建编辑器时调用
+function maybeCreateEditor() {
+  if (!editorView.value && content.value && props.file && hasEdit.value && activeTab.value === "edit") {
+    nextTick(() => createEditor(content.value));
+  }
+}
+
+// 文件切换时重建编辑器
+watch(() => props.file?.path, () => {
+  destroyEditor();
+  dirty.value = false;
+  maybeCreateEditor();
 });
 
-// ── extToLang（语法高亮用）──
-function extToLang(filename: string): string {
-  const ext = filename.split(".").pop()?.toLowerCase() || "";
-  const map: Record<string, string> = {
-    js: "javascript", ts: "typescript", tsx: "typescript", jsx: "javascript",
-    py: "python", rs: "rust", go: "go", java: "java", kt: "kotlin",
-    c: "c", h: "c", cpp: "cpp", hpp: "cpp", cs: "csharp",
-    rb: "ruby", php: "php", swift: "swift", r: "r", lua: "lua",
-    sh: "bash", bash: "bash", zsh: "bash",
-    ps1: "powershell", sql: "sql",
-    html: "xml", htm: "xml", xml: "xml", svg: "xml",
-    css: "css", scss: "css", less: "css",
-    json: "json", yaml: "yaml", yml: "yaml",
-    toml: "ini", ini: "ini", cfg: "ini", conf: "ini",
-    md: "markdown", mdx: "markdown",
-    dockerfile: "dockerfile", makefile: "makefile",
-    vue: "xml", svelte: "xml", graphql: "graphql", gql: "graphql",
-  };
-  return map[ext] || "";
+// 文件内容加载完成时初始化编辑器
+watch(content, (val) => {
+  if (val) maybeCreateEditor();
+});
+
+onMounted(() => maybeCreateEditor());
+onUnmounted(() => destroyEditor());
+
+// 切换到编辑 tab 时初始化编辑器
+watch(activeTab, (tab) => {
+  if (tab === "edit") maybeCreateEditor();
+});
+
+// ── 保存 ──
+
+async function saveFile() {
+  if (!props.file || !editorView.value || saving.value) return;
+  saving.value = true;
+  try {
+    const text = editorView.value.state.doc.toString();
+    await saveFileContent(props.file.path, text);
+    content.value = text;
+    dirty.value = false;
+  } catch (e) {
+    console.error("[FilePreviewModal] Save failed:", e);
+  } finally {
+    saving.value = false;
+  }
+}
+
+// ── 关闭确认 ──
+
+function confirmClose() {
+  if (confirm(t("file.unsavedChanges"))) {
+    dirty.value = false;
+    emit("close");
+  }
+}
+
+function handleClose() {
+  if (dirty.value) { confirmClose(); } else { emit("close"); }
 }
 </script>
 
@@ -272,9 +371,9 @@ function extToLang(filename: string): string {
                 background: activeTab === t ? 'var(--accent)' : 'transparent',
                 color: activeTab === t ? 'var(--bg-root)' : 'var(--text-muted)',
               }"
-            >{{ t === 'edit' ? '编辑' : '预览' }}</button>
+            >{{ t === 'edit' ? $t('preview.edit') : $t('preview.previewTab') }}</button>
           </div>
-          <!-- MD → docx（pandoc 直接转换） -->
+          <!-- MD → docx -->
           <button
             v-if="fileKind === 'markdown'"
             @click="sendConvertDocx"
@@ -282,11 +381,20 @@ function extToLang(filename: string): string {
             class="text-[11px] px-2.5 py-1 rounded font-medium transition-colors shrink-0"
             :class="converting ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-80'"
             style="background: var(--accent); color: var(--bg-root)"
-            :title="converting ? '转换中…' : '通过 CC /docx skill 转为 docx'"
-          >{{ converting ? '⏳' : '转 docx' }}</button>
+            :title="converting ? $t('preview.converting') : $t('preview.convertDocx')"
+          >{{ converting ? '⏳' : $t('preview.toDocx') }}</button>
+          <!-- 保存 -->
+          <button
+            v-if="activeTab === 'edit' && dirty"
+            @click="saveFile"
+            :disabled="saving"
+            class="text-[11px] px-2.5 py-1 rounded font-medium transition-colors shrink-0"
+            :class="saving ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-80'"
+            style="background: var(--accent); color: var(--bg-root)"
+          >{{ saving ? '…' : $t('preview.save') }}</button>
           <!-- 关闭 -->
           <button
-            @click="emit('close')"
+            @click="handleClose"
             class="w-7 h-7 flex items-center justify-center rounded-md transition-colors hover:bg-[var(--bg-hover)] shrink-0"
             style="color: var(--text-muted)"
           >&times;</button>
@@ -296,7 +404,7 @@ function extToLang(filename: string): string {
         <div class="flex flex-col" style="background: var(--bg-root); height: calc(88vh - 48px)">
           <!-- Loading -->
           <div v-if="loading" class="flex-1 flex items-center justify-center" style="color: var(--text-muted)">
-            <span class="text-xs">加载中…</span>
+            <span class="text-xs">{{ $t('chat.loading') }}</span>
           </div>
 
           <!-- Error -->
@@ -305,13 +413,15 @@ function extToLang(filename: string): string {
           <!-- Unsupported -->
           <div v-else-if="fileKind === 'unsupported'" class="flex-1 flex flex-col items-center justify-center gap-3">
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color: var(--text-muted); opacity: 0.4"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
-            <p class="text-sm" style="color: var(--text-muted)">不支持预览此文件类型</p>
+            <p class="text-sm" style="color: var(--text-muted)">{{ $t('preview.unsupported') }}</p>
           </div>
 
-          <!-- ── 编辑 tab：语法高亮代码（原设计）── -->
-          <div v-else-if="activeTab === 'edit'" class="flex-1 overflow-auto p-4">
-            <pre class="text-xs leading-relaxed font-mono rounded-lg overflow-x-auto" style="background: transparent; padding: 0"><code class="hljs" v-html="highlightedContent"></code></pre>
-          </div>
+          <!-- ── 编辑 tab：CodeMirror 编辑器 ── -->
+          <div
+            v-else-if="activeTab === 'edit'"
+            ref="editorContainer"
+            class="flex-1 overflow-auto"
+          ></div>
 
           <!-- ── 预览 tab ── -->
 
@@ -353,9 +463,14 @@ function extToLang(filename: string): string {
           <!-- Word 预览（mammoth HTML + CSS） -->
           <div v-else-if="fileKind === 'docx'" class="flex-1 overflow-auto p-5 docx-preview" v-html="previewHtml"></div>
 
-          <!-- 兜底：预览 tab 不可用 → 显示编辑内容 -->
-          <div v-else class="flex-1 overflow-auto p-4">
-            <pre class="text-xs leading-relaxed font-mono rounded-lg overflow-x-auto" style="background: transparent; padding: 0"><code class="hljs" v-html="highlightedContent"></code></pre>
+          <!-- 兜底：预览 tab 不可用 → CodeMirror 编辑器 -->
+          <div
+            v-else-if="hasEdit"
+            ref="editorContainer"
+            class="flex-1 overflow-auto"
+          ></div>
+          <div v-else class="flex-1 flex items-center justify-center" style="color: var(--text-muted)">
+            <span class="text-xs">{{ $t('preview.noPreview') }}</span>
           </div>
         </div>
       </div>

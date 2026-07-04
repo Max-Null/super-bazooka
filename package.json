@@ -1,6 +1,6 @@
 {
   "name": "super-bazooka",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Super Bazooka (90火) — A minimalist GUI client for Claude. Tauri 2 + Vue 3",
   "type": "module",
   "scripts": {

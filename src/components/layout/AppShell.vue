@@ -5,6 +5,7 @@ import SessionSidebar from "@/components/session/SessionSidebar.vue";
 import FilePanel from "@/components/files/FilePanel.vue";
 import CommandPalette from "@/components/shared/CommandPalette.vue";
 import ManagePanel from "@/components/shared/ManagePanel.vue";
+import ChangelogDialog from "@/components/shared/ChangelogDialog.vue";
 import { emitChatCommand, useGlobalCommandBus } from "@/composables/useCommandPalette";
 import { useNewSession } from "@/composables/useNewSession";
 import { useSessionSwitch } from "@/composables/useSessionSwitch";
@@ -529,6 +530,7 @@ function openFilePanelTo(_path: string) {
     </div>
 
     <CommandPalette @command="handleCommand" />
+    <ChangelogDialog />
     <ManagePanel :open="showManagePanel" @close="showManagePanel = false" />
   </div>
 </template>

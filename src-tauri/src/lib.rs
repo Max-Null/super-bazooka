@@ -485,18 +485,20 @@ async fn move_file(path: String, dest_dir: String) -> Result<String, String> {
         Ok(()) => Ok(new_path.to_string_lossy().to_string()),
         Err(e) if e.raw_os_error() == Some(17) => {
             // 跨设备/文件系统回退：复制后删除
-            if p.is_dir() {
-                copy_dir_recursive(&path, &new_path)
-                    .map_err(|_| format!("Failed to move (copy phase) '{}'", path))?;
-            } else {
+            // 符号链接无论指向什么，统一当文件处理（复制+删除链接本身）
+            if p.is_symlink() {
                 std::fs::copy(&path, &new_path)
                     .map_err(|_| format!("Failed to move (copy phase) '{}'", path))?;
-            }
-            // 删除源（ponytail: 复制成功后删除，不计较原子性）
-            if p.is_dir() {
+                std::fs::remove_file(&path)
+                    .map_err(|_| format!("Failed to move (delete phase) '{}'", path))?;
+            } else if p.is_dir() {
+                copy_dir_recursive(&path, &new_path)
+                    .map_err(|_| format!("Failed to move (copy phase) '{}'", path))?;
                 std::fs::remove_dir_all(&path)
                     .map_err(|_| format!("Failed to move (delete phase) '{}'", path))?;
             } else {
+                std::fs::copy(&path, &new_path)
+                    .map_err(|_| format!("Failed to move (copy phase) '{}'", path))?;
                 std::fs::remove_file(&path)
                     .map_err(|_| format!("Failed to move (delete phase) '{}'", path))?;
             }
@@ -604,6 +606,12 @@ async fn write_file(path: String, content: String) -> Result<(), String> {
     }
     std::fs::write(&resolved, &content)
         .map_err(|e| format!("写入文件失败 '{}': {}", path, e))
+}
+
+/// 保存文件内容（无路径限制，供文件预览弹窗编辑保存使用）
+#[tauri::command]
+async fn save_file_content(path: String, content: String) -> Result<(), String> {
+    std::fs::write(&path, &content).map_err(|e| format!("Failed to save '{}': {}", path, e))
 }
 
 /// 返回 ~/.claude 目录路径
@@ -1581,6 +1589,7 @@ pub fn run() {
             get_auto_mode_status,
             read_file_base64,
             write_file,
+            save_file_content,
             get_claude_dir,
             resolve_claude_path,
             get_claude_settings,
