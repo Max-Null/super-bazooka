@@ -75,7 +75,8 @@ pub enum UserContentBlock {
     #[serde(rename = "tool_result")]
     ToolResult {
         tool_use_id: String,
-        content: String,
+        // 多态：可以是 string、[{type:"text", text:"..."}]、或 null
+        content: Value,
         is_error: Option<bool>,
     },
 }
@@ -164,6 +165,7 @@ impl StreamLine {
                                     error: None,
                                     duration_ms: None, input_tokens: None, output_tokens: None, cost_usd: None,
                                     content_blocks: None,
+                                    tool_results: None,
                                 }
                             }
                             Some("input_json_delta") => {
@@ -179,6 +181,7 @@ impl StreamLine {
                                     error: None,
                                     duration_ms: None, input_tokens: None, output_tokens: None, cost_usd: None,
                                     content_blocks: None,
+                                    tool_results: None,
                                 }
                             }
                             _ => StreamFrontendEvent::empty(event_type, session_id),
@@ -201,6 +204,7 @@ impl StreamLine {
                                 error: None,
                                 duration_ms: None, input_tokens: None, output_tokens: None, cost_usd: None,
                                     content_blocks: None,
+                                    tool_results: None,
                             }
                         } else {
                             StreamFrontendEvent::empty(event_type, session_id)
@@ -222,7 +226,8 @@ impl StreamLine {
                             input_tokens: usage["input_tokens"].as_u64().map(|v| v as u32),
                             output_tokens: usage["output_tokens"].as_u64().map(|v| v as u32),
                             cost_usd: None,
-                                    content_blocks: None,
+                            content_blocks: None,
+                            tool_results: None,
                         }
                     }
                     _ => StreamFrontendEvent::empty(event_type, session_id),
@@ -257,13 +262,21 @@ impl StreamLine {
                                     texts.push(t.to_string());
                                 }
                             }
+                            // thinking 块字段名不稳定：某些版本用 "text" 代替 "thinking"
                             Some("thinking") => {
-                                if let Some(t) = block["thinking"].as_str() {
+                                let t = block["thinking"].as_str()
+                                    .or_else(|| block["text"].as_str())
+                                    .unwrap_or("");
+                                if !t.is_empty() {
                                     thinkings.push(t.to_string());
                                 }
                             }
                             Some("tool_use") => {
                                 tool_uses.push(block.clone());
+                            }
+                            // tool_result 也可能出现在 assistant 事件中（较少见但合法）
+                            Some("tool_result") => {
+                                // 在 assistant 分支中暂不独立处理，仅记录到 ordered_blocks
                             }
                             _ => {}
                         }
@@ -292,6 +305,7 @@ impl StreamLine {
                     output_tokens: self.inner["message"]["usage"]["output_tokens"].as_u64().map(|v| v as u32),
                     cost_usd: self.inner["total_cost_usd"].as_f64(),
                     content_blocks: if has_blocks { Some(ordered_blocks) } else { None },
+                    tool_results: None,
                 }
             }
             "result" => {
@@ -311,7 +325,8 @@ impl StreamLine {
                     input_tokens: usage["input_tokens"].as_u64().map(|v| v as u32),
                     output_tokens: usage["output_tokens"].as_u64().map(|v| v as u32),
                     cost_usd,
-                                    content_blocks: None,
+                    content_blocks: None,
+                    tool_results: None,
                 }
             },
             "control_request" => {
@@ -354,7 +369,80 @@ impl StreamLine {
                     input_tokens: None,
                     output_tokens: None,
                     cost_usd: None,
-                                    content_blocks: None,
+                    content_blocks: None,
+                    tool_results: None,
+                }
+            }
+            // user 事件携带 tool_result 块——工具执行结果。
+            // content 字段是多态的：string | [{type:"text", text:"..."}] | null，
+            // 通过 extract_tool_result_content() 归一化为纯文本。
+            "user" => {
+                let mut tool_results = Vec::new();
+                if let Some(content) = self.inner["message"]["content"].as_array() {
+                    for block in content {
+                        if block["type"].as_str() == Some("tool_result") {
+                            let raw_content = &block["content"];
+                            tool_results.push(ToolResultData {
+                                tool_use_id: block["tool_use_id"].as_str().unwrap_or("").to_string(),
+                                content: extract_tool_result_content(raw_content),
+                                is_error: block["is_error"].as_bool(),
+                            });
+                        }
+                    }
+                }
+                StreamFrontendEvent {
+                    event_type: "user".to_string(),
+                    session_id: session_id.to_string(),
+                    text: String::new(),
+                    thinking: String::new(),
+                    tool_use: None,
+                    control_request: None,
+                    is_final: false,
+                    error: None,
+                    duration_ms: None,
+                    input_tokens: None,
+                    output_tokens: None,
+                    cost_usd: None,
+                    content_blocks: None,
+                    tool_results: if tool_results.is_empty() { None } else { Some(tool_results) },
+                }
+            }
+            // system/result 是旧版 CC 的轮次结束事件（legacy），转换为等价 result 事件。
+            "system" => {
+                if self.inner["subtype"].as_str() == Some("result") {
+                    StreamFrontendEvent {
+                        event_type: "result".to_string(),
+                        session_id: session_id.to_string(),
+                        text: String::new(),
+                        thinking: String::new(),
+                        tool_use: None,
+                        control_request: None,
+                        is_final: true,
+                        error: None,
+                        duration_ms: self.inner["duration_ms"].as_u64(),
+                        input_tokens: self.inner["usage"]["input_tokens"].as_u64().map(|v| v as u32),
+                        output_tokens: self.inner["usage"]["output_tokens"].as_u64().map(|v| v as u32),
+                        cost_usd: self.inner["total_cost_usd"].as_f64(),
+                        content_blocks: None,
+                        tool_results: None,
+                    }
+                } else {
+                    StreamFrontendEvent {
+                        event_type: event_type.to_string(),
+                        session_id: session_id.to_string(),
+                        text: String::new(),
+                        thinking: String::new(),
+                        tool_use: None,
+                        control_request: None,
+                        is_final: false,
+                        error: None,
+                        duration_ms: None,
+                        input_tokens: None,
+                        output_tokens: None,
+                        cost_usd: None,
+                        content_blocks: None,
+                        tool_results: None,
+                    }
                 }
             }
             _ => StreamFrontendEvent {
@@ -370,7 +458,8 @@ impl StreamLine {
                 input_tokens: None,
                 output_tokens: None,
                 cost_usd: None,
-                                    content_blocks: None,
+                content_blocks: None,
+                tool_results: None,
             },
         }
     }
@@ -399,9 +488,31 @@ impl StreamFrontendEvent {
             error: None,
             duration_ms: None, input_tokens: None,
             output_tokens: None, cost_usd: None,
-                                    content_blocks: None,
+            content_blocks: None,
+            tool_results: None,
         }
     }
+}
+
+/// 归一化 tool_result.content 的三种形态 → 纯文本字符串。
+/// content 可以是：纯文本 string、块数组 [{type:"text", text:"..."}]、或 null。
+fn extract_tool_result_content(content: &Value) -> String {
+    match content {
+        Value::String(s) => s.clone(),
+        Value::Array(arr) => arr.iter()
+            .filter_map(|b| b["text"].as_str())
+            .collect::<Vec<_>>()
+            .join(""),
+        _ => String::new(),
+    }
+}
+
+/// 工具执行结果数据（从 user 事件的 tool_result 块中提取）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolResultData {
+    pub tool_use_id: String,
+    pub content: String,
+    pub is_error: Option<bool>,
 }
 
 /// Simplified event sent to the frontend
@@ -425,4 +536,176 @@ pub struct StreamFrontendEvent {
     /// 保持 CC 原始 content 块顺序的数组，解决"文字全堆在工具调用后面"的问题
     #[serde(default)]
     pub content_blocks: Option<Vec<Value>>,
+    /// 工具执行结果（从 user 事件的 tool_result 块中提取）
+    #[serde(default)]
+    pub tool_results: Option<Vec<ToolResultData>>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_extract_tool_result_content_string() {
+        let content = json!("plain text result");
+        assert_eq!(extract_tool_result_content(&content), "plain text result");
+    }
+
+    #[test]
+    fn test_extract_tool_result_content_array() {
+        let content = json!([
+            {"type": "text", "text": "line one\n"},
+            {"type": "text", "text": "line two"}
+        ]);
+        assert_eq!(extract_tool_result_content(&content), "line one\nline two");
+    }
+
+    #[test]
+    fn test_extract_tool_result_content_null() {
+        let content = json!(null);
+        assert_eq!(extract_tool_result_content(&content), "");
+    }
+
+    #[test]
+    fn test_user_event_with_tool_result() {
+        let raw = json!({
+            "type": "user",
+            "session_id": "test-sid",
+            "parent_tool_use_id": null,
+            "message": {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "call_abc123",
+                        "content": "file contents here",
+                        "is_error": false
+                    }
+                ]
+            }
+        });
+        let line = StreamLine { inner: raw };
+        let evt = line.to_frontend_event("test-sid");
+        assert_eq!(evt.event_type, "user");
+        assert_eq!(evt.text, "");
+        let trs = evt.tool_results.expect("should have tool_results");
+        assert_eq!(trs.len(), 1);
+        assert_eq!(trs[0].tool_use_id, "call_abc123");
+        assert_eq!(trs[0].content, "file contents here");
+        assert_eq!(trs[0].is_error, Some(false));
+    }
+
+    #[test]
+    fn test_user_event_with_tool_result_error() {
+        let raw = json!({
+            "type": "user",
+            "message": {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "call_err",
+                        "content": "command not found",
+                        "is_error": true
+                    }
+                ]
+            }
+        });
+        let line = StreamLine { inner: raw };
+        let evt = line.to_frontend_event("sid");
+        assert_eq!(evt.event_type, "user");
+        let trs = evt.tool_results.expect("should have tool_results");
+        assert_eq!(trs[0].is_error, Some(true));
+    }
+
+    #[test]
+    fn test_user_event_without_tool_result_is_empty() {
+        let raw = json!({
+            "type": "user",
+            "message": {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "some text"}
+                ]
+            }
+        });
+        let line = StreamLine { inner: raw };
+        let evt = line.to_frontend_event("sid");
+        assert_eq!(evt.event_type, "user");
+        assert!(evt.tool_results.is_none(), "should have no tool_results when no tool_result blocks");
+    }
+
+    #[test]
+    fn test_thinking_block_fallback_to_text_field() {
+        // 某些版本的 thinking 块使用 "text" 字段名而非 "thinking"
+        let raw = json!({
+            "type": "assistant",
+            "session_id": "test-sid",
+            "message": {
+                "role": "assistant",
+                "content": [
+                    {"type": "thinking", "text": "this uses text field"},
+                    {"type": "thinking", "thinking": "this uses thinking field"}
+                ]
+            }
+        });
+        let line = StreamLine { inner: raw };
+        let evt = line.to_frontend_event("test-sid");
+        // 两种形式都应被提取
+        assert_eq!(evt.thinking, "this uses text fieldthis uses thinking field");
+    }
+
+    #[test]
+    fn test_system_result_legacy_event() {
+        let raw = json!({
+            "type": "system",
+            "subtype": "result",
+            "session_id": "legacy-sid",
+            "duration_ms": 5000,
+            "usage": {
+                "input_tokens": 100,
+                "output_tokens": 50
+            },
+            "total_cost_usd": 0.01
+        });
+        let line = StreamLine { inner: raw };
+        let evt = line.to_frontend_event("legacy-sid");
+        assert_eq!(evt.event_type, "result");
+        assert!(evt.is_final);
+        assert_eq!(evt.duration_ms, Some(5000));
+        assert_eq!(evt.input_tokens, Some(100));
+        assert_eq!(evt.output_tokens, Some(50));
+    }
+
+    #[test]
+    fn test_stream_frontend_event_serialization() {
+        let evt = StreamFrontendEvent {
+            event_type: "user".to_string(),
+            session_id: "s1".to_string(),
+            text: String::new(),
+            thinking: String::new(),
+            tool_use: None,
+            control_request: None,
+            is_final: false,
+            error: None,
+            duration_ms: None,
+            input_tokens: None,
+            output_tokens: None,
+            cost_usd: None,
+            content_blocks: None,
+            tool_results: Some(vec![ToolResultData {
+                tool_use_id: "call_1".to_string(),
+                content: "result content".to_string(),
+                is_error: Some(false),
+            }]),
+        };
+        let json_str = serde_json::to_string(&evt).expect("serialization should succeed");
+        let parsed: Value = serde_json::from_str(&json_str).expect("deserialization should succeed");
+        assert_eq!(parsed["type"], "user");
+        let trs = parsed["tool_results"].as_array().expect("tool_results should exist");
+        assert_eq!(trs.len(), 1);
+        assert_eq!(trs[0]["tool_use_id"], "call_1");
+        assert_eq!(trs[0]["content"], "result content");
+    }
 }

@@ -1,6 +1,6 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useI18n } from "vue-i18n";
-import { useChatStore, type ToolUse, type ContentBlock } from "@/stores/chat";
+import { useChatStore, type ToolUse, type ContentBlock, type ToolResult } from "@/stores/chat";
 import { useSessionStore } from "@/stores/session";
 import { useSettingsStore } from "@/stores/settings";
 import { useDebugLog } from "@/composables/useDebugLog";
@@ -71,7 +71,7 @@ export function useStreamProcessor() {
     lastToolUse = tool;
   }
 
-  /** 将 toolUses 数组中的计时信息同步到 contentBlocks 的 tool_use 条目 */
+  /** 将 toolUses 数组中的计时信息和结果同步到 contentBlocks 的 tool_use 条目 */
   function syncBlockTimings(msg: import("@/stores/chat").Message | null) {
     if (!msg?.contentBlocks) return;
     const toolUses = msg.toolUses;
@@ -82,6 +82,9 @@ export function useStreamProcessor() {
         block.toolUse.thinkingDurationMs = match.thinkingDurationMs;
         block.toolUse.executionDurationMs = match.executionDurationMs;
         block.toolUse.startedAt = match.startedAt;
+        // 同步工具结果（从 user 事件回填）
+        if (match.result !== undefined) block.toolUse.result = match.result;
+        if (match.isError !== undefined) block.toolUse.isError = match.isError;
       }
     }
   }
@@ -108,15 +111,22 @@ export function useStreamProcessor() {
     for (const block of raw) {
       if (block.type === "text" || block.type === "thinking") {
         const txt: string = (block as any).text || (block as any).thinking || "";
-        const last = result[result.length - 1];
-        if (last?.type === block.type) {
-          const old = last.content || "";
-          // 新内容以旧内容开头 → 全量更新（Anthropic/CC 完整事件）
+        // 跨 tool_use 回查同类型上一个块——CC 完整事件中 thinking/text 被 tool_use
+        // 隔开时，新 thinking 是旧内容的累积扩展，需找到对应的旧块做 startsWith 去重。
+        let sameTypeLast: ContentBlock | undefined;
+        for (let j = result.length - 1; j >= 0; j--) {
+          if (result[j].type === block.type) {
+            sameTypeLast = result[j];
+            break;
+          }
+        }
+        if (sameTypeLast) {
+          const old = sameTypeLast.content || "";
           if (txt.startsWith(old)) {
-            last.content = txt;
+            sameTypeLast.content = txt;
           } else {
             // 不相关的新内容 → 追加（DeepSeek 增量事件）
-            last.content = old + txt;
+            sameTypeLast.content = old + txt;
           }
         } else {
           result.push({ type: block.type as "text" | "thinking", content: txt });
@@ -133,9 +143,34 @@ export function useStreamProcessor() {
             input: (block as any).input || {},
           },
         });
+      } else if (block.type === "tool_result") {
+        // tool_result 也可能出现在 assistant 事件的 content_blocks 中（较少见）
+        const trId = (block as any).tool_use_id || "";
+        // 去重：同 ID 已存在则跳过
+        if (trId && result.some(b => b.type === "tool_result" && b.toolResult?.toolUseId === trId)) continue;
+        result.push({
+          type: "tool_result",
+          toolResult: {
+            toolUseId: trId,
+            content: extractToolResultContent((block as any).content),
+            isError: (block as any).is_error,
+          },
+        });
       }
     }
     return result;
+  }
+
+  /** 归一化 tool_result.content 的三种形态 → 纯文本（辅助 buildContentBlocks 使用） */
+  function extractToolResultContent(content: unknown): string {
+    if (typeof content === "string") return content;
+    if (Array.isArray(content)) {
+      return content
+        .filter((b): b is { type: string; text: string } => b?.type === "text" && typeof b.text === "string")
+        .map(b => b.text)
+        .join("");
+    }
+    return "";
   }
 
   async function startListening() {
@@ -160,7 +195,7 @@ export function useStreamProcessor() {
           if (session.sessionActivity[data.session_id] !== 'blocked') {
             session.setSessionActivity(data.session_id, 'unread');
           }
-        } else if (data.type === 'assistant') {
+        } else if (data.type === 'assistant' || data.type === 'user') {
           if (session.sessionActivity[data.session_id] !== 'blocked') {
             session.setSessionActivity(data.session_id, 'processing');
           }
@@ -255,6 +290,22 @@ export function useStreamProcessor() {
           }
           break;
 
+        // user 事件携带 tool_result 块——工具执行结果
+        case "user": {
+          if (data.tool_results && chat.currentAssistantMsg) {
+            for (const tr of data.tool_results) {
+              // 结算对应工具的执行耗时（从 tool_use 发出到 tool_result 到达）
+              if (toolExecStart && lastToolUse?.id === tr.tool_use_id) {
+                lastToolUse.executionDurationMs = Date.now() - toolExecStart;
+                toolExecStart = 0;
+                lastToolUse = null;
+              }
+              chat.appendToolResult(tr.tool_use_id, tr.content, tr.is_error);
+            }
+          }
+          break;
+        }
+
         case "result":
         case "done": {
           // 活跃会话完成 → 用户正在看，无需指示器
@@ -307,6 +358,13 @@ export function useStreamProcessor() {
 
           // Desktop notification
           notifyComplete(data.duration_ms, data.input_tokens, data.output_tokens);
+
+          // CC 可能修改了工作区文件 → 通知文件面板刷新
+          if (msg) {
+            const fileModifiers = new Set(["Write", "Edit", "Bash", "PowerShell", "Skill", "Workflow", "Agent"]);
+            const didModify = msg.toolUses.some(tu => fileModifiers.has(tu.name));
+            if (didModify) window.dispatchEvent(new CustomEvent("cc-file-changed"));
+          }
           break;
         }
 

@@ -132,6 +132,15 @@ function formatJSON(obj: unknown): string {
   if (typeof obj === "string") return obj;
   return JSON.stringify(obj, null, 2);
 }
+
+/** 截断工具输出内容的首行或前 80 字符，用于折叠摘要 */
+function summarizeResult(content: string): string {
+  if (!content) return "";
+  // 取第一行（非空行），截断到 80 字符
+  const firstLine = content.trimStart().split("\n")[0] || "";
+  if (firstLine.length > 80) return firstLine.slice(0, 80) + "…";
+  return firstLine;
+}
 </script>
 
 <template>
@@ -191,12 +200,13 @@ function formatJSON(obj: unknown): string {
 
       <!-- ═══ 按时间线渲染（contentBlocks 可用时） ═══ -->
       <div v-if="message.contentBlocks?.length" class="sb-timeline">
-        <div
-          v-for="(block, i) in message.contentBlocks"
-          :key="i"
-          class="sb-timeline-block"
-          :class="['tl-' + block.type, { 'tl-last': i === message.contentBlocks.length - 1 && !message.isStreaming }]"
-        >
+        <!-- 跳过独立的 tool_result 块——结果已嵌套在 tool_use 内部展示 -->
+        <template v-for="(block, i) in message.contentBlocks" :key="i">
+          <div
+            v-if="block.type !== 'tool_result'"
+            class="sb-timeline-block"
+            :class="['tl-' + block.type, { 'tl-last': i === message.contentBlocks.length - 1 && !message.isStreaming }]"
+          >
           <!-- 时间线圆点 -->
           <div class="sb-timeline-dot">
             <span v-if="block.type === 'thinking'">💭</span>
@@ -216,7 +226,7 @@ function formatJSON(obj: unknown): string {
             <div class="tl-thinking-body">{{ block.content }}</div>
           </details>
 
-          <!-- 工具调用块 -->
+          <!-- 工具调用块（结果收进内部展示） -->
           <details
             v-else-if="block.type === 'tool_use' && block.toolUse"
             class="tl-tool"
@@ -226,8 +236,18 @@ function formatJSON(obj: unknown): string {
               <span v-if="block.toolUse.executionDurationMs" class="tl-stat" :class="{ 'tl-slow': block.toolUse.executionDurationMs > 5000 }">⚡{{ (block.toolUse.executionDurationMs / 1000).toFixed(1) }}s</span>
               <span v-if="!block.toolUse.executionDurationMs && block.toolUse.startedAt && message.isStreaming" class="tl-stat tl-live">⚡{{ ((now - block.toolUse.startedAt) / 1000).toFixed(1) }}s</span>
               <span class="tl-input-preview">{{ summarizeInput(block.toolUse.input) }}</span>
+              <!-- 结果简要标记 -->
+              <span v-if="block.toolUse.isError" class="tl-stat" style="color:var(--coral)">⚠️</span>
+              <span v-else-if="block.toolUse.result" class="tl-stat" style="color:var(--accent)">✓</span>
             </summary>
+            <!-- 输入参数 -->
+            <div class="tl-tool-section-label">{{ $t('chat.toolInput') }}</div>
             <pre>{{ formatJSON(block.toolUse.input) }}</pre>
+            <!-- 工具结果（嵌套在内部） -->
+            <div v-if="block.toolUse.result !== undefined" class="tl-tool-result" :class="{ 'tl-tool-result-error': block.toolUse.isError }">
+              <div class="tl-tool-section-label">{{ block.toolUse.isError ? $t('chat.toolError') : $t('chat.toolOutput') }}</div>
+              <pre class="tl-tool-result-body">{{ block.toolUse.result }}</pre>
+            </div>
           </details>
 
           <!-- 文本块 -->
@@ -235,6 +255,7 @@ function formatJSON(obj: unknown): string {
             <MarkdownRenderer :content="block.content" />
           </div>
         </div>
+        </template>
         <!-- 流式光标 -->
         <span v-if="message.isStreaming" class="stream-cursor" style="margin-left:20px"></span>
 
@@ -249,6 +270,15 @@ function formatJSON(obj: unknown): string {
           </span>
           <span v-else-if="message.wasStopped" :style="{ color: 'var(--coral)' }">— {{ $t('chat.stopped') }} —</span>
           <span v-else>— {{ $t('chat.completed') }} —</span>
+        </div>
+
+        <!-- 空文本兜底：模型未生成自然语言回复但有工具执行时，显示摘要 -->
+        <div
+          v-if="!message.isStreaming && !message.content && message.contentBlocks?.length && message.toolUses.length"
+          class="text-xs mt-2"
+          style="color: var(--text-muted); opacity: 0.6"
+        >
+          {{ $t('chat.toolsExecuted', { n: message.toolUses.filter(t => t.result).length }) }}
         </div>
 
         <!-- 统计行：耗时 / token / cost -->
@@ -302,9 +332,10 @@ function formatJSON(obj: unknown): string {
         </div>
       </div>
 
-      <!-- Assistant 消息兜底（无 contentBlocks 时显示纯文本） -->
+      <!-- Assistant 消息兜底（无 contentBlocks 时显示纯文本）。
+           注意：这里用 v-if 而非 v-else-if，因为上方 v-if="isEditing" 打断了链。 -->
       <div
-        v-else-if="message.role === 'assistant' && message.content"
+        v-if="!message.contentBlocks?.length && message.role === 'assistant' && message.content"
         class="prose text-sm leading-relaxed rounded-lg"
       >
         <MarkdownRenderer :content="message.content" />
@@ -313,7 +344,7 @@ function formatJSON(obj: unknown): string {
 
       <!-- 用户消息纯文本（无 contentBlocks） -->
       <div
-        v-else-if="message.role === 'user' && message.content"
+        v-if="!message.contentBlocks?.length && message.role === 'user' && message.content"
         class="px-3.5 py-2.5 rounded-2xl rounded-tr-md user-text prose text-sm leading-relaxed"
         :style="{ background: 'linear-gradient(135deg, rgba(59,130,246,0.15), rgba(99,102,241,0.10))', border: '1px solid rgba(59,130,246,0.15)', color: 'var(--text-bright)' }"
       >
@@ -393,9 +424,10 @@ function formatJSON(obj: unknown): string {
   border: 1.5px solid var(--border-dim);
   z-index: 1;
 }
-.tl-thinking .sb-timeline-dot  { border-color: var(--amber); }
-.tl-tool_use .sb-timeline-dot  { border-color: var(--violet); }
-.tl-text .sb-timeline-dot      { border-color: var(--border-bright); }
+.tl-thinking .sb-timeline-dot   { border-color: var(--amber); }
+.tl-tool_use .sb-timeline-dot   { border-color: var(--violet); }
+.tl-tool_result .sb-timeline-dot { border-color: var(--accent); }
+.tl-text .sb-timeline-dot       { border-color: var(--border-bright); }
 
 /* ── 各块 ── */
 .tl-thinking {
@@ -473,6 +505,86 @@ function formatJSON(obj: unknown): string {
   border-top: 1px solid var(--border-dim);
   color: var(--text-muted);
   max-height: 240px;
+}
+.tl-tool-section-label {
+  padding: 5px 10px 2px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+.tl-tool-result {
+  border-top: 1px solid var(--accent-dim);
+}
+.tl-tool-result.tl-tool-result-error {
+  border-top-color: var(--coral);
+}
+.tl-tool-result-body {
+  padding: 6px 10px 6px;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--text-secondary);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.tl-result {
+  font-size: 12px;
+  font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, monospace;
+  border-radius: 6px;
+  background: var(--bg-root);
+  border: 1px solid var(--accent-dim);
+}
+.tl-result.tl-result-error {
+  border-color: var(--coral);
+}
+.tl-result-summary {
+  padding: 5px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--accent);
+  transition: background 150ms;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  list-style: none;
+}
+.tl-result-summary::-webkit-details-marker { display: none; }
+.tl-result-summary:hover { background: rgba(255,255,255,0.03); }
+.tl-result-error .tl-result-summary {
+  color: var(--coral);
+}
+.tl-result-snippet {
+  color: var(--text-muted);
+  opacity: 0.7;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 320px;
+}
+.tl-result-empty {
+  color: var(--text-muted);
+  opacity: 0.4;
+}
+.tl-result-body {
+  padding: 8px 10px;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  border-top: 1px solid var(--border-dim);
+  color: var(--text-muted);
+  max-height: 300px;
+  overflow-y: auto;
 }
 
 .tl-text {

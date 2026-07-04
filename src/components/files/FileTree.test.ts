@@ -8,7 +8,7 @@ const i18n = createI18n({
   locale: "en",
   messages: {
     en: {
-      file: { title: "Files", empty: "Empty directory", reveal: "Reveal in Explorer", copyPath: "Copy Path", copyName: "Copy Name" },
+      file: { title: "Files", empty: "Empty directory", emptyDir: "Empty directory", reveal: "Reveal in Explorer", copyPath: "Copy Path", copyName: "Copy Name", copy: "Copy", cut: "Cut", paste: "Paste", pasteInto: "Paste here", delete: "Delete", rename: "Rename", newFolder: "New Folder", newFolderPrompt: "Enter folder name", confirmDelete: "Delete \"{name}\"?" },
     },
   },
 });
@@ -23,6 +23,11 @@ vi.mock("@tauri-apps/plugin-shell", () => ({
 vi.mock("@/lib/tauri-bridge", () => ({
   listDir: () => Promise.resolve([]),
   revealInExplorer: () => Promise.resolve(),
+  deleteFile: () => Promise.resolve(),
+  renameFile: () => Promise.resolve("/new"),
+  moveFile: () => Promise.resolve("/new"),
+  copyFile: () => Promise.resolve("/new"),
+  createDir: () => Promise.resolve(),
 }));
 
 const mockEntries = [

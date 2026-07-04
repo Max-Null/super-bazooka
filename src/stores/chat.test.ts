@@ -316,4 +316,92 @@ describe("chat store", () => {
     expect(md).toContain("Let me think...");
     expect(md).toContain("🔧 **Bash**");
   });
+
+  // ── appendToolResult ──
+
+  it("appendToolResult updates toolUse result and adds tool_result contentBlock", () => {
+    const chat = useChatStore();
+    chat.addUserMessage("Run");
+    chat.startAssistantMessage();
+    chat.addToolUse({ id: "t1", name: "Bash", input: { command: "ls" } });
+    // 建立 contentBlocks 时间线
+    chat.setContentBlocks([{ type: "tool_use", toolUse: { id: "t1", name: "Bash", input: { command: "ls" } } }]);
+
+    chat.appendToolResult("t1", "file1.txt\nfile2.txt", false);
+
+    const msg = chat.currentAssistantMsg!;
+    // toolUses 中对应工具被更新
+    expect(msg.toolUses[0].result).toBe("file1.txt\nfile2.txt");
+    expect(msg.toolUses[0].isError).toBe(false);
+    // contentBlocks 中追加了 tool_result
+    expect(msg.contentBlocks).toHaveLength(2);
+    expect(msg.contentBlocks![1].type).toBe("tool_result");
+    expect(msg.contentBlocks![1].toolResult!.toolUseId).toBe("t1");
+    expect(msg.contentBlocks![1].toolResult!.content).toBe("file1.txt\nfile2.txt");
+  });
+
+  it("appendToolResult with error flag", () => {
+    const chat = useChatStore();
+    chat.addUserMessage("Run");
+    chat.startAssistantMessage();
+    chat.addToolUse({ id: "t1", name: "Bash", input: { command: "bad" } });
+    chat.setContentBlocks([{ type: "tool_use", toolUse: { id: "t1", name: "Bash", input: { command: "bad" } } }]);
+
+    chat.appendToolResult("t1", "command not found", true);
+
+    expect(chat.currentAssistantMsg!.toolUses[0].result).toBe("command not found");
+    expect(chat.currentAssistantMsg!.toolUses[0].isError).toBe(true);
+    expect(chat.currentAssistantMsg!.contentBlocks![1].toolResult!.isError).toBe(true);
+  });
+
+  it("appendToolResult does nothing without currentAssistantMsg", () => {
+    const chat = useChatStore();
+    // 没有 startAssistantMessage → currentAssistantMsg 为 null → 不应崩溃
+    expect(() => chat.appendToolResult("t1", "result", false)).not.toThrow();
+  });
+
+  // ── synthesizeBlocks with tool_result ──
+
+  it("synthesizeBlocks includes tool_result when toolUses have results", () => {
+    const chat = useChatStore();
+    chat.addUserMessage("Run");
+    chat.startAssistantMessage();
+    chat.addToolUse({ id: "t1", name: "Bash", input: { command: "ls" } });
+    // 建立 contentBlocks 时间线（模拟 stream processor 的行为）
+    chat.setContentBlocks([{ type: "tool_use", toolUse: { id: "t1", name: "Bash", input: { command: "ls" } } }]);
+    chat.appendToolResult("t1", "output.txt", false);
+    chat.appendText("Done");
+    chat.finishAssistantMessage();
+
+    const blocks = chat.messages[1].contentBlocks!;
+    expect(blocks.some(b => b.type === "tool_use")).toBe(true);
+    expect(blocks.some(b => b.type === "tool_result")).toBe(true);
+    // text 通过 appendText 添加到 content，但 contentBlocks 中的 text 需要通过 buildContentBlocks 或 synthesizeBlocks
+    // finishAssistantMessage 保留现有的 contentBlocks，不重新合成
+    expect(blocks.some(b => b.type === "text") || chat.messages[1].content).toBeTruthy();
+  });
+
+  // ── loadMessages with tool_result in contentBlocks ──
+
+  it("loadMessages restores tool_result from contentBlocks JSON", () => {
+    const chat = useChatStore();
+    const json = JSON.stringify({
+      text: "",
+      thinking: "分析中...",
+      toolUses: [{ id: "t1", name: "Read", input: { file_path: "a.md" }, result: "content", isError: false }],
+      contentBlocks: [
+        { type: "thinking", content: "分析中..." },
+        { type: "tool_use", toolUse: { id: "t1", name: "Read", input: { file_path: "a.md" } } },
+        { type: "tool_result", toolResult: { toolUseId: "t1", content: "content", isError: false } },
+      ],
+      durationMs: 3000,
+    });
+    chat.loadMessages([{ id: "a1", role: "assistant", content: json, created_at: "2026-01-01T00:00:00" }]);
+
+    const msg = chat.messages[0];
+    expect(msg.contentBlocks).toHaveLength(3);
+    expect(msg.contentBlocks![2].type).toBe("tool_result");
+    expect(msg.contentBlocks![2].toolResult).toBeDefined();
+    expect(msg.contentBlocks![2].toolResult!.content).toBe("content");
+  });
 });

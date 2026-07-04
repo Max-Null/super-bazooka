@@ -1,12 +1,18 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref, onMounted, onUnmounted, inject, nextTick, type Ref } from "vue";
+import { useI18n } from "vue-i18n";
+import {
+  listDir, deleteFile, renameFile, moveFile, copyFile, createDir,
+  revealInExplorer as reveal, type FileEntry,
+} from "@/lib/tauri-bridge";
 
-import { listDir, revealInExplorer as reveal, type FileEntry } from "@/lib/tauri-bridge";
-
+const { t } = useI18n();
 
 const props = defineProps<{
   entries: FileEntry[];
   selected: string | null;
+  /** 文件操作后通知 FilePanel 刷新 */
+  onFileChanged?: () => void;
 }>();
 
 const emit = defineEmits<{
@@ -14,7 +20,21 @@ const emit = defineEmits<{
   navigateTo: [path: string];
 }>();
 
-// Context menu state
+// ═══ 剪贴板（通过 provide/inject 跨递归 FileTree 共享） ═══
+interface ClipState { path: string; name: string; op: "copy" | "cut" }
+const clip = inject<{ state: Ref<ClipState | null>; set: (v: ClipState | null) => void }>("file-clipboard");
+const clipState = clip?.state;
+const setClip = clip?.set;
+
+/** 提取文件所在目录路径 */
+function parentPath(filePath: string): string {
+  const p = filePath.lastIndexOf("\\");
+  const s = filePath.lastIndexOf("/");
+  const sep = Math.max(p, s);
+  return sep > 0 ? filePath.slice(0, sep) : filePath;
+}
+
+// ═══ 右键菜单 ═══
 const ctxMenu = ref<{ x: number; y: number; entry: FileEntry } | null>(null);
 
 function onContextMenu(e: MouseEvent, entry: FileEntry) {
@@ -26,21 +46,102 @@ function closeMenu() { ctxMenu.value = null; }
 onMounted(() => document.addEventListener("click", closeMenu));
 onUnmounted(() => document.removeEventListener("click", closeMenu));
 
+// ═══ 内联重命名 ═══
+const renamingPath = ref<string | null>(null);
+const renameInput = ref("");
+const renameRef = ref<HTMLInputElement | null>(null);
+const renaming = ref(false);  // 防 Enter+blur 双重提交
+
+function startRename(entry: FileEntry) {
+  closeMenu();
+  renamingPath.value = entry.path;
+  renameInput.value = entry.name;
+  nextTick(() => renameRef.value?.select());
+}
+
+async function commitRename(entry: FileEntry) {
+  if (renaming.value) return;  // 已在执行中，跳过
+  const newName = renameInput.value.trim();
+  renamingPath.value = null;
+  if (!newName || newName === entry.name) return;
+  renaming.value = true;
+  try {
+    await renameFile(entry.path, newName);
+    props.onFileChanged?.();
+  } catch (e) {
+    console.error("[FileTree] Rename failed:", e);
+  } finally {
+    renaming.value = false;
+  }
+}
+
+function cancelRename() { renamingPath.value = null; }
+
+// ═══ 删除 ═══
+async function doDelete(entry: FileEntry) {
+  closeMenu();
+  if (!confirm(t("file.confirmDelete", { name: entry.name }))) return;
+  try {
+    await deleteFile(entry.path);
+    props.onFileChanged?.();
+  } catch (e) {
+    console.error("[FileTree] Delete failed:", e);
+    alert(String(e));
+  }
+}
+
+// ═══ 复制 / 剪切 ═══
+async function doCopy(entry: FileEntry, op: "copy" | "cut") {
+  closeMenu();
+  setClip?.({ path: entry.path, name: entry.name, op });
+}
+
+// ═══ 粘贴 ═══
+async function doPaste(destDir: string) {
+  closeMenu();
+  if (!clipState?.value) return;
+  const src = clipState.value;
+  try {
+    if (src.op === "cut") {
+      await moveFile(src.path, destDir);
+    } else {
+      await copyFile(src.path, destDir);
+    }
+    setClip?.(null);
+    props.onFileChanged?.();
+  } catch (e) {
+    console.error("Paste failed:", e);
+  }
+}
+
+// ═══ 新建文件夹 ═══
+async function doNewFolder(parentDir: string) {
+  closeMenu();
+  const name = prompt(t("file.newFolderPrompt"));
+  if (!name?.trim()) return;
+  try {
+    // 跨平台路径拼接：避免硬编码 \\ 或 /
+    const sep = parentDir.includes("/") && !parentDir.includes("\\") ? "/" : "\\";
+    await createDir(parentDir + sep + name.trim());
+    props.onFileChanged?.();
+  } catch (e) {
+    console.error("Create dir failed:", e);
+  }
+}
+
+// ═══ 在文件管理器中打开 ═══
 async function revealInExplorer(entry: FileEntry) {
   closeMenu();
   try { await reveal(entry.path); } catch {}
 }
 
+// ═══ 复制路径/文件名 ═══
 async function copyToClipboard(text: string) {
   closeMenu();
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch {
-    // clipboard fallback handled silently
-  }
+  try { await navigator.clipboard.writeText(text); } catch {}
 }
 
-// Track expanded directories and their children
+// ═══ 展开/收起 ═══
 const expandedDirs = ref<Record<string, FileEntry[]>>({});
 const loadingDirs = ref<Record<string, boolean>>({});
 
@@ -49,14 +150,11 @@ async function toggleDir(entry: FileEntry) {
     emit("selectFile", entry);
     return;
   }
-
   const key = entry.path;
   if (expandedDirs.value[key]) {
-    // Collapse
     delete expandedDirs.value[key];
-    expandedDirs.value = { ...expandedDirs.value }; // trigger reactivity
+    expandedDirs.value = { ...expandedDirs.value };
   } else {
-    // Expand — load children
     loadingDirs.value[key] = true;
     loadingDirs.value = { ...loadingDirs.value };
     try {
@@ -74,11 +172,8 @@ async function toggleDir(entry: FileEntry) {
 function icon(isDir: boolean, name: string): string {
   if (isDir) {
     const key = name;
-    // Check if expanded
     for (const k in expandedDirs.value) {
-      if (k.endsWith("\\" + key) || k.endsWith("/" + key) || k === key) {
-        return "📂";
-      }
+      if (k.endsWith("\\" + key) || k.endsWith("/" + key) || k === key) return "📂";
     }
     return "📁";
   }
@@ -99,20 +194,32 @@ function sizeStr(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function isExpanded(path: string): boolean {
-  return !!expandedDirs.value[path];
-}
-
-function isLoading(path: string): boolean {
-  return !!loadingDirs.value[path];
-}
+function isExpanded(path: string): boolean { return !!expandedDirs.value[path]; }
+function isLoading(path: string): boolean { return !!loadingDirs.value[path]; }
 </script>
 
 <template>
   <div class="text-xs select-none leading-relaxed">
     <template v-for="entry in entries" :key="entry.path">
-      <!-- Entry row -->
+      <!-- ═══ 内联重命名 ═══ -->
+      <div v-if="renamingPath === entry.path" class="flex items-center gap-1.5 px-2 py-0.5">
+        <span class="w-3.5 shrink-0"></span>
+        <span class="text-xs shrink-0">{{ icon(entry.is_dir, entry.name) }}</span>
+        <input
+          ref="renameRef"
+          v-model="renameInput"
+          @keydown.enter="commitRename(entry)"
+          @keydown.escape="cancelRename"
+          @blur="commitRename(entry)"
+          class="flex-1 text-xs bg-transparent border rounded px-1 py-px outline-none"
+          :style="{ borderColor: 'var(--accent)', color: 'var(--text-bright)' }"
+        />
+        <span class="text-[10px] shrink-0" :style="{ color: 'var(--text-muted)' }">⏎</span>
+      </div>
+
+      <!-- ═══ 普通行 ═══ -->
       <div
+        v-else
         @click="toggleDir(entry)"
         @contextmenu="onContextMenu($event, entry)"
         :class="[
@@ -123,7 +230,6 @@ function isLoading(path: string): boolean {
         ]"
         :style="{ color: selected === entry.name ? 'var(--accent)' : 'var(--text-secondary)' }"
       >
-        <!-- Expand toggle for dirs -->
         <span
           v-if="entry.is_dir"
           class="w-3.5 shrink-0 text-center text-[10px]"
@@ -143,18 +249,19 @@ function isLoading(path: string): boolean {
         >{{ sizeStr(entry.size) }}</span>
       </div>
 
-      <!-- Children (if expanded) -->
+      <!-- ═══ 展开的子目录 ═══ -->
       <div v-if="entry.is_dir && isExpanded(entry.path)" class="ml-3.5 border-l"
         :style="{ borderColor: 'var(--border-dim)' }">
         <FileTree
           v-if="expandedDirs[entry.path]?.length"
           :entries="expandedDirs[entry.path]"
           :selected="selected"
+          :onFileChanged="onFileChanged"
           @selectFile="emit('selectFile', $event)"
           @navigateTo="emit('navigateTo', $event)"
         />
         <div v-else class="px-2 py-1 text-[10px]" :style="{ color: 'var(--text-muted)' }">
-          Empty
+          {{ $t('file.empty') }}
         </div>
       </div>
     </template>
@@ -164,14 +271,14 @@ function isLoading(path: string): boolean {
       class="px-2 py-4 text-center"
       :style="{ color: 'var(--text-muted)' }"
     >
-      Empty directory
+      {{ $t('file.emptyDir') }}
     </div>
 
-    <!-- Context menu -->
+    <!-- ═══ 右键菜单 ═══ -->
     <Teleport to="body">
       <div
         v-if="ctxMenu"
-        class="fixed z-50 py-1 rounded-lg shadow-lg border text-[11px] min-w-[160px]"
+        class="fixed z-50 py-1 rounded-lg shadow-lg border text-[11px] min-w-[180px]"
         :style="{
           left: ctxMenu.x + 'px',
           top: ctxMenu.y + 'px',
@@ -181,16 +288,47 @@ function isLoading(path: string): boolean {
         }"
         @click.stop
       >
-        <button
-          @click="revealInExplorer(ctxMenu.entry)"
+        <!-- 目录专用 -->
+        <template v-if="ctxMenu.entry.is_dir">
+          <button @click="doPaste(ctxMenu.entry.path)" :disabled="!clipState"
+            class="w-full text-left px-3 py-1.5 transition-colors flex items-center gap-2"
+            :class="clipState ? 'hover:bg-[var(--bg-hover)]' : ''"
+            :style="{ opacity: clipState ? 1 : 0.3 }"
+          >📥 {{ clipState ? $t('file.paste') : $t('file.paste') }}</button>
+          <button @click="doNewFolder(ctxMenu.entry.path)"
+            class="w-full text-left px-3 py-1.5 hover:bg-[var(--bg-hover)] transition-colors flex items-center gap-2"
+          >📁 {{ $t('file.newFolder') }}</button>
+          <div class="my-1 mx-2 border-t" :style="{ borderColor: 'var(--border-dim)' }"></div>
+        </template>
+        <!-- 通用操作 -->
+        <button @click="doCopy(ctxMenu.entry, 'copy')"
+          class="w-full text-left px-3 py-1.5 hover:bg-[var(--bg-hover)] transition-colors flex items-center gap-2"
+        >📋 {{ $t('file.copy') }}</button>
+        <button @click="doCopy(ctxMenu.entry, 'cut')"
+          class="w-full text-left px-3 py-1.5 hover:bg-[var(--bg-hover)] transition-colors flex items-center gap-2"
+        >✂️ {{ $t('file.cut') }}</button>
+        <template v-if="clipState">
+          <button @click="doPaste(parentPath(ctxMenu.entry.path))" :disabled="!clipState"
+            class="w-full text-left px-3 py-1.5 transition-colors flex items-center gap-2"
+            :class="clipState ? 'hover:bg-[var(--bg-hover)]' : ''"
+            :style="{ opacity: clipState ? 1 : 0.3 }"
+          >📥 {{ $t('file.pasteInto') }}</button>
+        </template>
+        <button @click="startRename(ctxMenu.entry)"
+          class="w-full text-left px-3 py-1.5 hover:bg-[var(--bg-hover)] transition-colors flex items-center gap-2"
+        >✏️ {{ $t('file.rename') }}</button>
+        <button @click="doDelete(ctxMenu.entry)"
+          class="w-full text-left px-3 py-1.5 hover:bg-[var(--bg-hover)] transition-colors flex items-center gap-2"
+          :style="{ color: 'var(--coral)' }"
+        >🗑️ {{ $t('file.delete') }}</button>
+        <div class="my-1 mx-2 border-t" :style="{ borderColor: 'var(--border-dim)' }"></div>
+        <button @click="revealInExplorer(ctxMenu.entry)"
           class="w-full text-left px-3 py-1.5 hover:bg-[var(--bg-hover)] transition-colors flex items-center gap-2"
         >📂 {{ $t('file.reveal') }}</button>
-        <button
-          @click="copyToClipboard(ctxMenu.entry.path)"
+        <button @click="copyToClipboard(ctxMenu.entry.path)"
           class="w-full text-left px-3 py-1.5 hover:bg-[var(--bg-hover)] transition-colors flex items-center gap-2"
-        >📋 {{ $t('file.copyPath') }}</button>
-        <button
-          @click="copyToClipboard(ctxMenu.entry.name)"
+        >🔗 {{ $t('file.copyPath') }}</button>
+        <button @click="copyToClipboard(ctxMenu.entry.name)"
           class="w-full text-left px-3 py-1.5 hover:bg-[var(--bg-hover)] transition-colors flex items-center gap-2"
         >📝 {{ $t('file.copyName') }}</button>
       </div>

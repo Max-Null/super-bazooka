@@ -31,6 +31,12 @@ export interface StreamEvent {
   cost_usd?: number;
   is_final: boolean;
   error?: string;
+  /** 工具执行结果（从 user 事件中提取） */
+  tool_results?: Array<{
+    tool_use_id: string;
+    content: string;
+    is_error?: boolean;
+  }>;
 }
 
 /**
@@ -231,6 +237,31 @@ export async function getWorkspaceRoot(): Promise<string> {
 
 export async function writeFile(path: string, content: string): Promise<void> {
   return invoke("write_file", { path, content });
+}
+
+/** 删除文件或目录 */
+export async function deleteFile(path: string): Promise<void> {
+  return invoke("delete_file", { path });
+}
+
+/** 重命名文件，返回新路径 */
+export async function renameFile(path: string, newName: string): Promise<string> {
+  return invoke("rename_file", { path, newName });
+}
+
+/** 移动文件到目标目录，返回新路径 */
+export async function moveFile(path: string, destDir: string): Promise<string> {
+  return invoke("move_file", { path, destDir });
+}
+
+/** 复制文件到目标目录，返回新路径 */
+export async function copyFile(path: string, destDir: string): Promise<string> {
+  return invoke("copy_file", { path, destDir });
+}
+
+/** 创建目录 */
+export async function createDir(path: string): Promise<void> {
+  return invoke("create_dir", { path });
 }
 
 export async function getClaudeDir(): Promise<string> {

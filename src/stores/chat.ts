@@ -39,13 +39,22 @@ export interface ToolUse {
   startedAt?: number;
 }
 
+/** 工具执行结果（来自 user 事件的 tool_result 块） */
+export interface ToolResult {
+  toolUseId: string;
+  content: string;
+  isError?: boolean;
+}
+
 /** CC 内容块（保持原始顺序），解决"文字全堆在工具调用后面"的问题 */
 export interface ContentBlock {
-  type: "text" | "thinking" | "tool_use";
+  type: "text" | "thinking" | "tool_use" | "tool_result";
   /** text/thinking 块的文本内容 */
   content?: string;
   /** tool_use 块的工具信息 */
   toolUse?: ToolUse;
+  /** tool_result 块的执行结果 */
+  toolResult?: ToolResult;
 }
 
 export interface ControlRequest {
@@ -143,6 +152,22 @@ export const useChatStore = defineStore("chat", () => {
       if (event.input_tokens != null) last.inputTokens = event.input_tokens;
       if (event.output_tokens != null) last.outputTokens = event.output_tokens;
       if (event.cost_usd != null) last.costUSD = event.cost_usd;
+    } else if (event.type === 'user' && event.tool_results) {
+      // 后台会话：追加工具执行结果（无对应 assistant 消息时跳过，不创建幽灵消息）
+      if (!last || last.role !== 'assistant') return;
+      for (const tr of event.tool_results) {
+        const tu = last.toolUses.find((t: ToolUse) => t.id === tr.tool_use_id);
+        if (tu) {
+          tu.result = tr.content;
+          tu.isError = tr.is_error;
+        }
+        if (last.contentBlocks) {
+          last.contentBlocks.push({
+            type: 'tool_result',
+            toolResult: { toolUseId: tr.tool_use_id, content: tr.content, isError: tr.is_error },
+          });
+        }
+      }
     } else if (event.type === 'result' || event.type === 'done') {
       if (last && last.isStreaming) {
         last.isStreaming = false;
@@ -233,6 +258,33 @@ export const useChatStore = defineStore("chat", () => {
         usedAgents.value = next;
       }
     }
+  }
+
+  /** 追加工具执行结果，同时更新 toolUses 数组和 contentBlocks 时间线 */
+  function appendToolResult(toolUseId: string, content: string, isError?: boolean) {
+    const msg = currentAssistantMsg.value;
+    if (!msg) return;
+
+    // 1. 更新 toolUses 数组中对应工具的 result
+    const toolUse = msg.toolUses.find(t => t.id === toolUseId);
+    if (toolUse) {
+      toolUse.result = content;
+      toolUse.isError = isError;
+    }
+
+    // 2. 初始化 contentBlocks（如果需要）
+    if (!msg.contentBlocks) {
+      msg.contentBlocks = [];
+    }
+    // 3. 在 contentBlocks 末尾追加 tool_result 块
+    msg.contentBlocks.push({
+      type: "tool_result",
+      toolResult: {
+        toolUseId,
+        content,
+        isError,
+      },
+    });
   }
 
   function markStopped() {
@@ -368,6 +420,17 @@ export const useChatStore = defineStore("chat", () => {
     if (thinking) blocks.push({ type: "thinking", content: thinking });
     for (const tu of toolUses) {
       blocks.push({ type: "tool_use", toolUse: tu });
+      // 如果从 JSON blob 恢复了 tool_result 数据，也一起合成
+      if (tu.result !== undefined) {
+        blocks.push({
+          type: "tool_result",
+          toolResult: {
+            toolUseId: tu.id,
+            content: tu.result || "",
+            isError: tu.isError,
+          },
+        });
+      }
     }
     if (text) blocks.push({ type: "text", content: text });
     return blocks;
@@ -445,6 +508,7 @@ export const useChatStore = defineStore("chat", () => {
     appendText,
     appendThinking,
     addToolUse,
+    appendToolResult,
     setContentBlocks,
     addControlRequest,
     resolveControlRequest,

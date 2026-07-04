@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch, provide, type Ref } from "vue";
 
 import { listDir, readFileContent, readFileBase64, getWorkspaceRoot, type FileEntry } from "@/lib/tauri-bridge";
 import mammoth from "mammoth";
@@ -22,6 +22,12 @@ const selectedFile = ref<string | null>(null);
 const selectedFilePath = ref("");  // 完整路径，openModalPreview 从子目录选中文件时使用
 const previewContent = ref("");
 const previewFile = ref<{ name: string; path: string } | null>(null);
+
+// ═══ 文件剪贴板（跨递归 FileTree 共享） ═══
+interface ClipState { path: string; name: string; op: "copy" | "cut" }
+const clipState = ref<ClipState | null>(null);
+function setClip(v: ClipState | null) { clipState.value = v; }
+provide("file-clipboard", { state: clipState as Ref<ClipState | null>, set: setClip });
 
 // Drag-to-resize panel width
 const draggingPanel = ref(false);
@@ -66,6 +72,9 @@ function onSplitDragStart(e: MouseEvent) {
   document.addEventListener("mouseup", onUp);
 }
 
+// CC 修改工作区文件后自动刷新文件面板
+function onCcFileChanged() { refreshDir(); }
+
 onMounted(async () => {
   try {
     workspaceRoot.value = await getWorkspaceRoot();
@@ -73,6 +82,11 @@ onMounted(async () => {
     rootPath.value = props.navPath || workspaceRoot.value;
     files.value = await listDir(rootPath.value);
   } catch { workspaceRoot.value = ""; }
+  window.addEventListener("cc-file-changed", onCcFileChanged);
+});
+
+onUnmounted(() => {
+  window.removeEventListener("cc-file-changed", onCcFileChanged);
 });
 
 // Listen for external navigation signal (e.g. header CWD click)
@@ -220,9 +234,6 @@ function goUp() {
           <button @click="goRoot" class="hover:text-[var(--accent)] transition-colors shrink-0 mr-0.5" :title="$t('file.backToRoot')">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
           </button>
-          <button @click="refreshDir" class="hover:text-[var(--accent)] transition-colors shrink-0 mr-1.5" :title="$t('file.refresh')">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
-          </button>
           <template v-for="(seg, i) in pathSegments" :key="seg.fullPath">
             <span class="text-[10px]" :style="{ color: 'var(--border-bright)' }" v-if="i > 0">›</span>
             <button
@@ -234,6 +245,10 @@ function goUp() {
               {{ seg.label }}
             </button>
           </template>
+          <!-- 刷新按钮靠右 -->
+          <button @click="refreshDir" class="hover:text-[var(--accent)] transition-colors shrink-0 ml-auto" :title="$t('file.refresh')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+          </button>
         </div>
 
         <!-- File tree + preview（可拖动分隔条） -->
@@ -243,7 +258,7 @@ function goUp() {
             class="overflow-y-auto px-1 py-0.5 min-h-0"
             :style="selectedFile && previewContent ? { height: splitRatio + '%' } : { flex: 1 }"
           >
-            <FileTree :entries="files" :selected="selectedFile" @selectFile="openFile" @navigateTo="navigateTo" />
+            <FileTree :entries="files" :selected="selectedFile" :onFileChanged="refreshDir" @selectFile="openFile" @navigateTo="navigateTo" />
           </div>
 
           <!-- 拖动分隔条 -->

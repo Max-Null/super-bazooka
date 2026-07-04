@@ -436,6 +436,121 @@ async fn read_file_content(path: String) -> Result<String, String> {
     std::fs::read_to_string(&path).map_err(|e| format!("Failed to read '{}': {}", path, e))
 }
 
+/// 从用户输入中提取安全的文件名（剥离任何目录成分和特殊名称），防止 ../ 穿越。
+fn safe_file_name(raw: &str) -> Result<&str, String> {
+    let name = std::path::Path::new(raw)
+        .file_name()
+        .ok_or_else(|| format!("Invalid file name: '{}'", raw))?
+        .to_str()
+        .ok_or_else(|| format!("Invalid file name encoding: '{}'", raw))?;
+    if name == "." || name == ".." || name.is_empty() {
+        return Err(format!("Invalid file name: '{}'", name));
+    }
+    Ok(name)
+}
+
+#[tauri::command]
+async fn delete_file(path: String) -> Result<(), String> {
+    let p = std::path::Path::new(&path);
+    // 符号链接无论指向什么，统一用 remove_file 删除链接本身
+    if p.is_symlink() {
+        std::fs::remove_file(&path).map_err(|e| format!("Failed to delete symlink '{}': {}", path, e))
+    } else if p.is_dir() {
+        std::fs::remove_dir_all(&path).map_err(|e| format!("Failed to delete dir '{}': {}", path, e))
+    } else {
+        std::fs::remove_file(&path).map_err(|e| format!("Failed to delete file '{}': {}", path, e))
+    }
+}
+
+#[tauri::command]
+async fn rename_file(path: String, new_name: String) -> Result<String, String> {
+    let safe = safe_file_name(&new_name)?;  // 剥离 ../ 等穿越字符
+    let p = std::path::Path::new(&path);
+    let parent = p.parent().unwrap_or(std::path::Path::new(""));
+    let new_path = parent.join(safe);
+    std::fs::rename(&path, &new_path)
+        .map_err(|e| format!("Failed to rename '{}' → '{}': {}", path, safe, e))?;
+    Ok(new_path.to_string_lossy().to_string())
+}
+
+/// 移动文件/目录到目标目录（保持原名）。
+/// 跨设备/文件系统时 rename 会失败，此时回退到 copy+delete。
+#[tauri::command]
+async fn move_file(path: String, dest_dir: String) -> Result<String, String> {
+    let p = std::path::Path::new(&path);
+    let name = p.file_name()
+        .ok_or_else(|| format!("Invalid path: {}", path))?;
+    let new_path = std::path::Path::new(&dest_dir).join(name);
+    match std::fs::rename(&path, &new_path) {
+        Ok(()) => Ok(new_path.to_string_lossy().to_string()),
+        Err(e) if e.raw_os_error() == Some(17) => {
+            // 跨设备/文件系统回退：复制后删除
+            if p.is_dir() {
+                copy_dir_recursive(&path, &new_path)
+                    .map_err(|_| format!("Failed to move (copy phase) '{}'", path))?;
+            } else {
+                std::fs::copy(&path, &new_path)
+                    .map_err(|_| format!("Failed to move (copy phase) '{}'", path))?;
+            }
+            // 删除源（ponytail: 复制成功后删除，不计较原子性）
+            if p.is_dir() {
+                std::fs::remove_dir_all(&path)
+                    .map_err(|_| format!("Failed to move (delete phase) '{}'", path))?;
+            } else {
+                std::fs::remove_file(&path)
+                    .map_err(|_| format!("Failed to move (delete phase) '{}'", path))?;
+            }
+            Ok(new_path.to_string_lossy().to_string())
+        }
+        Err(e) => Err(format!("Failed to move '{}' → '{}': {}", path, dest_dir, e)),
+    }
+}
+
+/// 复制文件到目标目录（保持原名，冲突时追加 _copy 后缀）
+#[tauri::command]
+async fn copy_file(path: String, dest_dir: String) -> Result<String, String> {
+    let p = std::path::Path::new(&path);
+    let name = p.file_name()
+        .ok_or_else(|| format!("Invalid path: {}", path))?;
+    let mut new_path = std::path::Path::new(&dest_dir).join(name);
+    // 冲突时自动加 _copy
+    if new_path.exists() {
+        let stem = p.file_stem().unwrap_or_default().to_string_lossy();
+        let ext = p.extension().map(|e| format!(".{}", e.to_string_lossy())).unwrap_or_default();
+        new_path = std::path::Path::new(&dest_dir).join(format!("{}_copy{}", stem, ext));
+    }
+    if p.is_dir() {
+        copy_dir_recursive(&path, &new_path)
+            .map_err(|e| format!("Failed to copy dir '{}': {}", path, e))?;
+    } else {
+        std::fs::copy(&path, &new_path)
+            .map_err(|e| format!("Failed to copy '{}': {}", path, e))?;
+    }
+    Ok(new_path.to_string_lossy().to_string())
+}
+
+/// 递归复制目录（ponytail: 简单递归，大目录可能慢，可优化为并行 walkdir）
+fn copy_dir_recursive(src: &str, dest: &std::path::Path) -> Result<(), std::io::Error> {
+    std::fs::create_dir_all(dest)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let src_path = entry.path();
+        let dest_path = dest.join(entry.file_name());
+        if src_path.is_dir() {
+            copy_dir_recursive(&src_path.to_string_lossy(), &dest_path)?;
+        } else {
+            std::fs::copy(&src_path, &dest_path)?;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn create_dir(path: String) -> Result<(), String> {
+    std::fs::create_dir_all(&path)
+        .map_err(|e| format!("Failed to create dir '{}': {}", path, e))
+}
+
 #[tauri::command]
 async fn get_workspace_root() -> Result<String, String> {
     let cwd = std::env::current_dir().map_err(|e| format!("{}", e))?;
@@ -1456,6 +1571,11 @@ pub fn run() {
             list_messages,
             list_dir,
             read_file_content,
+            delete_file,
+            rename_file,
+            move_file,
+            copy_file,
+            create_dir,
             get_workspace_root,
             reveal_in_explorer,
             get_auto_mode_status,
