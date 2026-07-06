@@ -49,12 +49,14 @@ Because this tool is designed to be **simple, powerful, and precise** — just l
 
 - 🖥️ **Full GUI** — Chat, Markdown rendering, code highlighting, Mermaid diagrams
 - 🧠 **Streaming** — Real-time incremental token rendering via three-thread process model
+- 📝 **4th Column Editor** — CodeMirror editor panel side-by-side with chat, double-click to open
+- 🎯 **Selection → Chat** — Select text in MD or DOM in HTML, send with suggestions to chat
 - 🔍 **Command Palette** — Ctrl+K, 40+ commands with pinyin matching
-- 📁 **File Panel** — Tree browser, code preview, diff viewer
-- 💬 **Sessions** — Create/delete/rename/resume, SQLite persistence
+- 📁 **File Panel** — Tree browser, code preview, diff viewer, right-click context menu
+- 💬 **Sessions** — Smart reuse (skip duplicates), create/delete/rename/resume, SQLite persistence
 - ⚙️ **Settings** — API key, base URL, model config + connection test
 - 🛡️ **Permissions** — 6 modes, auto-sync to `~/.claude/settings.json`
-- 🎨 **Dark/Light themes** — CSS variable driven
+- 🎨 **Dark/Light themes** — CSS variable driven, semantic BEM class naming
 - 🌐 **i18n** — Chinese / English
 - 🔔 **Desktop notifications** — Token stats on completion
 - ✨ **Prompt optimizer** — One-click AI rewrite for vague prompts
@@ -127,7 +129,7 @@ Output in `src-tauri/target/release/bundle/`.
 │   │   ├── session/        # SessionSidebar
 │   │   ├── files/          # FilePanel, FileTree, FilePreview, DiffViewer
 │   │   ├── settings/       # SettingsPanel
-│   │   └── shared/         # Markdown, Mermaid, CommandPalette, ErrorBoundary
+│   │   └── shared/         # Markdown, Mermaid, CommandPalette, FilePreviewPanel
 │   ├── composables/        # useStreamProcessor, useFilePreview, etc.
 │   ├── stores/             # Pinia stores (chat, session, settings)
 │   ├── lib/                # Utils, Tauri bridge, test mocks
@@ -189,6 +191,7 @@ flowchart TB
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| [0.6.0](docs/变更记录.md) | 2026-07-07 | 4th column editor, MD/HTML selection to chat, CSS semantic naming, smart session reuse |
 | [0.5.0](docs/变更记录.md) | 2026-07-04 | File panel context menu, tool result rendering, CodeMirror editor, changelog dialog, settings UI polish |
 | [0.4.0](docs/变更记录.md) | 2026-07-04 | Message timeline, session audit, MD→docx |
 | [0.3.0](docs/变更记录.md) | 2026-07-03 | Core features, multi-provider, i18n |

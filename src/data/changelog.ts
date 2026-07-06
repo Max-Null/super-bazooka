@@ -31,6 +31,68 @@ export const APP_VERSION: string = appPackage.version;
 // 按版本降序排列（最新在第一个）
 export const changelog: ChangelogEntry[] = [
   {
+    version: "0.6.0",
+    date: "2026-07-07",
+    sections: [
+      {
+        titleZh: "第四列文件编辑器",
+        titleEn: "4th Column File Editor",
+        itemsZh: [
+          "对话右侧新增独立文件编辑面板，双击文件树打开，可拖拽调宽",
+          "编辑 Tab（CodeMirror 6）+ 预览 Tab，Ctrl+S 保存，脏状态指示",
+          "MD 编辑中选中文本 → 浮动 tip 输入修改建议 → 发送到对话（含文件路径+行号）",
+          "HTML 预览点击元素 → 浮动 tip 显示 DOM 信息 → 发 HTML 片段到对话",
+        ],
+        itemsEn: [
+          "New file editor panel to the right of chat, open with double-click, resizable",
+          "Edit tab (CodeMirror 6) + Preview tab, Ctrl+S save, dirty state indicator",
+          "MD selection → floating tip with suggestion input → send to chat (includes file path + line numbers)",
+          "HTML preview click element → floating tip with DOM info → send HTML snippet to chat",
+        ],
+      },
+      {
+        titleZh: "智能会话管理",
+        titleEn: "Smart Session Management",
+        itemsZh: [
+          "最新会话为空时自动跳转复用，切换工作区复用空会话，不再堆积「新会话」",
+          "新建/切换会话提示改用状态 pill 而非 alert 弹窗",
+        ],
+        itemsEn: [
+          "Auto-reuse latest empty session instead of creating duplicates, workspace switch reuses empty sessions",
+          "Session notifications use status pill instead of alert dialog",
+        ],
+      },
+      {
+        titleZh: "文件操作体验优化",
+        titleEn: "File Operations UX",
+        itemsZh: [
+          "右键删除/剪切/粘贴后，展开的子目录自动刷新，编辑器面板自动重载",
+          "修复右键菜单在子目录中 contextmenu 事件冒泡导致操作失效",
+          "CC 修改文件后预览区和编辑器自动刷新",
+        ],
+        itemsEn: [
+          "Expanded subdirectories and editor panel auto-refresh after cut/delete/paste operations",
+          "Fixed contextmenu event bubbling breaking right-click in subdirectories",
+          "Preview and editor auto-refresh when CC modifies files",
+        ],
+      },
+      {
+        titleZh: "CSS 语义化命名收编",
+        titleEn: "CSS Semantic Naming Refactor",
+        itemsZh: [
+          "新增 btn-ghost/btn-primary/chip/badge/status-pill 等 20+ 通用语义类",
+          "BEM 命名覆盖 sb-shell ~ file-panel-* 全布局，CLAUDE.md 新增 CSS 命名硬约束",
+          "工具栏宽度不足时自动换行并按组居中，滚动按钮自适应高度",
+        ],
+        itemsEn: [
+          "20+ new semantic CSS classes: btn-ghost, btn-primary, chip, badge, status-pill, etc.",
+          "BEM naming across layout from sb-shell to file-panel-*, CLAUDE.md CSS naming rules",
+          "Toolbar wraps and centers on overflow, scroll button adapts to toolbar height",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.5.0",
     date: "2026-07-04",
     sections: [
