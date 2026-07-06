@@ -140,83 +140,80 @@ const currentEffortLabel = computed(() => {
 
 <template>
   <div class="sb-toolbar">
-    <!-- 外部注入按钮（debug/LLM 切换等），左对齐 -->
-    <slot name="left" />
+    <!-- ═══ 左区：操作按钮 ═══ -->
+    <div class="toolbar-group">
+      <slot name="left" />
 
-    <!-- ➕ Attach File -->
-    <button
-      @click="emit('attachFile')"
-      class="toolbar-btn"
-      :title="$t('toolbar.attachTitle')"
-    >
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-    </button>
-
-    <!-- / Slash quick menu -->
-    <div class="slash-menu-container">
+      <!-- ➕ Attach File -->
       <button
-        @click.stop="toggleMenu('slash')"
+        @click="emit('attachFile')"
         class="toolbar-btn"
-        :title="$t('toolbar.slashTitle')"
+        :title="$t('toolbar.attachTitle')"
       >
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="4" x2="6" y2="20"/></svg>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       </button>
-      <Transition name="drop">
-        <div
-          v-if="openMenu === 'slash'"
-          class="dropdown-menu slash-dropdown toolbar-dropdown"
+
+      <!-- / Slash quick menu -->
+      <div class="slash-menu-container">
+        <button
+          @click.stop="toggleMenu('slash')"
+          class="toolbar-btn"
+          :title="$t('toolbar.slashTitle')"
         >
-          <!-- 最近 -->
-          <template v-if="recentCommands.length > 0">
-            <div class="slash-section-header">🕐 {{ $t('toolbar.slashRecent') }}</div>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="4" x2="6" y2="20"/></svg>
+        </button>
+        <Transition name="drop">
+          <div
+            v-if="openMenu === 'slash'"
+            class="dropdown-menu slash-dropdown toolbar-dropdown"
+          >
+            <template v-if="recentCommands.length > 0">
+              <div class="slash-section-header">🕐 {{ $t('toolbar.slashRecent') }}</div>
+              <button
+                v-for="r in recentCommands.slice(0, 5)"
+                :key="r"
+                @click="emit('sendSlash', '/' + r); openMenu = null"
+                class="dropdown-item"
+              >{{ r }}</button>
+            </template>
+            <template v-if="favorites.size > 0">
+              <div class="slash-section-header">⭐ {{ $t('toolbar.slashFavorites') }}</div>
+              <button
+                v-for="f in [...favorites]"
+                :key="f"
+                @click="emit('sendSlash', '/' + f); openMenu = null"
+                class="dropdown-item"
+              >{{ f }}</button>
+            </template>
+            <div v-if="recentCommands.length > 0 || favorites.size > 0" class="slash-section-divider"></div>
             <button
-              v-for="r in recentCommands.slice(0, 5)"
-              :key="r"
-              @click="emit('sendSlash', '/' + r); openMenu = null"
-              class="dropdown-item"
-            >{{ r }}</button>
-          </template>
-          <!-- 收藏 -->
-          <template v-if="favorites.size > 0">
-            <div class="slash-section-header">⭐ {{ $t('toolbar.slashFavorites') }}</div>
-            <button
-              v-for="f in [...favorites]"
-              :key="f"
-              @click="emit('sendSlash', '/' + f); openMenu = null"
-              class="dropdown-item"
-            >{{ f }}</button>
-          </template>
-          <!-- Browse all -->
-          <div v-if="recentCommands.length > 0 || favorites.size > 0" class="slash-section-divider"></div>
-          <button
-            @click="emit('openCommandMenu'); openMenu = null"
-            class="dropdown-item slash-browse-all"
-          >📋 {{ $t('toolbar.slashBrowseAll') }}</button>
-          <!-- 空状态 -->
-          <div v-if="favorites.size === 0 && recentCommands.length === 0" class="slash-empty">
-            {{ $t('toolbar.slashEmpty') }}
+              @click="emit('openCommandMenu'); openMenu = null"
+              class="dropdown-item slash-browse-all"
+            >📋 {{ $t('toolbar.slashBrowseAll') }}</button>
+            <div v-if="favorites.size === 0 && recentCommands.length === 0" class="slash-empty">
+              {{ $t('toolbar.slashEmpty') }}
+            </div>
           </div>
-        </div>
-      </Transition>
+        </Transition>
+      </div>
+
+      <!-- ☰ Command Menu -->
+      <button
+        @click="emit('openCommandMenu')"
+        class="toolbar-btn"
+        :title="$t('toolbar.commandsTitle')"
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+      </button>
     </div>
 
-    <!-- ☰ Command Menu -->
-    <button
-      @click="emit('openCommandMenu')"
-      class="toolbar-btn"
-      :title="$t('toolbar.commandsTitle')"
-    >
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
-    </button>
-
-    <!-- Spacer -->
-    <div class="flex-1"></div>
-
-    <!-- Permission Mode dropdown -->
-    <div
-      class="toolbar-pill"
-      @click.stop="toggleMenu('mode')"
-    >
+    <!-- ═══ 右区：模式/Effort/Ponytail ═══ -->
+    <div class="toolbar-group">
+      <!-- Permission Mode dropdown -->
+      <div
+        class="toolbar-pill"
+        @click.stop="toggleMenu('mode')"
+      >
       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="color: var(--accent); opacity: 0.7">
         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
       </svg>
@@ -317,6 +314,7 @@ const currentEffortLabel = computed(() => {
       <div class="w-px h-4 shrink-0" style="background: var(--border-dim)"></div>
       <ContextIndicator @click="emit('showContext')" />
     </template>
+    </div>
   </div>
 
   <!-- Effort warning -->
@@ -333,11 +331,22 @@ const currentEffortLabel = computed(() => {
 .sb-toolbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 0.375rem;
+  row-gap: 0.25rem;
   max-width: 48rem;
   margin-inline: auto;
   padding-bottom: 0.25rem;
   user-select: none;
+}
+
+/* ── 工具栏分组（左/右），宽度不足时按组换行 ── */
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.375rem;
 }
 
 /* ── Tool buttons (attach, command menu) ── */

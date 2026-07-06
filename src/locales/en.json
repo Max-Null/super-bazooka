@@ -147,6 +147,7 @@
 
   "session": {
     "new": "New Session",
+    "alreadyNew": "Already a new session",
     "title": "Sessions",
     "search": "Search sessions…",
     "rename": "Rename",
@@ -217,7 +218,9 @@
     "noPreview": "No preview available",
     "loading": "Loading...",
     "unsupported": "Preview not available for this file type",
-    "unsupportedHint": "Binary / proprietary format — open externally"
+    "unsupportedHint": "Binary / proprietary format — open externally",
+    "sendToChat": "Send",
+    "mdSuggestionPlaceholder": "Enter suggestion…"
   },
 
   "effortWarning": "xhigh + DeepSeek may cause API errors (WebSearch/WebFetch tools)",

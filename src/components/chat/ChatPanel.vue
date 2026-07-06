@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, nextTick, watch, onMounted, onUnmounted } from "vue";
+import { ref, computed, nextTick, watch, onMounted, onUnmounted, inject } from "vue";
 import { useChatStore, type AttachedFile } from "@/stores/chat";
 import { useSessionStore } from "@/stores/session";
 import { useDebugLog } from "@/composables/useDebugLog";
@@ -23,7 +23,6 @@ import InputBar from "./InputBar.vue";
 import InputBarToolbar from "./InputBarToolbar.vue";
 import MessageBubble from "./MessageBubble.vue";
 import ThinkingIndicator from "./ThinkingIndicator.vue";
-import FilePreviewModal from "@/components/shared/FilePreviewModal.vue";
 import ContextUsageModal from "@/components/shared/ContextUsageModal.vue";
 import ManagePanel from "@/components/shared/ManagePanel.vue";
 import ModalShell from "@/components/shared/ModalShell.vue";
@@ -104,7 +103,7 @@ interface DomSnippet { html: string; filePath: string; selector: string }
 const domSnippet = ref<DomSnippet | null>(null);
 function removeDomSnippet() { domSnippet.value = null; }
 
-const previewFile = ref<{ name: string; path: string } | null>(null);
+const openFileInPanel = inject<(f: { name: string; path: string }) => void>("openFileInPanel", () => {});
 
 // ── 状态消息（临时横幅，不挤占消息区域）──
 const statusMessage = ref("");
@@ -296,12 +295,24 @@ watch(() => chatCommand.value.ts, async (ts) => {
         chat.clearMessages();
         isNearBottom.value = true;
         autoScroll.value = true;
-        try {
-          await session.createSession(settings.model, newPath, undefined, settings.locale);
+        // 最新会话若是空会话则复用，避免堆积"新会话"
+        const sorted = [...session.sessions].sort((a, b) => b.createdAt - a.createdAt);
+        const latestEmpty = sorted.find(s => s.messageCount === 0 && s.id !== session.activeSessionId);
+        if (latestEmpty) {
+          session.setActiveSession(latestEmpty.id);
           showStatus(t('status.workspaceSwitched', { path: newPath }));
-        } catch {
-          showStatus(t('status.sessionCreateFailed'));
+        } else {
+          try {
+            await session.createSession(settings.model, newPath, undefined, settings.locale);
+            showStatus(t('status.workspaceSwitched', { path: newPath }));
+          } catch {
+            showStatus(t('status.sessionCreateFailed'));
+          }
         }
+      } else if (action.startsWith("show-status:")) {
+        showStatus(action.slice("show-status:".length));
+      } else if (action.startsWith("md-selection:")) {
+        handleSend(action.slice("md-selection:".length));
       } else {
         // 通用文本 → 作为普通消息发送给 CC
         handleSend(action);
@@ -342,6 +353,11 @@ watch(() => chatCommand.value.ts, async (ts) => {
 // ── Sticky question banner ──
 const stickyQuestion = ref("");
 const showSticky = ref(false);
+const stickyTargetEl = ref<HTMLElement | null>(null);
+
+function scrollToSticky() {
+  stickyTargetEl.value?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
 // 消息清空（新建会话 / clear）时同步隐藏置顶问题横幅
 watch(() => chat.messages.length, (len) => {
   if (len === 0) {
@@ -378,8 +394,18 @@ function updateStickyBanner() {
   if (lastAbove) {
     stickyQuestion.value = lastAbove.length > 100 ? lastAbove.slice(0, 100) + "…" : lastAbove;
     showSticky.value = true;
+    // 记录目标元素，点击时滚动到该消息
+    // ponytail: 此处需遍历两次获取 el（text 和 element 分别取），O(n) 可接受
+    let foundEl: HTMLElement | null = null;
+    for (const el of userMsgs) {
+      if ((el.querySelector('.user-text')?.textContent || "").includes(lastAbove.slice(0, 20))) {
+        foundEl = el; break;
+      }
+    }
+    stickyTargetEl.value = foundEl;
   } else {
     showSticky.value = false;
+    stickyTargetEl.value = null;
   }
 }
 
@@ -783,44 +809,44 @@ watch(
 
 <template>
   <ErrorBoundary name="ChatPanel">
-  <div class="sb-chat-panel flex flex-col flex-1 h-full relative overflow-hidden">
+  <div class="sb-chat-panel">
     <!-- Sticky question banner -->
     <div
       v-if="showSticky"
-      class="shrink-0 px-4 py-1.5 text-xs truncate z-10"
-      style="background:var(--bg-elevated); border-bottom:1px solid var(--border-dim); color:var(--text-muted); backdrop-filter:blur(8px)"
+      class="sticky-question-bar"
+      @click="scrollToSticky"
     >
       <span class="font-medium" style="color:var(--text-secondary)">↳ </span>{{ stickyQuestion }}
     </div>
 
     <!-- Messages -->
-    <div ref="scrollContainer" class="flex-1 relative overflow-y-auto" @scroll="onScrollThrottled">
+    <div ref="scrollContainer" class="chat-messages" @scroll="onScrollThrottled">
       <!-- Welcome -->
-      <div v-if="chat.messages.length === 0" class="flex items-center justify-center h-full">
-        <div class="text-center max-w-sm px-6 pb-24">
+      <div v-if="chat.messages.length === 0" class="welcome-container">
+        <div class="welcome-page">
           <!-- Icon: terminal cursor -->
-          <div class="mb-6 inline-flex items-center justify-center w-16 h-16 rounded-2xl" style="background:var(--accent-glow)">
+          <div class="welcome-logo" style="background:var(--accent-glow)">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="4 17 10 11 4 5" />
               <line x1="12" y1="19" x2="20" y2="19" />
             </svg>
           </div>
-          <h2 class="text-xl font-bold mb-2 tracking-tight" style="color:var(--text-bright)">{{ $t('chat.welcomeTitle') }}</h2>
+          <h2 class="welcome-title" style="color:var(--text-bright)">{{ $t('chat.welcomeTitle') }}</h2>
           <p class="text-sm leading-relaxed mb-6" style="color:var(--text-secondary)">{{ $t('chat.welcomeSubtitle') }}</p>
-          <div class="flex items-center justify-center gap-2 text-[11px]" style="color:var(--text-muted)">
-            <kbd class="px-1.5 py-0.5 rounded text-[10px]" style="background:var(--bg-elevated); border:1px solid var(--border-dim)">Enter</kbd>
+          <div class="welcome-keywords" style="color:var(--text-muted)">
+            <kbd class="badge" style="background:var(--bg-elevated); border:1px solid var(--border-dim)">Enter</kbd>
             <span>{{ $t('chat.welcomeSend') }}</span>
             <span style="color:var(--border-default)">·</span>
-            <kbd class="px-1.5 py-0.5 rounded text-[10px]" style="background:var(--bg-elevated); border:1px solid var(--border-dim)">Shift</kbd>
+            <kbd class="badge" style="background:var(--bg-elevated); border:1px solid var(--border-dim)">Shift</kbd>
             <span>+</span>
-            <kbd class="px-1.5 py-0.5 rounded text-[10px]" style="background:var(--bg-elevated); border:1px solid var(--border-dim)">Enter</kbd>
+            <kbd class="badge" style="background:var(--bg-elevated); border:1px solid var(--border-dim)">Enter</kbd>
             <span>{{ $t('chat.welcomeNewline') }}</span>
           </div>
         </div>
       </div>
 
       <!-- Message list -->
-      <div v-if="chat.messages.length > 0" class="max-w-3xl mx-auto px-4 py-6 space-y-5">
+      <div v-if="chat.messages.length > 0" class="chat-messages-inner">
         <!-- Export bar (when messages exist) -->
         <div class="flex items-center justify-end">
           <button
@@ -840,7 +866,7 @@ watch(
             :message="msg"
             @edit-save="handleEditSave"
             @resend="handleResend"
-            @preview-file="(f) => previewFile = f"
+            @preview-file="(f) => openFileInPanel(f)"
           />
         </TransitionGroup>
 
@@ -861,17 +887,17 @@ watch(
       >
         <div
           @click.stop
-          class="absolute bottom-[160px] left-4 right-4 max-w-3xl mx-auto flex flex-col gap-1.5"
+          class="attach-bar"
         >
-          <div class="flex items-center gap-4 self-start px-3 py-1 rounded-md" style="background: var(--bg-surface); border: 1px solid var(--border-dim); box-shadow: 0 2px 6px rgba(0,0,0,0.15)">
+          <div class="system-msg-bar" style="background: var(--bg-surface); border: 1px solid var(--border-dim); box-shadow: 0 2px 6px rgba(0,0,0,0.15)">
             <span v-if="debugLog.visible.value" class="text-[11px]" :style="{ color: 'var(--text-bright)' }">{{ $t('chat.debugLabel') }} ({{ debugLog.lines.value.length }})</span>
             <span v-if="stderrLog.visible.value" class="text-[11px]" :style="{ color: 'var(--accent)' }">📤 {{ $t('chat.llmRequestLabel') }} ({{ stderrLog.lines.value.length }})</span>
-            <button @click="debugLog.visible.value ? copyDebugLog() : copyStderrLog()" class="cursor-pointer w-4 h-4 flex items-center justify-center rounded hover:bg-[var(--bg-hover)] transition-colors" :style="{ color: 'var(--text-muted)' }" :title="$t('chat.copy')">
+            <button @click="debugLog.visible.value ? copyDebugLog() : copyStderrLog()" class="icon-btn-sm cursor-pointer" :style="{ color: 'var(--text-muted)' }" :title="$t('chat.copy')">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             </button>
           </div>
-          <pre v-if="debugLog.visible.value" class="p-3 rounded-lg text-[11px] font-mono leading-relaxed whitespace-pre-wrap break-all max-h-48 overflow-y-auto" style="background:var(--bg-elevated); border:1px solid var(--border-dim); color:var(--text-muted); box-shadow: 0 4px 12px rgba(0,0,0,0.4)">{{ debugLog.lines.value.join('\n') }}</pre>
-          <pre v-if="stderrLog.visible.value" class="p-3 rounded-lg text-[11px] font-mono leading-relaxed whitespace-pre-wrap break-all max-h-96 overflow-y-auto" style="background:var(--bg-elevated); border:1px solid var(--accent-glow); color:var(--text-muted); box-shadow: 0 4px 12px rgba(0,0,0,0.4)">{{ stderrLog.lines.value.join('\n') }}</pre>
+          <pre v-if="debugLog.visible.value" class="code-block max-h-48 overflow-y-auto" style="background:var(--bg-elevated); border:1px solid var(--border-dim); color:var(--text-muted); box-shadow: 0 4px 12px rgba(0,0,0,0.4)">{{ debugLog.lines.value.join('\n') }}</pre>
+          <pre v-if="stderrLog.visible.value" class="code-block max-h-96 overflow-y-auto" style="background:var(--bg-elevated); border:1px solid var(--accent-glow); color:var(--text-muted); box-shadow: 0 4px 12px rgba(0,0,0,0.4)">{{ stderrLog.lines.value.join('\n') }}</pre>
         </div>
       </div>
     </Teleport>
@@ -879,7 +905,7 @@ watch(
     <!-- Permission bar（AskUserQuestion 走独立问答弹窗）-->
     <div
       v-if="chat.pendingControlRequest && chat.pendingControlRequest.tool_name !== 'AskUserQuestion' && chat.pendingControlRequest.tool_name !== 'ExitPlanMode'"
-      class="shrink-0 px-4 py-2.5 flex items-center gap-3"
+      class="approval-bar"
       style="background:var(--amber-glow); border-top:1px solid var(--amber); border-color:var(--amber); --tw-border-opacity:0.25"
     >
       <span class="text-xs flex-1" style="color:var(--amber)">
@@ -889,35 +915,38 @@ watch(
       <button @click="handleDeny" class="px-3 py-1 rounded-md text-xs font-medium transition-colors" style="border:1px solid var(--coral); color:var(--coral)">{{ $t('chat.deny') }}</button>
     </div>
 
-    <!-- 滚动到底按钮 — 绝对定位在工具栏上方居中，不占文档流高度 -->
-    <Transition name="scroll-btn">
-      <button
-        v-if="!isNearBottom && chat.messages.length > 0"
-        @click="scrollToBottomAndResume"
-        class="scroll-to-bottom-btn"
-        :title="$t('chat.scrollToBottom')"
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
-      </button>
-    </Transition>
+    <!-- ═══ 底部区域：滚动按钮 + 状态消息 + 工具栏 + 输入框 ═══ -->
+    <div class="shrink-0 relative">
+      <!-- 滚动到底按钮 — 悬浮在底部区域上方 -->
+      <Transition name="scroll-btn">
+        <button
+          v-if="!isNearBottom && chat.messages.length > 0"
+          @click="scrollToBottomAndResume"
+          class="scroll-to-bottom-btn"
+          :title="$t('chat.scrollToBottom')"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+      </Transition>
 
-    <!-- 状态消息：绝对定位在输入框上方，不挤占消息区域 -->
-    <Transition name="scroll-btn">
-      <div
-        v-if="statusMessage"
-        class="absolute bottom-[140px] left-0 right-0 flex justify-center z-10 pointer-events-none"
-      >
-        <span
-          class="text-[11px] font-mono px-2.5 py-0.5 rounded-full"
-          style="background: var(--accent-glow); color: var(--accent)"
-        >{{ statusMessage }}</span>
-      </div>
-    </Transition>
+      <!-- 状态消息 -->
+      <Transition name="scroll-btn">
+        <div
+          v-if="statusMessage"
+          class="absolute left-0 right-0 flex justify-center z-10 pointer-events-none"
+          style="bottom: calc(100% + 36px)"
+        >
+          <span
+            class="status-pill"
+            style="background: var(--accent-glow); color: var(--accent)"
+          >{{ statusMessage }}</span>
+        </div>
+      </Transition>
 
-    <!-- Toolbar（禅模式下隐藏——模式/effort/Ponytail 对直接 LLM 无意义） -->
-    <InputBarToolbar
+      <!-- Toolbar（禅模式下隐藏——模式/effort/Ponytail 对直接 LLM 无意义） -->
+      <InputBarToolbar
       v-if="!settings.zenMode"
       @attach-file="handleAttachFile"
       @open-command-menu="commandBus.open()"
@@ -929,7 +958,7 @@ watch(
           <button
             v-if="debugLog.lines.value.length > 0"
             @click="debugLog.toggle(); if (debugLog.visible.value) stderrLog.visible.value = false"
-            class="cursor-pointer text-[11px] transition-colors hover:text-[var(--text-secondary)] flex items-center gap-1"
+            class="debug-btn"
             :style="{ color: debugLog.visible.value ? 'var(--text-bright)' : 'var(--text-muted)' }"
           >
             <span>{{ debugLog.visible.value ? '▾' : '▸' }}</span>
@@ -938,7 +967,7 @@ watch(
           <button
             v-if="stderrLog.lines.value.length > 0"
             @click="stderrLog.toggle(); if (stderrLog.visible.value) debugLog.visible.value = false"
-            class="cursor-pointer text-[11px] transition-colors hover:text-[var(--text-secondary)] flex items-center gap-1"
+            class="debug-btn"
             :style="{ color: stderrLog.visible.value ? 'var(--accent)' : 'var(--text-muted)' }"
           >
             <span>{{ stderrLog.visible.value ? '▾' : '▸' }}</span>
@@ -976,26 +1005,26 @@ watch(
       <button
         v-if="savedPlan.plan && !isPlanPending()"
         @click="showPlanModal = true"
-        class="flex items-center gap-1 pl-2 pr-1 py-1 rounded-md text-[11px] shrink-0 transition-colors hover:bg-[var(--bg-hover)]"
+        class="attach-chip chip--clickable"
         :style="{ color: 'var(--text-muted)', border: '1px dashed var(--border-dim)' }"
       >📋 {{ $t('chat.viewPlan') }}</button>
       <!-- DOM 选择器片段卡片 -->
       <div
         v-if="domSnippet"
-        class="flex items-center gap-1.5 pl-2 pr-1 py-1 rounded-md text-[11px] group shrink-0 max-w-[260px]"
+        class="attach-chip"
         :style="{ background: 'var(--accent-glow)', border: '1px solid var(--accent-dim)', color: 'var(--accent)' }"
       >
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="shrink-0"><polyline points="6 9 12 15 18 9"/><line x1="4" y1="20" x2="20" y2="20"/></svg>
-        <span class="truncate text-[11px] font-medium" :title="domSnippet.filePath">{{ domSnippet.filePath.split(/[\\/]/).pop() }} · &lt;{{ domSnippet.selector }}&gt;</span>
-        <button @click="removeDomSnippet" class="shrink-0 w-4 h-4 flex items-center justify-center rounded hover:bg-[var(--bg-hover)] transition-colors">×</button>
+        <span class="attach-chip-name" :title="domSnippet.filePath">{{ domSnippet.filePath.split(/[\\/]/).pop() }} · &lt;{{ domSnippet.selector }}&gt;</span>
+        <button @click="removeDomSnippet" class="icon-btn-sm shrink-0">×</button>
       </div>
       <!-- Attached files chips -->
       <div
         v-for="(file, i) in attachedFiles"
         :key="file.path"
-        class="flex items-center gap-1.5 pl-2 pr-1 py-1 rounded-md text-[11px] group shrink-0 max-w-[220px] cursor-pointer transition-colors"
+        class="attach-chip chip--clickable max-w-[220px]"
         :style="{ background: 'var(--bg-elevated)', border: '1px solid var(--border-dim)', color: 'var(--text-secondary)' }"
-        @click="previewFile = file"
+        @click="openFileInPanel(file)"
       >
         <!-- File thumbnail / icon -->
         <img
@@ -1007,7 +1036,7 @@ watch(
           v-show="thumbnails[file.path]"
         />
         <svg v-else width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" class="shrink-0"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
-        <span class="truncate text-[11px] font-medium" :title="file.path">{{ file.name }}</span>
+        <span class="attach-chip-name" :title="file.path">{{ file.name }}</span>
         <button
           @click.stop="removeAttachedFile(i)"
           class="w-4 h-4 flex items-center justify-center rounded transition-colors hover:bg-[var(--bg-hover)] shrink-0 opacity-50 group-hover:opacity-100"
@@ -1018,7 +1047,7 @@ watch(
     </div>
 
     <!-- File preview modal -->
-    <FilePreviewModal :file="previewFile" @close="previewFile = null" />
+    <!-- 文件预览统一由 AppShell 第四列处理 -->
     <ContextUsageModal :open="showContextModal" @close="showContextModal = false" @compact="showContextModal = false; handleSend('/compact')" />
     <ManagePanel :open="showManage" :initialTab="manageTab" @close="showManage = false" @send-slash="(t) => handleSend(t)" />
 
@@ -1030,7 +1059,7 @@ watch(
       <div class="space-y-4 px-1">
         <div v-for="(q, qi) in getQuestions()" :key="qi" class="space-y-2">
           <div class="flex items-center gap-1.5">
-            <span v-if="q.header" class="text-[10px] px-1.5 py-0.5 rounded font-medium whitespace-nowrap shrink-0" :style="{ background: 'var(--accent-glow)', color: 'var(--accent)' }">{{ q.header }}</span>
+            <span v-if="q.header" class="badge font-medium whitespace-nowrap shrink-0" :style="{ background: 'var(--accent-glow)', color: 'var(--accent)' }">{{ q.header }}</span>
             <span class="text-xs font-medium" :style="{ color: 'var(--text-primary)' }">{{ q.question }}</span>
           </div>
           <div class="space-y-1 ml-1">
@@ -1069,7 +1098,7 @@ watch(
                   :value="questionOther.get(q.question) || ''"
                   @input="(e) => setOther(q.question, (e.target as HTMLInputElement).value)"
                   placeholder="输入自定义答案..."
-                  class="mt-1 w-full rounded px-2 py-1 text-xs outline-none"
+                  class="input-plain mt-1"
                   :style="{ background: 'var(--bg-elevated)', border: '1px solid var(--border-dim)', color: 'var(--text-primary)', caretColor: 'var(--accent)' }"
                 />
               </div>
@@ -1103,17 +1132,17 @@ watch(
         <input
           v-model="planFeedback"
           :placeholder="$t('chat.planFeedbackPlaceholder')"
-          class="w-full rounded-lg px-3 py-2 text-xs outline-none"
+          class="input-plain"
           :style="{ background: 'var(--bg-elevated)', border: '1px solid var(--border-dim)', color: 'var(--text-primary)', caretColor: 'var(--accent)' }"
           @keydown.enter="rejectPlan(planFeedback)"
         />
       </div>
       <template #footer>
-        <div v-if="isPlanPending()" class="flex items-center gap-1.5 flex-wrap">
+        <div v-if="isPlanPending()" class="action-bar action-bar--start flex-wrap">
           <button @click="approvePlan()" class="px-3 py-1.5 rounded text-xs font-medium transition-colors hover:brightness-110" :style="{ background: 'var(--accent)', color: 'var(--bg-root)' }">✅ {{ $t('chat.planExecute') }}</button>
-          <button @click="rejectPlan('继续优化计划设计')" class="px-3 py-1.5 rounded text-xs font-medium transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-secondary)', border: '1px solid var(--border-dim)' }">✏️ {{ $t('chat.planContinueDesign') }}</button>
-          <button @click="rejectPlan('停止计划')" class="px-3 py-1.5 rounded text-xs font-medium transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-secondary)', border: '1px solid var(--border-dim)' }">⏹ {{ $t('chat.planStop') }}</button>
-          <button @click="exportPlan()" class="px-3 py-1.5 rounded text-xs font-medium transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-muted)', border: '1px dashed var(--border-dim)' }">📤 {{ $t('chat.planExport') }}</button>
+          <button @click="rejectPlan('继续优化计划设计')" class="btn-ghost" :style="{ color: 'var(--text-secondary)', border: '1px solid var(--border-dim)' }">✏️ {{ $t('chat.planContinueDesign') }}</button>
+          <button @click="rejectPlan('停止计划')" class="btn-ghost" :style="{ color: 'var(--text-secondary)', border: '1px solid var(--border-dim)' }">⏹ {{ $t('chat.planStop') }}</button>
+          <button @click="exportPlan()" class="btn-ghost" :style="{ color: 'var(--text-muted)', border: '1px dashed var(--border-dim)' }">📤 {{ $t('chat.planExport') }}</button>
           <button
             v-if="planFeedback"
             @click="rejectPlan(planFeedback)"
@@ -1122,7 +1151,7 @@ watch(
           >💬 {{ $t('chat.planOther') }}</button>
         </div>
         <div v-else class="flex items-center justify-end">
-          <button @click="exportPlan()" class="px-3 py-1.5 rounded text-xs font-medium transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-muted)', border: '1px dashed var(--border-dim)' }">📤 {{ $t('chat.planExport') }}</button>
+          <button @click="exportPlan()" class="btn-ghost" :style="{ color: 'var(--text-muted)', border: '1px dashed var(--border-dim)' }">📤 {{ $t('chat.planExport') }}</button>
           <button @click="showPlanModal = false" class="px-3 py-1.5 rounded text-xs transition-colors hover:bg-[var(--bg-hover)] ml-2" :style="{ color: 'var(--text-muted)' }">{{ $t('chat.close') }}</button>
         </div>
       </template>
@@ -1159,7 +1188,7 @@ watch(
         </div>
       </div>
       <div class="flex justify-end gap-2 mt-3">
-        <button @click="showExportPreview = false" class="px-3 py-1.5 rounded-md text-xs transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-muted)' }">取消</button>
+        <button @click="showExportPreview = false" class="btn-ghost" :style="{ color: 'var(--text-muted)' }">取消</button>
         <button @click="doExport" class="px-4 py-1.5 rounded-md text-xs font-medium transition-colors" :style="{ background: 'var(--accent)', color: 'var(--bg-root)' }">选择目录并导出</button>
       </div>
     </ModalShell>
@@ -1177,13 +1206,14 @@ watch(
         autofocus
       />
       <div class="flex justify-end gap-2 mt-3">
-        <button @click="showRenameModal = false" class="px-3 py-1.5 rounded-md text-xs transition-colors hover:bg-[var(--bg-hover)]" :style="{ color: 'var(--text-muted)' }">取消</button>
+        <button @click="showRenameModal = false" class="btn-ghost" :style="{ color: 'var(--text-muted)' }">取消</button>
         <button @click="confirmRename" class="px-3 py-1.5 rounded-md text-xs font-medium transition-colors" :style="{ background: 'var(--accent)', color: 'var(--bg-root)' }">确认</button>
       </div>
     </ModalShell>
 
     <!-- Input -->
     <InputBar ref="inputBar" :disabled="chat.isProcessing" :auto-mode="autoModeActive" :api-key="settings.apiKey" :base-url="settings.baseUrl" @send="handleSend" @stop="handleStop" @files="(fs) => { for (const f of fs) { if (!attachedFiles.some(af => af.path === f.path)) attachedFiles.push(f); } }" />
+    </div>
   </div>
   </ErrorBoundary>
 </template>
@@ -1194,4 +1224,19 @@ watch(
 .scroll-btn-leave-active { transition: all 150ms ease-in; }
 .scroll-btn-enter-from { opacity: 0; transform: translateY(8px) scale(0.9); }
 .scroll-btn-leave-to { opacity: 0; transform: translateY(4px) scale(0.95); }
+
+.sticky-question-bar {
+  flex-shrink: 0;
+  padding: 0.375rem 1rem;
+  cursor: pointer;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  z-index: 10;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-dim);
+  color: var(--text-muted);
+  backdrop-filter: blur(8px);
+}
 </style>

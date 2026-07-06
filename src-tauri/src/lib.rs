@@ -621,6 +621,20 @@ async fn get_claude_dir() -> Result<String, String> {
     Ok(home.join(".claude").to_string_lossy().to_string())
 }
 
+/// 确保 ~/.claude/ 目录和 settings.json 存在（便携版首次运行时不会自动创建）
+fn ensure_claude_dir() -> Result<(), String> {
+    let home = dirs::home_dir().ok_or("无法获取用户目录")?;
+    let dir = home.join(".claude");
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("创建 .claude 目录失败: {}", e))?;
+    let settings = dir.join("settings.json");
+    if !settings.exists() {
+        std::fs::write(&settings, "{}")
+            .map_err(|e| format!("创建 settings.json 失败: {}", e))?;
+    }
+    Ok(())
+}
+
 /// 返回 claude CLI 的自动检测路径（不检查文件是否存在，仅返回检测逻辑的结果）
 #[tauri::command]
 fn resolve_claude_path() -> Result<String, String> {
@@ -750,6 +764,7 @@ struct ConnectionTestResult {
 
 #[tauri::command]
 fn get_claude_settings() -> Result<ClaudeSettings, String> {
+    ensure_claude_dir()?;
     let home = dirs::home_dir().ok_or("无法获取用户目录")?;
     let path = home.join(".claude").join("settings.json");
     let raw = std::fs::read_to_string(&path)
@@ -799,6 +814,7 @@ fn set_claude_settings(
     permission_mode: String,
     provider_id: String,
 ) -> Result<(), String> {
+    ensure_claude_dir()?;
     let home = dirs::home_dir().ok_or("无法获取用户目录")?;
     let path = home.join(".claude").join("settings.json");
 

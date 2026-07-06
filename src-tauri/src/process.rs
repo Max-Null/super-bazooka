@@ -264,10 +264,13 @@ pub struct ProcessExitedEvent {
 /// so bypassPermissions / dontAsk / acceptEdits are preserved
 /// for future CLI runs outside the GUI.
 fn sync_permission_settings(auto_mode: bool, plan_mode: bool, permission_mode: &str) -> Result<(), String> {
-    let settings_path = dirs::home_dir()
-        .ok_or("No home dir")?
-        .join(".claude")
-        .join("settings.json");
+    let home = dirs::home_dir().ok_or("No home dir")?;
+    let claude_dir = home.join(".claude");
+    std::fs::create_dir_all(&claude_dir).map_err(|e| format!("Failed to create .claude: {}", e))?;
+    let settings_path = claude_dir.join("settings.json");
+    if !settings_path.exists() {
+        std::fs::write(&settings_path, "{}").map_err(|e| format!("Failed to create settings.json: {}", e))?;
+    }
 
     let content = std::fs::read_to_string(&settings_path)
         .map_err(|e| format!("Failed to read settings.json: {}", e))?;

@@ -1,8 +1,9 @@
 ﻿<script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch, provide } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import SessionSidebar from "@/components/session/SessionSidebar.vue";
 import FilePanel from "@/components/files/FilePanel.vue";
+import FilePreviewPanel from "@/components/shared/FilePreviewPanel.vue";
 import CommandPalette from "@/components/shared/CommandPalette.vue";
 import ManagePanel from "@/components/shared/ManagePanel.vue";
 import ChangelogDialog from "@/components/shared/ChangelogDialog.vue";
@@ -55,6 +56,10 @@ const drawerOpen = ref(false);
 const showManagePanel = ref(false);
 const fileNavCounter = ref(0);
 const filePanelForceClose = ref(0);
+
+// 第四列：文件预览/编辑面板
+const panelFile = ref<{ name: string; path: string } | null>(null);
+provide("openFileInPanel", (f: { name: string; path: string }) => { panelFile.value = f; });
 const showWorkspaceMenu = ref(false);
 
 // ── 工作区（状态由 settings store 管理，SQLite 持久化）──
@@ -66,6 +71,7 @@ function switchToWorkspace(path: string) {
   emitChatCommand(`switch-workspace:${path}`);
   showWorkspaceMenu.value = false;
   filePanelForceClose.value++;  // 切工作区时收起文件面板
+  panelFile.value = null;       // 关闭编辑器面板
 }
 
 function onBodyClickForWs(e: MouseEvent) {
@@ -76,10 +82,19 @@ onUnmounted(() => document.removeEventListener("click", onBodyClickForWs));
 
 const commandPalette = ref<InstanceType<typeof CommandPalette> | null>(null);
 
-function handleCommand(action: string) {
+async function handleCommand(action: string) {
   switch (action) {
     // ── 💬 会话 ──
-    case "new-session": handleNew(); break;
+    case "new-session": {
+      const result = await handleNew();
+      if (result === "current-empty") {
+        emitChatCommand("show-status:" + t("session.alreadyNew"));
+      } else if (result !== "created") {
+        // result 是最新空会话的 id → 直接切换，无需新建
+        switchTo(result);
+      }
+      break;
+    }
     case "continue-session":
     case "rename-session":
     case "delete-session":
@@ -279,12 +294,9 @@ function openFilePanelTo(_path: string) {
     <span class="text-xs animate-pulse" style="color:var(--text-muted)">{{ $t('chat.loading') }}</span>
   </div>
 
-  <div v-else class="h-screen flex flex-col" style="background:var(--bg-root)">
+  <div v-else class="sb-shell">
     <!-- Navbar -->
-    <header
-      class="sb-header flex items-center h-11 px-4 shrink-0 select-none"
-      style="background:var(--bg-surface); border-bottom:1px solid var(--border-dim)"
-    >
+    <header class="sb-header">
       <!-- Logo group -->
       <div class="header-logo-group">
         <span class="text-sm font-semibold tracking-tight leading-none" style="color:var(--text-bright)">{{ $t('app.title') }}</span>
@@ -466,9 +478,9 @@ function openFilePanelTo(_path: string) {
     </header>
 
     <!-- Body -->
-    <div class="flex-1 flex overflow-hidden">
+    <div class="sb-body">
       <!-- 左侧会话栏：rail + 展开面板 -->
-      <div class="flex shrink-0">
+      <div class="sb-sidebar">
         <!-- 窄 rail（收起时显示） -->
         <nav v-show="!drawerOpen" class="sb-session-rail">
           <!-- 展开/收起 -->
@@ -524,12 +536,8 @@ function openFilePanelTo(_path: string) {
 
         <!-- 展开面板 -->
         <aside
-          :class="['sb-session-panel overflow-hidden transition-all duration-200 ease-in-out',
-            drawerOpen ? 'w-[260px]' : 'w-0']"
-          :style="{
-            borderRight: drawerOpen ? '1px solid var(--border-dim)' : 'none',
-            background: 'var(--bg-surface)',
-          }"
+          :class="['sb-session-panel',
+            drawerOpen ? 'sb-session-panel--open' : 'sb-session-panel--closed']"
         >
           <div class="w-[260px] h-full">
             <SessionSidebar @navigate="drawerOpen = false" @collapse="drawerOpen = false" />
@@ -538,11 +546,18 @@ function openFilePanelTo(_path: string) {
       </div>
 
       <!-- Main -->
-      <main class="flex-1 flex overflow-hidden">
-        <div class="flex-1 flex flex-col overflow-hidden">
+      <main class="sb-main">
+        <div class="sb-main-content">
           <router-view />
         </div>
       </main>
+
+      <!-- 第四列：文件预览/编辑面板 -->
+      <FilePreviewPanel
+        v-if="panelFile"
+        :file="panelFile"
+        @close="panelFile = null"
+      />
 
       <!-- File panel (right side) -->
       <FilePanel :navCounter="fileNavCounter" :navPath="cwd" :forceClose="filePanelForceClose" />
@@ -555,6 +570,51 @@ function openFilePanelTo(_path: string) {
 </template>
 
 <style scoped>
+/* ── Shell ── */
+.sb-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg-root);
+}
+
+/* ── Header ── */
+.sb-header {
+  display: flex;
+  align-items: center;
+  height: 2.75rem;
+  padding: 0 1rem;
+  flex-shrink: 0;
+  user-select: none;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-dim);
+}
+
+/* ── Body ── */
+.sb-body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.sb-sidebar {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.sb-main {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.sb-main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .header-logo-group {
   display: flex;
   align-items: center;
@@ -617,7 +677,17 @@ function openFilePanelTo(_path: string) {
 }
 
 .sb-session-panel {
+  overflow: hidden;
+  transition: width 200ms ease-in-out, border 200ms ease-in-out;
   background: var(--bg-surface);
+}
+.sb-session-panel--open {
+  width: 260px;
+  border-right: 1px solid var(--border-dim);
+}
+.sb-session-panel--closed {
+  width: 0;
+  border-right: none;
 }
 
 /* ── Activity dot（rail 角标）── */

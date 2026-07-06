@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, inject, nextTick, type Ref } from "vue";
+import { ref, onMounted, onUnmounted, inject, nextTick, watch, type Ref } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   listDir, deleteFile, renameFile, moveFile, copyFile, createDir,
@@ -13,6 +13,8 @@ const props = defineProps<{
   selected: string | null;
   /** 文件操作后通知 FilePanel 刷新 */
   onFileChanged?: () => void;
+  /** FilePanel 刷新计数器，变更时子 FileTree 刷新已展开目录 */
+  refreshKey?: number;
 }>();
 
 const emit = defineEmits<{
@@ -25,6 +27,15 @@ interface ClipState { path: string; name: string; op: "copy" | "cut" }
 const clip = inject<{ state: Ref<ClipState | null>; set: (v: ClipState | null) => void }>("file-clipboard");
 const clipState = clip?.state;
 const setClip = clip?.set;
+
+// ═══ 双击文件 → 打开到右侧编辑面板 ═══
+const openInPanel = inject<(f: { name: string; path: string }) => void>("openFileInPanel", () => {});
+
+function onDblClick(entry: FileEntry) {
+  if (!entry.is_dir) {
+    openInPanel({ name: entry.name, path: entry.path });
+  }
+}
 
 /** 提取文件所在目录路径 */
 function parentPath(filePath: string): string {
@@ -39,6 +50,7 @@ const ctxMenu = ref<{ x: number; y: number; entry: FileEntry } | null>(null);
 
 function onContextMenu(e: MouseEvent, entry: FileEntry) {
   e.preventDefault();
+  e.stopPropagation();  // 阻止冒泡到父级 FileTree，避免菜单覆盖
   ctxMenu.value = { x: e.clientX, y: e.clientY, entry };
 }
 
@@ -145,6 +157,18 @@ async function copyToClipboard(text: string) {
 const expandedDirs = ref<Record<string, FileEntry[]>>({});
 const loadingDirs = ref<Record<string, boolean>>({});
 
+// 文件操作后刷新所有已展开目录（避免子目录内操作后 UI 陈旧）
+watch(() => props.refreshKey, async () => {
+  const keys = Object.keys(expandedDirs.value);
+  if (keys.length === 0) return;
+  await Promise.all(keys.map(async (key) => {
+    try {
+      expandedDirs.value[key] = await listDir(key);
+    } catch { /* 目录可能已被删除 */ }
+  }));
+  expandedDirs.value = { ...expandedDirs.value };
+});
+
 async function toggleDir(entry: FileEntry) {
   if (!entry.is_dir) {
     emit("selectFile", entry);
@@ -221,6 +245,7 @@ function isLoading(path: string): boolean { return !!loadingDirs.value[path]; }
       <div
         v-else
         @click="toggleDir(entry)"
+        @dblclick="onDblClick(entry)"
         @contextmenu="onContextMenu($event, entry)"
         :class="[
           'flex items-center gap-1.5 px-2 py-0.5 rounded cursor-pointer transition-colors truncate',
@@ -257,6 +282,7 @@ function isLoading(path: string): boolean { return !!loadingDirs.value[path]; }
           :entries="expandedDirs[entry.path]"
           :selected="selected"
           :onFileChanged="onFileChanged"
+          :refreshKey="refreshKey"
           @selectFile="emit('selectFile', $event)"
           @navigateTo="emit('navigateTo', $event)"
         />

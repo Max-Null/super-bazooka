@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, provide, type Ref } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch, provide, inject, type Ref } from "vue";
 
 import { listDir, readFileContent, readFileBase64, getWorkspaceRoot, type FileEntry } from "@/lib/tauri-bridge";
 import mammoth from "mammoth";
@@ -8,7 +8,6 @@ import { useI18n } from "vue-i18n";
 import ErrorBoundary from "@/components/shared/ErrorBoundary.vue";
 import FileTree from "./FileTree.vue";
 import FilePreview from "./FilePreview.vue";
-import FilePreviewModal from "@/components/shared/FilePreviewModal.vue";
 
 const props = defineProps<{ navCounter?: number; navPath?: string; forceClose?: number }>();
 
@@ -21,7 +20,7 @@ const files = ref<FileEntry[]>([]);
 const selectedFile = ref<string | null>(null);
 const selectedFilePath = ref("");  // 完整路径，openModalPreview 从子目录选中文件时使用
 const previewContent = ref("");
-const previewFile = ref<{ name: string; path: string } | null>(null);
+const openFileInPanel = inject<(f: { name: string; path: string }) => void>("openFileInPanel", () => {});
 
 // ═══ 文件剪贴板（跨递归 FileTree 共享） ═══
 interface ClipState { path: string; name: string; op: "copy" | "cut" }
@@ -49,6 +48,7 @@ function onPanelDragStart(e: MouseEvent) {
 }
 
 // Drag-to-resize splitter between file tree and preview
+const refreshKey = ref(0);  // 文件操作后触发 FileTree 刷新展开目录
 const splitRatio = ref(35); // 文件树占比 %
 const draggingSplit = ref(false);
 function onSplitDragStart(e: MouseEvent) {
@@ -73,7 +73,11 @@ function onSplitDragStart(e: MouseEvent) {
 }
 
 // CC 修改工作区文件后自动刷新文件面板
-function onCcFileChanged() { refreshDir(); }
+function onCcFileChanged() {
+  refreshDir();
+  // 当前预览的文件可能已被修改 → 重新加载预览内容
+  if (selectedFilePath.value) openFile({ name: selectedFile.value || "", path: selectedFilePath.value, is_dir: false, size: 0 });
+}
 
 onMounted(async () => {
   try {
@@ -125,6 +129,7 @@ function goRoot() {
 /** 刷新当前目录列表 */
 async function refreshDir() {
   try { files.value = await listDir(rootPath.value); } catch {}
+  refreshKey.value++;  // 通知 FileTree 刷新已展开子目录
 }
 
 async function navigateTo(path: string) {
@@ -162,7 +167,7 @@ async function openFile(entry: FileEntry) {
 
 function openModalPreview() {
   if (selectedFile.value && selectedFilePath.value) {
-    previewFile.value = { name: selectedFile.value, path: selectedFilePath.value };
+    openFileInPanel({ name: selectedFile.value, path: selectedFilePath.value });
   }
 }
 
@@ -187,45 +192,32 @@ function goUp() {
 
 <template>
   <ErrorBoundary name="FilePanel">
-    <div class="sb-file-panel flex shrink-0 overflow-hidden">
+    <div class="sb-file-panel">
     <!-- Drag handle (thin strip, visible when panel is open) -->
     <div
       v-if="!collapsed"
       @mousedown="onPanelDragStart"
-      class="w-1.5 shrink-0 cursor-col-resize hover:bg-[var(--accent)]/30 transition-colors select-none"
-      :class="draggingPanel ? 'bg-[var(--accent)]/40' : ''"
-      :style="{ background: draggingPanel ? 'var(--accent-dim)' : 'transparent' }"
+      class="file-panel-drag-handle"
+      :class="{ 'file-panel-drag-handle--active': draggingPanel }"
     ></div>
 
     <!-- Drawer pull-tab -->
     <button
       @click="collapsed = !collapsed"
-      class="shrink-0 w-7 flex items-center justify-center rounded-l-lg cursor-pointer select-none transition-all duration-200"
-      :style="{
-        background: collapsed ? 'var(--bg-surface)' : 'var(--bg-elevated)',
-        color: 'var(--text-secondary)',
-        border: collapsed ? '1px solid var(--border-dim)' : 'none',
-        borderRight: 'none',
-      }"
+      class="file-panel-tab"
+      :class="{ 'file-panel-tab--open': !collapsed }"
       :title="collapsed ? $t('file.title') : ''"
     >
-      <span
-        class="transition-transform duration-200"
-        :style="{ writingMode: 'vertical-rl', fontSize: '10px', letterSpacing: '3px', transform: collapsed ? '' : 'rotate(180deg)' }"
-      >
+      <span class="file-panel-tab-label" :class="{ 'file-panel-tab-label--open': !collapsed }">
         {{ collapsed ? $t('file.title') : '◀' }}
       </span>
     </button>
 
     <!-- Panel body -->
     <aside
-      :class="['flex flex-col overflow-hidden transition-all duration-200',
-        collapsed ? 'w-0' : '']"
-      :style="{
-        width: collapsed ? '0' : panelWidth + 'px',
-        background: 'var(--bg-surface)',
-        borderLeft: collapsed ? 'none' : '1px solid var(--border-dim)',
-      }"
+      class="file-panel-body"
+      :class="{ 'file-panel-body--closed': collapsed }"
+      :style="{ width: collapsed ? '0' : panelWidth + 'px' }"
     >
       <div v-if="!collapsed" class="flex flex-col h-full">
         <!-- Breadcrumb -->
@@ -252,13 +244,13 @@ function goUp() {
         </div>
 
         <!-- File tree + preview（可拖动分隔条） -->
-        <div class="sb-file-panel-body flex flex-col flex-1 min-h-0">
+        <div class="sb-file-panel-body">
           <!-- File tree -->
           <div
             class="overflow-y-auto px-1 py-0.5 min-h-0"
             :style="selectedFile && previewContent ? { height: splitRatio + '%' } : { flex: 1 }"
           >
-            <FileTree :entries="files" :selected="selectedFile" :onFileChanged="refreshDir" @selectFile="openFile" @navigateTo="navigateTo" />
+            <FileTree :entries="files" :selected="selectedFile" :onFileChanged="refreshDir" :refreshKey="refreshKey" @selectFile="openFile" @navigateTo="navigateTo" />
           </div>
 
           <!-- 拖动分隔条 -->
@@ -312,7 +304,4 @@ function goUp() {
     </aside>
   </div>
   </ErrorBoundary>
-
-  <!-- File preview modal -->
-  <FilePreviewModal :file="previewFile" @close="previewFile = null" />
 </template>

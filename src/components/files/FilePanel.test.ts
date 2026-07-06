@@ -51,18 +51,22 @@ function stub(name: string, template = "<div></div>") {
 }
 
 // pony: <script setup> 内部变量无法被 vue-tsc 推断到 wrapper.vm 类型上，mount 时一并返回 any 类型的 vm
+/** openFileInPanel mock，供测试验证调用参数 */
+const mockOpenInPanel = vi.fn();
+
 function mountPanel() {
   const wrapper = mount(FilePanel, {
     global: {
       plugins: [i18n],
+      provide: { openFileInPanel: mockOpenInPanel },
       stubs: {
         ErrorBoundary: stub("ErrorBoundary", "<div><slot /></div>"),
         FileTree: stub("FileTree"),
         FilePreview: stub("FilePreview"),
-        FilePreviewModal: stub("FilePreviewModal"),
       },
     },
   });
+  mockOpenInPanel.mockClear();
   return { wrapper, vm: wrapper.vm as any };
 }
 
@@ -129,15 +133,14 @@ describe("FilePanel", () => {
 
   // ── openModalPreview：使用完整路径 ──
 
-  it("openModalPreview uses selectedFilePath for modal preview", () => {
+  it("openModalPreview opens file in 4th column panel", () => {
     const { wrapper, vm } = mountPanel();
 
-    // 模拟从子目录选中文件后的状态
     vm.selectedFile = "App.vue";
     vm.selectedFilePath = "C:\\project\\src\\App.vue";
     vm.openModalPreview();
 
-    expect(vm.previewFile).toEqual({
+    expect(mockOpenInPanel).toHaveBeenCalledWith({
       name: "App.vue",
       path: "C:\\project\\src\\App.vue",
     });
@@ -150,8 +153,10 @@ describe("FilePanel", () => {
     vm.selectedFilePath = "C:\\project\\src\\composables\\useStreamProcessor.ts";
     vm.openModalPreview();
 
-    expect(vm.previewFile?.path).toBe("C:\\project\\src\\composables\\useStreamProcessor.ts");
-    expect(vm.previewFile?.name).toBe("index.ts");
+    expect(mockOpenInPanel).toHaveBeenCalledWith({
+      name: "index.ts",
+      path: "C:\\project\\src\\composables\\useStreamProcessor.ts",
+    });
   });
 
   it("openModalPreview does nothing when selectedFile is null", () => {
@@ -161,18 +166,17 @@ describe("FilePanel", () => {
     vm.selectedFilePath = "";
     vm.openModalPreview();
 
-    expect(vm.previewFile).toBeNull();
+    expect(mockOpenInPanel).not.toHaveBeenCalled();
   });
 
   it("openModalPreview does nothing when selectedFilePath is empty", () => {
     const { wrapper, vm } = mountPanel();
 
-    // 有文件名但无完整路径 —— 防御性保护
     vm.selectedFile = "orphan.txt";
     vm.selectedFilePath = "";
     vm.openModalPreview();
 
-    expect(vm.previewFile).toBeNull();
+    expect(mockOpenInPanel).not.toHaveBeenCalled();
   });
 
   // ── 关闭预览清理状态 ──

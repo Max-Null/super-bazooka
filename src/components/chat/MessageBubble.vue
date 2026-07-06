@@ -144,10 +144,10 @@ function summarizeResult(content: string): string {
 </script>
 
 <template>
-  <div :class="['flex gap-3', message.role === 'user' ? 'flex-row-reverse' : '']" :data-role="message.role">
+  <div :class="['msg-row', message.role === 'user' ? 'msg-row--user' : 'msg-row--assistant']" :data-role="message.role">
     <!-- Avatar -->
     <div
-      class="w-7 h-7 shrink-0 rounded-md flex items-center justify-center text-[11px] font-semibold"
+      class="msg-avatar"
       :style="{
         background: message.role === 'user'
           ? 'linear-gradient(135deg, #3b82f6, #6366f1)'
@@ -169,7 +169,7 @@ function summarizeResult(content: string): string {
         <button
           v-if="message.content && !message.isStreaming"
           @click="copyContent"
-          class="w-4 h-4 flex items-center justify-center rounded transition-colors hover:bg-[var(--bg-hover)]"
+          class="msg-action-btn"
           :style="{ color: copied ? 'var(--accent)' : 'var(--text-secondary)' }"
           :title="copied ? $t('chat.copied') : $t('chat.copy')"
         >
@@ -180,7 +180,7 @@ function summarizeResult(content: string): string {
         <button
           v-if="message.role === 'user' && !message.isStreaming && !isEditing"
           @click="startEdit"
-          class="w-4 h-4 flex items-center justify-center rounded transition-colors hover:bg-[var(--bg-hover)]"
+          class="msg-action-btn"
           style="color: var(--text-secondary)"
           :title="$t('chat.edit')"
         >
@@ -190,7 +190,7 @@ function summarizeResult(content: string): string {
         <button
           v-if="message.role === 'user' && !message.isStreaming && !isEditing"
           @click="emit('resend', message.id, message.content)"
-          class="w-4 h-4 flex items-center justify-center rounded transition-colors hover:bg-[var(--bg-hover)]"
+          class="msg-action-btn"
           style="color: var(--text-secondary)"
           :title="$t('chat.resend')"
         >
@@ -215,7 +215,7 @@ function summarizeResult(content: string): string {
           </div>
 
           <!-- 思考块（默认折叠） -->
-          <details v-if="block.type === 'thinking'" class="tl-thinking">
+          <details v-if="block.type === 'thinking'" class="tl-thinking-inner">
             <summary class="tl-thinking-summary">
               💭 {{ (message.isStreaming && i === message.contentBlocks!.length - 1) ? $t('chat.thinking') : $t('chat.thinkingDone') }}
               <!-- 思考耗时：后一个工具块上记录的 thinkingDurationMs -->
@@ -380,6 +380,26 @@ function summarizeResult(content: string): string {
 </template>
 
 <style scoped>
+/* ── 消息行 ── */
+.msg-row { display: flex; gap: 0.75rem; }
+.msg-row--user { flex-direction: row-reverse; }
+
+/* ── 消息头像 ── */
+.msg-avatar {
+  width: 1.75rem; height: 1.75rem;
+  flex-shrink: 0; border-radius: 0.375rem;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 600;
+}
+
+/* ── 消息操作按钮（编辑/重发/复制）── */
+.msg-action-btn {
+  width: 1rem; height: 1rem;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 0.25rem; transition: background-color 150ms;
+}
+.msg-action-btn:hover { background: var(--bg-hover); }
+
 /* ── 时间线 ── */
 .sb-timeline {
   position: relative;
@@ -442,6 +462,10 @@ function summarizeResult(content: string): string {
   color: var(--amber);
   transition: background 150ms;
   list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
 }
 .tl-thinking-summary::-webkit-details-marker { display: none; }
 .tl-thinking-summary:hover { background: rgba(255,255,255,0.03); }
@@ -452,14 +476,16 @@ function summarizeResult(content: string): string {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 320px;
-  margin-left: 8px;
+  flex: 1;
+  min-width: 0;
 }
 .tl-thinking-body {
   padding: 6px 10px;
   font-size: 12px;
   line-height: 1.6;
   white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
   color: var(--text-secondary);
   border-top: 1px solid rgba(255,255,255,0.05);
 }

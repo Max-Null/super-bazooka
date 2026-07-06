@@ -81,6 +81,24 @@ npm run test:quick             # 快速测试（跳过 e2e）
 2. 更新 CLAUDE.md / docs/（如有设计变更）
 3. Git commit（Conventional Commits: `feat(模块):` / `fix(模块):`）
 
+## CSS 命名硬约束
+
+**DOM 元素必须有语义 class 名，禁止裸 Tailwind。** 用注释里描述的元素名命名 class，以后沟通直接说"拖拽把手"、"面板头部"就能定位。
+
+```html
+<!-- ❌ 禁止 -->
+<div class="w-1.5 shrink-0 cursor-col-resize hover:bg-[var(--accent)]/30 transition-colors select-none" />
+
+<!-- ✅ 正确 -->
+<div class="panel-drag-handle" />
+```
+
+**规则：**
+- 任何 `class="..."` 含 3+ 个 Tailwind token → 必须提取为语义 class
+- class 名用 BEM 风格：`组件-区块--状态`（如 `sb-header`、`panel-drag-handle--active`）
+- inline `style="..."` 含 3+ 条规则 → 收进 class
+- 颜色只用 CSS 变量（`var(--xxx)`），禁止硬编码色值
+
 ## 颜色系统
 
 全部颜色通过 CSS 变量管理（`src/assets/main.css`），禁止硬编码色值。
