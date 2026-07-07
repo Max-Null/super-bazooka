@@ -31,6 +31,62 @@ export const APP_VERSION: string = appPackage.version;
 // 按版本降序排列（最新在第一个）
 export const changelog: ChangelogEntry[] = [
   {
+    version: "0.7.0",
+    date: "2026-07-08",
+    sections: [
+      {
+        titleZh: "Git 适配阶段一：状态面板 + 提交 + Diff 第四列",
+        titleEn: "Git Adaptation Phase 1: Status Panel + Commit + Diff 4th Column",
+        itemsZh: [
+          "Git 面板（FilePanel Tab 切换）：分支名 + Staged/Modified/Untracked 三段式文件列表",
+          "点击文件查看 diff → 推送到第四列 360px 宽屏展示，逐行着色（增绿删红），与文件编辑器互斥",
+          "行内 Stage / Unstage 按钮，底部 Commit 输入框 + Amend / 提交后推送 选项 + 独立推送按钮",
+          "非 Git 仓库时一键发送指令让 CC 初始化 git（含自动安装 + .gitignore）",
+          "Rust 后端：git2 库实现 6 个命令（status/diff/stage/unstage/commit/push），11 个 Rust 测试",
+        ],
+        itemsEn: [
+          "Git panel (FilePanel tab switch): branch name + Staged/Modified/Untracked three-section file list",
+          "Click file to view diff → pushed to 4th column 360px wide display, color-coded lines (green add/red del), mutually exclusive with file editor",
+          "Inline Stage/Unstage buttons, commit input bar + Amend/Push-after options + standalone push button",
+          "One-click CC-initiated git setup when workspace is not a repo (auto-install git + .gitignore)",
+          "Rust backend: 6 git2 commands (status/diff/stage/unstage/commit/push), 11 Rust tests",
+        ],
+      },
+      {
+        titleZh: "会话分叉 + 时间线导航",
+        titleEn: "Session Fork + Timeline Navigation",
+        itemsZh: [
+          "消息气泡新增 ✂️ 分叉按钮 → 从指定消息创建分叉会话（--fork-session）",
+          "分叉会话标题自动区分（\"分叉: 消息前30字\"），点击时预检 CC 会话有效性",
+          "原会话无 CC ID → 立即提示降级为普通新会话；CC 进程异常退出时聊天区可见错误提示",
+          "聊天右侧时间线导航：圆点定位用户消息，悬停预览，滚动高亮当前消息（Scroll Spy）",
+        ],
+        itemsEn: [
+          "New ✂️ fork button on message bubbles → fork session from specific message (--fork-session)",
+          "Forked sessions get distinct titles (\"Fork: first 30 chars\"), pre-check CC session validity on click",
+          "Missing CC session ID → immediate fallback notice; CC process crash shows visible chat error",
+          "Chat right-side timeline nav: dots for user messages, hover tooltip, scroll spy highlights current",
+        ],
+      },
+      {
+        titleZh: "Markdown 渲染 + 错误提示优化",
+        titleEn: "Markdown Rendering + Error UX",
+        itemsZh: [
+          "修复编号列表正则匹配（1.text 不跳号、排除版本号 0.5.0）",
+          "修复缩进代码块识别（允许 0-3 空格缩进的 ```）",
+          "列表项间空白行不再打断连续 ol/ul，相邻块自动合并",
+          "API 402 Insufficient Balance 错误友好提示",
+        ],
+        itemsEn: [
+          "Fixed numbered list regex (1.text detection, exclude version numbers like 0.5.0)",
+          "Fixed indented code block recognition (allow 0-3 space-indented ```)",
+          "Blank lines between list items no longer break contiguous ol/ul, adjacent blocks auto-merge",
+          "Friendly error message for API 402 Insufficient Balance",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.6.0",
     date: "2026-07-07",
     sections: [
