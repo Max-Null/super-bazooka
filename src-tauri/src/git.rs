@@ -122,34 +122,32 @@ pub fn git_commit(repo_path: &str, message: &str, amend: bool) -> Result<String,
     let tree_id = index.write_tree().map_err(|e| format!("写入 tree 失败: {}", e))?;
     let tree = repo.find_tree(tree_id).map_err(|e| format!("查找 tree 失败: {}", e))?;
 
-    let head = repo.head().ok();
-    let head_commit = head.as_ref().and_then(|h| h.peel_to_commit().ok());
-
+    // 在 if 块内提取 parent 信息（借用仅块内有效，amend 后需重新获取 HEAD 引用）
     let oid = if amend {
-        // amend: 用 HEAD 的父提交作为新提交的父（替换 HEAD）
+        let head = repo.head().ok();
+        let head_commit = head.as_ref().and_then(|h| h.peel_to_commit().ok());
         let parent_commits: Vec<git2::Commit> = head_commit.as_ref()
             .map(|c| c.parents().collect())
             .unwrap_or_default();
         let parents: Vec<&git2::Commit> = parent_commits.iter().collect();
-        repo.commit(
-            Some("HEAD"),
-            &sig,
-            &sig,
-            message,
-            &tree,
-            &parents,
-        )
+        // amend: 不传 refname——git2 要求 first parent = current HEAD，amend 不满足
+        repo.commit(None, &sig, &sig, message, &tree, &parents)
+            .map_err(|e| format!("提交失败: {}", e))?
     } else {
+        let head = repo.head().ok();
+        let head_commit = head.as_ref().and_then(|h| h.peel_to_commit().ok());
         let parents: Vec<&git2::Commit> = head_commit.iter().collect();
-        repo.commit(
-            Some("HEAD"),
-            &sig,
-            &sig,
-            message,
-            &tree,
-            &parents,
-        )
-    }.map_err(|e| format!("提交失败: {}", e))?;
+        repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents)
+            .map_err(|e| format!("提交失败: {}", e))?
+    };
+
+    if amend {
+        // 手动更新 HEAD 引用指向新 commit（amend 不会自动更新）
+        repo.head()
+            .map_err(|e| format!("获取 HEAD 引用失败: {}", e))?
+            .set_target(oid, "amend")
+            .map_err(|e| format!("更新 HEAD 失败: {}", e))?;
+    }
 
     Ok(oid.to_string())
 }
