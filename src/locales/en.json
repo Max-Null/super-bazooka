@@ -35,6 +35,7 @@
     "copied": "Copied",
     "edit": "Edit",
     "resend": "Resend",
+    "forkSession": "Fork",
     "cancel": "Cancel",
     "saveResend": "Save & Resend",
     "toolOutput": "Output",
@@ -154,6 +155,7 @@
     "delete": "Delete",
     "confirmDelete": "Delete session \"{title}\"? This cannot be undone.",
     "switchSuccess": "Switched to: {title}",
+    "forked": "Forked session created",
     "loadFailed": "Failed to load messages",
     "clear": "Clear",
     "noSessions": "No sessions yet",
@@ -331,6 +333,7 @@
     "fileWriteError": "Failed to write file: {error}",
     "httpError": "Network request failed: {error}",
     "sessionNotFound": "Session not found: {error}",
+    "insufficientBalance": "Insufficient API balance. Please top up and try again.",
     "generic": "Error: {error}"
   },
 

@@ -35,6 +35,7 @@
     "copied": "已复制",
     "edit": "编辑",
     "resend": "重发",
+    "forkSession": "分叉",
     "cancel": "取消",
     "saveResend": "保存并重发",
     "toolOutput": "输出",
@@ -154,6 +155,7 @@
     "delete": "删除",
     "confirmDelete": "删除会话 \"{title}\"？此操作不可撤销。",
     "switchSuccess": "已切换到: {title}",
+    "forked": "已创建分叉会话",
     "loadFailed": "加载消息失败",
     "clear": "清空",
     "noSessions": "暂无会话",
@@ -331,6 +333,7 @@
     "fileWriteError": "写入文件失败: {error}",
     "httpError": "网络请求失败: {error}",
     "sessionNotFound": "会话未找到: {error}",
+    "insufficientBalance": "API 余额不足，请充值后重试",
     "generic": "错误: {error}"
   },
 

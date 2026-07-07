@@ -44,6 +44,9 @@ function renderMarkdown(text: string): string {
     const items: string[] = [];
     let j = start;
     while (j < lines.length) {
+      // 跳过空行：避免列表项间的空行导致 collectLines 提前终止，
+      // 把连续的 "1.\n\n2.\n\n3." 拆成三个独立的 <ol>（编号全部从 1 开始）
+      if (lines[j].trim() === "") { j++; continue; }
       const result = pred(lines[j]);
       if (result === null) break;
       items.push(result);
@@ -53,11 +56,11 @@ function renderMarkdown(text: string): string {
   }
 
   while (i < lines.length) {
-    if (/^```/.test(lines[i])) {
+    if (/^ {0,3}```/.test(lines[i])) {
       const lang = lines[i].slice(3).trim();
       const codeLines: string[] = [];
       i++;
-      while (i < lines.length && !/^```/.test(lines[i])) {
+      while (i < lines.length && !/^ {0,3}```/.test(lines[i])) {
         codeLines.push(lines[i]);
         i++;
       }
@@ -85,8 +88,8 @@ function renderMarkdown(text: string): string {
       output.push(`<ul>${result.html}</ul>`);
       i = result.end; continue;
     }
-    else if (/^\d+\. (.+)$/.test(lines[i])) {
-      const result = collectLines(i, (line) => { const m = line.match(/^\d+\. (.+)$/); return m ? `<li>${m[1]}</li>` : null; });
+    else if (/^\d+\.(?!\d)\s?(.+)$/.test(lines[i])) {
+      const result = collectLines(i, (line) => { const m = line.match(/^\d+\.(?!\d)\s?(.+)$/); return m ? `<li>${m[1]}</li>` : null; });
       output.push(`<ol>${result.html}</ol>`);
       i = result.end; continue;
     }
@@ -117,6 +120,9 @@ function renderMarkdown(text: string): string {
   }
   html = wrapped.join("\n");
   html = html.replace(/<p><\/p>/g, "");
+  // 合并直接相邻的同类列表（被空行分开但无其他内容的，避免编号重置）
+  html = html.replace(/<\/ol>\s*\n\s*<ol>/g, '');
+  html = html.replace(/<\/ul>\s*\n\s*<ul>/g, '');
 
   return html;
 }

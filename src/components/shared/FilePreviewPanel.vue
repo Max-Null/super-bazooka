@@ -94,7 +94,13 @@ function onCcFileChanged() {
   if (!props.file) return;
   readFileContent(props.file.path).then(raw => {
       content.value = raw;
-      // 编辑 tab 才重建编辑器；预览 tab 只刷新 content 供 MarkdownRenderer 等使用
+      // HTML 预览 tab：重新生成 iframe 的 blob URL，让预览区刷新
+      if (fileKind.value === "html") {
+        const injected = raw.replace("<body>", "<body>" + INSPECTOR_SCRIPT)
+          || raw + INSPECTOR_SCRIPT;
+        updateHtmlBlob(injected);
+      }
+      // 编辑 tab 才重建编辑器；Markdown/docx 等预览只刷新 content
       if (activeTab.value === "edit") {
         destroyEditor();
         dirty.value = false;

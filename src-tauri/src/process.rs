@@ -238,6 +238,7 @@ pub struct SpawnParams {
     pub model: String,
     pub file_paths: Vec<String>,
     pub claude_path: Option<String>,
+    pub fork_session: bool,
 }
 
 /// Result of spawning a claude session.
@@ -401,6 +402,9 @@ pub async fn spawn_claude_session(
     if let Some(ref resume_id) = params.resume_id {
         args.push("--resume".to_string());
         args.push(resume_id.clone());
+    }
+    if params.fork_session {
+        args.push("--fork-session".to_string());
     }
 
     // --input-format stream-json 模式下，消息通过 stdin NDJSON 发送，不能作为命令行参数

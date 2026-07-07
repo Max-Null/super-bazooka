@@ -27,6 +27,7 @@ import ContextUsageModal from "@/components/shared/ContextUsageModal.vue";
 import ManagePanel from "@/components/shared/ManagePanel.vue";
 import ModalShell from "@/components/shared/ModalShell.vue";
 import MarkdownRenderer from "@/components/shared/MarkdownRenderer.vue";
+import ChatTimelineNav from "./ChatTimelineNav.vue";
 import { useCommandPaletteBus, useChatCommandBus, emitGlobalCommand } from "@/composables/useCommandPalette";
 import { useI18n } from "vue-i18n";
 const { t } = useI18n();
@@ -358,6 +359,13 @@ const stickyTargetEl = ref<HTMLElement | null>(null);
 function scrollToSticky() {
   stickyTargetEl.value?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
+
+function scrollToUserMsg(index: number) {
+  const userEls = scrollContainer.value?.querySelectorAll<HTMLElement>('[data-role="user"]');
+  if (userEls && userEls[index]) {
+    userEls[index].scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+}
 // 消息清空（新建会话 / clear）时同步隐藏置顶问题横幅
 watch(() => chat.messages.length, (len) => {
   if (len === 0) {
@@ -478,7 +486,17 @@ async function handleSend(text: string) {
       // 用 model 字段（用户当前选择的模型），禅模式下通常应为 OpenAI-format 模型名（如 deepseek-chat）
       await zenSendMessage(sid, fullText, settings.apiKey, chatUrl, settings.model);
     } else {
-      await sendMessage(sid, fullText, {
+      // 分叉会话首条消息：加前缀告知 CC 忽略分叉点之后的内容
+      let finalText = fullText;
+      let resumeId: string | undefined;
+      let forkSession = false;
+      if (forkedFrom.value && sid === forkedFrom.value.sessionId) {
+        finalText = `[会话分叉] 以下对话从用户消息 "${forkedFrom.value.msgSnippet}" 之后分叉。请忽略该消息之后的所有对话内容，从现在起继续。\n\n${fullText}`;
+        resumeId = forkedFrom.value.claudeSessionId;
+        forkSession = true;
+        forkedFrom.value = null; // 仅首条消息注入
+      }
+      await sendMessage(sid, finalText, {
         planMode: settings.planMode,
         autoMode: settings.autoMode,
         permissionMode: settings.permissionMode,
@@ -487,6 +505,9 @@ async function handleSend(text: string) {
         model: settings.model,
         filePaths: filePaths.length > 0 ? filePaths : undefined,
         claudePath: settings.claudePath || undefined,
+        cwd: settings.cwd || undefined,
+        resumeId,
+        forkSession,
       });
     }
     // 侧栏统计在 useStreamProcessor result 事件后刷新（token 已入库）
@@ -578,6 +599,24 @@ async function handleResend(id: string, content: string) {
   }
   const cleanContent = extractDomSnippet(content);
   await handleSend(cleanContent);
+}
+
+// 分叉状态：当前会话是否从另一个会话分叉而来
+const forkedFrom = ref<{ sessionId: string; claudeSessionId: string | undefined; msgSnippet: string } | null>(null);
+
+async function handleFork(msgId: string) {
+  const msg = chat.messages.find(m => m.id === msgId);
+  if (!msg) return;
+  // 先提取分叉点信息再清空消息（clearMessages 后 msg 引用仍有效，但防御性存储）
+  const originalSession = session.sessions.find(s => s.id === session.activeSessionId);
+  const claudeId = originalSession?.claudeSessionId;
+  const snippet = msg.content?.slice(0, 80) || "(消息内容)";
+  // 创建新前端会话（复用当前工作区）
+  const newId = await session.createSession(settings.model, settings.cwd, undefined, settings.locale);
+  forkedFrom.value = { sessionId: newId, claudeSessionId: claudeId, msgSnippet: snippet };
+  session.setActiveSession(newId);
+  chat.clearMessages();
+  showStatus(t("session.forked"));
 }
 
 // ── AskUserQuestion 问答状态 ──
@@ -819,8 +858,9 @@ watch(
       <span class="font-medium" style="color:var(--text-secondary)">↳ </span>{{ stickyQuestion }}
     </div>
 
-    <!-- Messages -->
-    <div ref="scrollContainer" class="chat-messages" @scroll="onScrollThrottled">
+    <!-- Messages + 时间线导航 -->
+    <div class="chat-area">
+      <div ref="scrollContainer" class="chat-messages" @scroll="onScrollThrottled">
       <!-- Welcome -->
       <div v-if="chat.messages.length === 0" class="welcome-container">
         <div class="welcome-page">
@@ -866,6 +906,7 @@ watch(
             :message="msg"
             @edit-save="handleEditSave"
             @resend="handleResend"
+            @fork="handleFork"
             @preview-file="(f) => openFileInPanel(f)"
           />
         </TransitionGroup>
@@ -876,6 +917,13 @@ watch(
           :tool-name="activeToolName"
         />
       </div>
+    </div>
+    <!-- 时间线导航（竖排点，与 scroll 容器同级，不随滚动） -->
+    <ChatTimelineNav
+      :messages="chat.messages"
+      :scrollContainer="scrollContainer"
+      @scrollTo="(i) => scrollToUserMsg(i)"
+    />
     </div>
 
     <!-- Debug / LLM 展开内容：绝对定位弹出 + 点击外部关闭 -->

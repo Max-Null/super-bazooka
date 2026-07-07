@@ -67,25 +67,43 @@ async fn send_message(
     model: Option<String>,
     file_paths: Option<Vec<String>>,
     claude_path: Option<String>,
+    cwd: Option<String>,
+    resume_id: Option<String>,
+    fork_session: bool,
     app_handle: tauri::AppHandle,
 ) -> Result<String, String> {
     let file_paths = file_paths.unwrap_or_default();
 
-    // Look up claude session UUID for resume + CWD + model
-    let (resume_id, cwd, session_model) = {
+    // 工作目录优先级：前端传入 > session 存储 > current_dir
+    let default_cwd = std::env::current_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_default();
+
+    let cwd = if let Some(ref c) = cwd {
+        if !c.is_empty() && std::path::Path::new(c).is_dir() { c.clone() } else { default_cwd }
+    } else {
+        // 回退到 session 存储的 cwd
         let session = state.session_manager.lock().await;
-        let s = session.get_session(&session_id);
-        let resume = session.get_claude_session(&session_id);
-        let (cwd, model) = match s {
-            Ok(s) => (s.cwd, s.model),
-            Err(_) => (
-                std::env::current_dir()
-                    .map(|p| p.to_string_lossy().to_string())
-                    .unwrap_or_default(),
-                String::new(),
-            ),
-        };
-        (resume, cwd, model)
+        match session.get_session(&session_id) {
+            Ok(s) if !s.cwd.is_empty() && std::path::Path::new(&s.cwd).is_dir() => s.cwd.clone(),
+            _ => default_cwd,
+        }
+    };
+
+    // Look up claude session UUID for resume + model
+    // 前端传入的 resume_id（分叉用）优先于 session 存储的
+    let resume_id = if let Some(ref id) = resume_id {
+        Some(id.clone())
+    } else {
+        let session = state.session_manager.lock().await;
+        session.get_claude_session(&session_id)
+    };
+    let session_model = {
+        let session = state.session_manager.lock().await;
+        match session.get_session(&session_id) {
+            Ok(s) => s.model.clone(),
+            Err(_) => String::new(),
+        }
     };
 
     // Save user message to DB + auto-title on first message
@@ -155,6 +173,7 @@ async fn send_message(
         model: spawn_model,
         file_paths,
         claude_path,
+        fork_session,
     };
 
     let stdin_mgr = state.stdin_manager.clone();

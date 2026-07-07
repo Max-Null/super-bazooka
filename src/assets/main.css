@@ -318,11 +318,20 @@ body {
   justify-content: center;
   height: 100%;
 }
-.chat-messages {
+.chat-area {
   flex: 1;
   position: relative;
-  overflow-y: auto;
+  display: flex;
+  overflow: hidden;
 }
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  /* 隐藏默认滚动条，用时间线导航替代 */
+  scrollbar-width: none;
+}
+.chat-messages::-webkit-scrollbar { display: none; }
 .chat-messages-inner {
   max-width: 48rem;
   margin: 0 auto;

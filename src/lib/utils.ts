@@ -45,6 +45,11 @@ export function translateError(err: unknown): { key: string; params?: Record<str
     return { key: "error.httpError", params: { error: s } };
   }
 
+  // API 余额不足（402 Insufficient Balance）
+  if (lower.includes("402") || lower.includes("insufficient") || lower.includes("balance")) {
+    return { key: "error.insufficientBalance", params: { error: s } };
+  }
+
   // Session errors
   if (lower.includes("session") && lower.includes("not found")) {
     return { key: "error.sessionNotFound", params: { error: s } };

@@ -1,6 +1,6 @@
 import { defineStore } from "pinia";
 import { ref, watch } from "vue";
-import { getClaudeSettings, setClaudeSettings, resolveClaudePath, saveProviderConfig, loadProviderConfigs, saveUiSettings as saveUiSettingsDb, loadUiSettings as loadUiSettingsDb } from "@/lib/tauri-bridge";
+import { getClaudeSettings, setClaudeSettings, resolveClaudePath, saveProviderConfig, loadProviderConfigs, saveUiSettings as saveUiSettingsDb, loadUiSettings as loadUiSettingsDb, listDir } from "@/lib/tauri-bridge";
 
 /** Provider logo CDN URL 映射（lobe-icons，与 SettingsPanel 同源） */
 export const PROVIDER_LOGOS: Record<string, string> = {
@@ -168,7 +168,10 @@ export const useSettingsStore = defineStore("settings", () => {
       if (db.locale) locale.value = db.locale as "zh" | "en";
       if (db.fontSize) fontSize.value = db.fontSize as "small" | "medium" | "large";
       if (db.ponytailMode) ponytailMode.value = db.ponytailMode as PonytailMode;
-      if (db.cwd) cwd.value = db.cwd;
+      if (db.cwd) {
+        // 校验路径是否仍存在，防止 exe 换位置后加载无效工作区
+        listDir(db.cwd).then(() => { cwd.value = db.cwd; }).catch(() => { /* 路径不存在，保持空让 AppShell 用 getWorkspaceRoot */ });
+      }
       if (db.recentWorkspaces) recentWorkspaces.value = db.recentWorkspaces;
     } catch {}
       }).catch(() => {}),

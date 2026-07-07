@@ -29,6 +29,7 @@ const props = defineProps<{ message: Message }>();
 const emit = defineEmits<{
   edit: [id: string, content: string];
   resend: [id: string, content: string];
+  fork: [id: string];
   editSave: [id: string, newContent: string];
   previewFile: [file: { name: string; path: string }];
 }>();
@@ -186,6 +187,16 @@ function summarizeResult(content: string): string {
         >
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
         </button>
+        <!-- Fork（用户消息分叉） -->
+        <button
+          v-if="message.role === 'user' && !message.isStreaming && !isEditing"
+          @click="emit('fork', message.id)"
+          class="msg-action-btn"
+          style="color: var(--text-secondary)"
+          :title="$t('chat.forkSession')"
+        >
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v8M9 5l3-3 3 3"/><path d="M18 22v-8M18 8v6M6 14v8"/></svg>
+        </button>
         <!-- Resend (user messages only) -->
         <button
           v-if="message.role === 'user' && !message.isStreaming && !isEditing"
@@ -342,13 +353,12 @@ function summarizeResult(content: string): string {
         <span v-if="message.isStreaming" class="stream-cursor"></span>
       </div>
 
-      <!-- 用户消息纯文本（无 contentBlocks） -->
+      <!-- 用户消息纯文本（无 contentBlocks，不做 Markdown 解析） -->
       <div
         v-if="!message.contentBlocks?.length && message.role === 'user' && message.content"
-        class="px-3.5 py-2.5 rounded-2xl rounded-tr-md user-text prose text-sm leading-relaxed"
-        :style="{ background: 'linear-gradient(135deg, rgba(59,130,246,0.15), rgba(99,102,241,0.10))', border: '1px solid rgba(59,130,246,0.15)', color: 'var(--text-bright)' }"
+        class="user-bubble"
       >
-        <MarkdownRenderer :content="message.content" />
+        {{ message.content }}
 
         <!-- Attachments in user message -->
         <div
@@ -380,6 +390,18 @@ function summarizeResult(content: string): string {
 </template>
 
 <style scoped>
+/* ── 用户消息气泡 ── */
+.user-bubble {
+  padding: 0.625rem 0.875rem;
+  border-radius: 1rem 1rem 0.25rem 1rem;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  background: linear-gradient(135deg, rgba(59,130,246,0.15), rgba(99,102,241,0.10));
+  border: 1px solid rgba(59,130,246,0.15);
+  color: var(--text-bright);
+}
+
 /* ── 消息行 ── */
 .msg-row { display: flex; gap: 0.75rem; }
 .msg-row--user { flex-direction: row-reverse; }

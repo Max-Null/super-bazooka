@@ -64,6 +64,12 @@ export interface SendOptions {
   filePaths?: string[];
   /** Manual claude CLI path (overrides auto-detect) */
   claudePath?: string;
+  /** Working directory (overrides session cwd, used when workspace changes) */
+  cwd?: string;
+  /** Resume a specific claude session (for forking) */
+  resumeId?: string;
+  /** Use --fork-session to branch from the resumed session */
+  forkSession?: boolean;
 }
 
 export async function sendMessage(sessionId: string, message: string, options?: SendOptions): Promise<string> {
@@ -78,6 +84,9 @@ export async function sendMessage(sessionId: string, message: string, options?: 
     model: options?.model ?? null,
     filePaths: options?.filePaths ?? null,
     claudePath: options?.claudePath ?? null,
+    cwd: options?.cwd ?? null,
+    resumeId: options?.resumeId ?? null,
+    forkSession: options?.forkSession ?? false,
   });
 }
 
