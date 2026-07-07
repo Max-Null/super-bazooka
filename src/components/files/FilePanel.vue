@@ -8,6 +8,7 @@ import { useI18n } from "vue-i18n";
 import ErrorBoundary from "@/components/shared/ErrorBoundary.vue";
 import FileTree from "./FileTree.vue";
 import FilePreview from "./FilePreview.vue";
+import GitPanel from "./GitPanel.vue";
 
 const props = defineProps<{ navCounter?: number; navPath?: string; forceClose?: number }>();
 
@@ -48,6 +49,7 @@ function onPanelDragStart(e: MouseEvent) {
 }
 
 // Drag-to-resize splitter between file tree and preview
+const activeTab = ref<"files" | "git">("files");  // 面板 Tab 切换
 const refreshKey = ref(0);  // 文件操作后触发 FileTree 刷新展开目录
 const splitRatio = ref(35); // 文件树占比 %
 const draggingSplit = ref(false);
@@ -243,8 +245,22 @@ function goUp() {
           </button>
         </div>
 
-        <!-- File tree + preview（可拖动分隔条） -->
-        <div class="sb-file-panel-body">
+        <!-- Tab 栏：文件 / Git -->
+        <div class="file-panel-tabs">
+          <button
+            @click="activeTab = 'files'"
+            class="file-panel-tab-btn"
+            :class="{ 'file-panel-tab-btn--active': activeTab === 'files' }"
+          >📁 {{ $t('file.title') }}</button>
+          <button
+            @click="activeTab = 'git'"
+            class="file-panel-tab-btn"
+            :class="{ 'file-panel-tab-btn--active': activeTab === 'git' }"
+          >⎇ Git</button>
+        </div>
+
+        <!-- 文件 Tab -->
+        <div v-if="activeTab === 'files'" class="sb-file-panel-body">
           <!-- File tree -->
           <div
             class="overflow-y-auto px-1 py-0.5 min-h-0"
@@ -299,6 +315,11 @@ function goUp() {
               <FilePreview :content="previewContent" :filename="selectedFile" />
             </div>
           </div>
+        </div>
+
+        <!-- Git Tab -->
+        <div v-if="activeTab === 'git'" class="flex-1 flex flex-col overflow-hidden min-h-0">
+          <GitPanel :repoPath="rootPath" />
         </div>
       </div>
     </aside>

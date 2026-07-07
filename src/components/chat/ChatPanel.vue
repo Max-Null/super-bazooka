@@ -255,6 +255,7 @@ watch(() => chatCommand.value.ts, async (ts) => {
     }
     case "slash-clear": handleSend("/clear"); break;
     case "install-ponytail": handleSend("请帮我安装 Ponytail 插件（ponytail@claude-plugins-official）"); break;
+    case "git-init": handleSend(t("git.initMessage")); break;
     default:
       if (action.startsWith("md-convert:")) {
         // MD → docx fallback：通过 CC /docx skill 转换
@@ -493,7 +494,7 @@ async function handleSend(text: string) {
       if (forkedFrom.value && sid === forkedFrom.value.sessionId) {
         finalText = `[会话分叉] 以下对话从用户消息 "${forkedFrom.value.msgSnippet}" 之后分叉。请忽略该消息之后的所有对话内容，从现在起继续。\n\n${fullText}`;
         resumeId = forkedFrom.value.claudeSessionId;
-        forkSession = true;
+        forkSession = !!resumeId;
         forkedFrom.value = null; // 仅首条消息注入
       }
       await sendMessage(sid, finalText, {
@@ -607,16 +608,22 @@ const forkedFrom = ref<{ sessionId: string; claudeSessionId: string | undefined;
 async function handleFork(msgId: string) {
   const msg = chat.messages.find(m => m.id === msgId);
   if (!msg) return;
-  // 先提取分叉点信息再清空消息（clearMessages 后 msg 引用仍有效，但防御性存储）
   const originalSession = session.sessions.find(s => s.id === session.activeSessionId);
   const claudeId = originalSession?.claudeSessionId;
   const snippet = msg.content?.slice(0, 80) || "(消息内容)";
+  // 分叉会话标题与普通新建区分
+  const title = t("session.forkedTitle", { snippet: snippet.slice(0, 30) });
   // 创建新前端会话（复用当前工作区）
-  const newId = await session.createSession(settings.model, settings.cwd, undefined, settings.locale);
-  forkedFrom.value = { sessionId: newId, claudeSessionId: claudeId, msgSnippet: snippet };
+  const newId = await session.createSession(settings.model, settings.cwd, undefined, settings.locale, title);
+  // 仅当原会话有 CC 会话 ID 时才尝试分叉
+  // （不检查磁盘文件——CC 运行时可能未落盘，实际有效性由 CC --resume 决定；
+  //   若失效则在发送首条消息时通过进程异常退出提示反馈）
+  forkedFrom.value = claudeId
+    ? { sessionId: newId, claudeSessionId: claudeId, msgSnippet: snippet }
+    : null;
   session.setActiveSession(newId);
   chat.clearMessages();
-  showStatus(t("session.forked"));
+  showStatus(claudeId ? t("session.forked") : t("session.forkedFallback"));
 }
 
 // ── AskUserQuestion 问答状态 ──

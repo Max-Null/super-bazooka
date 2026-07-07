@@ -66,10 +66,10 @@ export const useSessionStore = defineStore("session", () => {
   }
 
   /** Create a new session via backend，可指定 CWD 和 mode。locale 用于本地化默认标题 */
-  async function createSession(model?: string, cwd?: string, mode?: string, locale?: string): Promise<string> {
-    const title = defaultTitle(locale);
+  async function createSession(model?: string, cwd?: string, mode?: string, locale?: string, title?: string): Promise<string> {
+    const finalTitle = title || defaultTitle(locale);
     try {
-      const s = await createSessionBackend(model, cwd, mode, title);
+      const s = await createSessionBackend(model, cwd, mode, finalTitle);
       sessions.value.unshift(toLocalSession(s));
       activeSessionId.value = s.id;
       return s.id;
@@ -78,7 +78,7 @@ export const useSessionStore = defineStore("session", () => {
       const id = Date.now().toString(36);
       const session: Session = {
         id,
-        title,
+        title: finalTitle,
         createdAt: Date.now(),
         updatedAt: Date.now(),
         messageCount: 0,

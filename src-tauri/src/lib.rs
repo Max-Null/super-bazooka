@@ -1,4 +1,5 @@
 pub mod db;
+pub mod git;
 pub mod process;
 pub mod protocol;
 pub mod provider;
@@ -1642,11 +1643,78 @@ pub fn run() {
             load_session_logs,
             install_claude_code,
             optimize_prompt,
+            git_status_cmd,
+            git_diff_cmd,
+            git_stage_cmd,
+            git_unstage_cmd,
+            git_commit_cmd,
+            git_push_cmd,
+            check_cc_session_exists,
             zen_send_message,
             check_skill_installed,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+// ── Git commands ──
+
+#[tauri::command]
+fn git_status_cmd(repo_path: String) -> Result<git::GitStatus, String> {
+    git::git_status(&repo_path)
+}
+
+#[tauri::command]
+fn git_diff_cmd(repo_path: String, file: String, staged: bool) -> Result<String, String> {
+    git::git_diff(&repo_path, &file, staged)
+}
+
+#[tauri::command]
+fn git_stage_cmd(repo_path: String, files: Vec<String>) -> Result<(), String> {
+    git::git_stage(&repo_path, &files)
+}
+
+#[tauri::command]
+fn git_unstage_cmd(repo_path: String, files: Vec<String>) -> Result<(), String> {
+    git::git_unstage(&repo_path, &files)
+}
+
+#[tauri::command]
+fn git_commit_cmd(repo_path: String, message: String, amend: bool) -> Result<String, String> {
+    git::git_commit(&repo_path, &message, amend)
+}
+
+#[tauri::command]
+fn git_push_cmd(repo_path: String) -> Result<(), String> {
+    git::git_push(&repo_path)
+}
+
+/// 检查 CC 会话是否仍存在于 ~/.claude/ 下（分叉前预检）
+#[tauri::command]
+fn check_cc_session_exists(session_id: String) -> Result<bool, String> {
+    let home = dirs::home_dir().ok_or("无法获取用户目录")?;
+    let claude_dir = home.join(".claude");
+    if !claude_dir.exists() {
+        return Ok(false);
+    }
+    let session_json = format!("{}.json", session_id);
+    // 递归扫描 ~/.claude/ 下最多 4 层，匹配 <id>.json 文件或 <id> 目录名
+    fn scan_dir(dir: &std::path::Path, json_name: &str, dir_name: &str, depth: u32) -> bool {
+        if depth == 0 { return false; }
+        let entries = match std::fs::read_dir(dir) { Ok(e) => e, Err(_) => return false };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let fname = entry.file_name();
+            if path.is_dir() {
+                if fname.to_string_lossy() == *dir_name { return true; }
+                if scan_dir(&path, json_name, dir_name, depth - 1) { return true; }
+            } else if fname.to_string_lossy() == *json_name {
+                return true;
+            }
+        }
+        false
+    }
+    Ok(scan_dir(&claude_dir, &session_json, &session_id, 4))
 }
 
 /// 构建含附件路径的用户消息文本，process.rs 复用以避免重复

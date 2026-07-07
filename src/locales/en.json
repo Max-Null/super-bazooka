@@ -156,6 +156,9 @@
     "confirmDelete": "Delete session \"{title}\"? This cannot be undone.",
     "switchSuccess": "Switched to: {title}",
     "forked": "Forked session created",
+    "forkedTitle": "Fork: {snippet}",
+    "forkedFallback": "Cannot fork (no CC session ID on original), created as normal session",
+    "forkedExpired": "Cannot fork (CC session expired), created as normal session",
     "loadFailed": "Failed to load messages",
     "clear": "Clear",
     "noSessions": "No sessions yet",
@@ -421,6 +424,33 @@
     "manageMemory": "Manage Memory",
     "managePermissions": "Manage Permissions",
     "manageOutputStyles": "Output Styles"
+  },
+
+  "git": {
+    "notRepo": "Not a Git repository",
+    "clean": "Working tree clean",
+    "diffError": "Failed to load diff",
+    "diffLoading": "Loading...",
+    "stageError": "Stage failed",
+    "unstageError": "Unstage failed",
+    "commitError": "Commit failed",
+    "pushError": "Push failed",
+    "pushSuccess": "Push succeeded",
+    "pushing": "Pushing...",
+    "commitPlaceholder": "Commit message...",
+    "staged": "Staged",
+    "modified": "Modified",
+    "untracked": "Untracked",
+    "commit": "Commit",
+    "push": "Push",
+    "amend": "Amend",
+    "pushAfter": "Push after commit",
+    "stageTooltip": "Stage",
+    "unstageTooltip": "Unstage",
+    "closeDiff": "Close diff",
+    "initRepo": "Init Git",
+    "initRepoDesc": "Let CC set up Git version control for the workspace",
+    "initMessage": "Please initialize a Git repository for the current workspace. First check if git is installed, install it if needed, then run git init and create an appropriate .gitignore file for this project."
   },
 
   "contextUsage": {

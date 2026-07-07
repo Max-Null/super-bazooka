@@ -403,7 +403,8 @@ pub async fn spawn_claude_session(
         args.push("--resume".to_string());
         args.push(resume_id.clone());
     }
-    if params.fork_session {
+    // --fork-session 必须配合 --resume，单独传入行为未定义
+    if params.fork_session && params.resume_id.is_some() {
         args.push("--fork-session".to_string());
     }
 

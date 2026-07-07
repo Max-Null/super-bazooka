@@ -434,6 +434,8 @@ export function useStreamProcessor() {
       session.setSessionActivity(session_id, null);
       chat.isProcessing = false;
       if (!success) {
+        // 进程异常退出时追加可见错误提示（分叉失效 / CC 错误等场景）
+        chat.appendText(`\n\n> ❌ CC 进程异常退出 (exit code: ${exit_code})`);
         chat.finishAssistantMessage();
       }
     });

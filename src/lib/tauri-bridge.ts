@@ -426,6 +426,49 @@ export async function loadSessionLogs(sessionId: string): Promise<[string | null
   return invoke("load_session_logs", { sessionId });
 }
 
+// ── Git ──
+
+export interface GitFile {
+  path: string;
+  status: "staged" | "modified" | "untracked";
+}
+
+export interface GitStatus {
+  branch: string;
+  staged: GitFile[];
+  modified: GitFile[];
+  untracked: GitFile[];
+}
+
+export async function gitStatus(repoPath: string): Promise<GitStatus> {
+  return invoke("git_status_cmd", { repoPath });
+}
+
+export async function gitDiff(repoPath: string, file: string, staged?: boolean): Promise<string> {
+  return invoke("git_diff_cmd", { repoPath, file, staged: staged ?? false });
+}
+
+export async function gitStage(repoPath: string, files: string[]): Promise<void> {
+  return invoke("git_stage_cmd", { repoPath, files });
+}
+
+export async function gitUnstage(repoPath: string, files: string[]): Promise<void> {
+  return invoke("git_unstage_cmd", { repoPath, files });
+}
+
+export async function gitCommit(repoPath: string, message: string, amend?: boolean): Promise<string> {
+  return invoke("git_commit_cmd", { repoPath, message, amend: amend ?? false });
+}
+
+export async function gitPush(repoPath: string): Promise<void> {
+  return invoke("git_push_cmd", { repoPath });
+}
+
+/** 检查 CC 会话是否仍存在（分叉前预检） */
+export async function checkCcSessionExists(sessionId: string): Promise<boolean> {
+  return invoke("check_cc_session_exists", { sessionId });
+}
+
 /**
  * Emitted by Rust when a claude process exits.
  */

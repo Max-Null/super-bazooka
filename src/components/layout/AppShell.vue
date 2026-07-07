@@ -59,7 +59,24 @@ const filePanelForceClose = ref(0);
 
 // 第四列：文件预览/编辑面板
 const panelFile = ref<{ name: string; path: string } | null>(null);
-provide("openFileInPanel", (f: { name: string; path: string }) => { panelFile.value = f; });
+// Git diff 面板（与文件编辑器互斥，共用第四列）
+const gitDiffFile = ref<{ path: string; diff: string } | null>(null);
+// 逐行解析 diff 并标注类型，供模板着色
+const diffLines = computed(() => {
+  const d = gitDiffFile.value?.diff;
+  if (!d) return [];
+  return d.split("\n").map(line => {
+    const t = line.charAt(0);
+    if (t === "+" && !line.startsWith("+++")) return { text: line, type: "add" as const };
+    if (t === "-" && !line.startsWith("---")) return { text: line, type: "del" as const };
+    if (line.startsWith("@@")) return { text: line, type: "hunk" as const };
+    if (line.startsWith("diff ") || line.startsWith("index ") || line.startsWith("--- ") || line.startsWith("+++ ")) return { text: line, type: "meta" as const };
+    return { text: line, type: "context" as const };
+  });
+});
+provide("openFileInPanel", (f: { name: string; path: string }) => { panelFile.value = f; gitDiffFile.value = null; });
+provide("openGitDiff", (f: { path: string; diff: string }) => { gitDiffFile.value = f; panelFile.value = null; });
+provide("closeGitDiff", () => { gitDiffFile.value = null; });
 const showWorkspaceMenu = ref(false);
 
 // ── 工作区（状态由 settings store 管理，SQLite 持久化）──
@@ -552,9 +569,41 @@ function openFilePanelTo(_path: string) {
         </div>
       </main>
 
+      <!-- 第四列：Git diff 面板（与文件编辑器互斥） -->
+      <div v-if="gitDiffFile" class="git-diff-panel-col">
+        <div class="git-diff-panel-col-header">
+          <span class="git-diff-panel-col-filename">{{ gitDiffFile.path }}</span>
+          <button @click="gitDiffFile = null" class="git-diff-panel-col-close">×</button>
+        </div>
+        <div class="git-diff-panel-col-content">
+          <template v-for="(line, i) in diffLines" :key="i">
+            <div
+              v-if="line.type === 'hunk'"
+              class="diff-line diff-line--hunk"
+            >{{ line.text }}</div>
+            <div
+              v-else-if="line.type === 'add'"
+              class="diff-line diff-line--add"
+            >{{ line.text }}</div>
+            <div
+              v-else-if="line.type === 'del'"
+              class="diff-line diff-line--del"
+            >{{ line.text }}</div>
+            <div
+              v-else-if="line.type === 'meta'"
+              class="diff-line diff-line--meta"
+            >{{ line.text }}</div>
+            <div
+              v-else
+              class="diff-line diff-line--ctx"
+            >{{ line.text }}</div>
+          </template>
+        </div>
+      </div>
+
       <!-- 第四列：文件预览/编辑面板 -->
       <FilePreviewPanel
-        v-if="panelFile"
+        v-else-if="panelFile"
         :file="panelFile"
         @close="panelFile = null"
       />
@@ -714,5 +763,80 @@ function openFilePanelTo(_path: string) {
 @keyframes dot-blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.15; }
+}
+
+/* ── 第四列 Git diff 面板 ── */
+.git-diff-panel-col {
+  display: flex;
+  flex-direction: column;
+  width: 360px;
+  flex-shrink: 0;
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border-dim);
+  overflow: hidden;
+}
+.git-diff-panel-col-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  flex-shrink: 0;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-dim);
+}
+.git-diff-panel-col-filename {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.git-diff-panel-col-close {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  font-size: 16px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 150ms;
+}
+.git-diff-panel-col-close:hover { background: var(--bg-hover); }
+.git-diff-panel-col-content {
+  flex: 1;
+  overflow-y: auto;
+  font-size: 11px;
+  font-family: ui-monospace, monospace;
+  line-height: 1.6;
+}
+.diff-line {
+  padding: 0 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  min-height: 1.3em;
+}
+.diff-line--add {
+  background: rgba(6, 214, 160, 0.08);
+  color: var(--accent);
+}
+.diff-line--del {
+  background: rgba(255, 94, 91, 0.08);
+  color: var(--coral);
+}
+.diff-line--hunk {
+  color: var(--violet);
+  font-weight: 500;
+  padding-top: 4px;
+}
+.diff-line--meta {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.diff-line--ctx {
+  color: var(--text-secondary);
 }
 </style>

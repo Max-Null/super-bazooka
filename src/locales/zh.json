@@ -156,6 +156,9 @@
     "confirmDelete": "删除会话 \"{title}\"？此操作不可撤销。",
     "switchSuccess": "已切换到: {title}",
     "forked": "已创建分叉会话",
+    "forkedTitle": "分叉: {snippet}",
+    "forkedFallback": "无法分叉（原会话无 CC 会话 ID），已创建普通新会话",
+    "forkedExpired": "无法分叉（CC 会话已失效），已创建普通新会话",
     "loadFailed": "加载消息失败",
     "clear": "清空",
     "noSessions": "暂无会话",
@@ -421,6 +424,33 @@
     "manageMemory": "Memory 管理",
     "managePermissions": "权限规则管理",
     "manageOutputStyles": "输出风格"
+  },
+
+  "git": {
+    "notRepo": "非 Git 仓库",
+    "clean": "工作区干净",
+    "diffError": "无法加载 diff",
+    "diffLoading": "加载中...",
+    "stageError": "Stage 失败",
+    "unstageError": "Unstage 失败",
+    "commitError": "提交失败",
+    "pushError": "推送失败",
+    "pushSuccess": "推送成功",
+    "pushing": "推送中...",
+    "commitPlaceholder": "Commit message...",
+    "staged": "已暂存",
+    "modified": "已修改",
+    "untracked": "未跟踪",
+    "commit": "提交",
+    "push": "推送",
+    "amend": "Amend",
+    "pushAfter": "提交后推送",
+    "stageTooltip": "Stage",
+    "unstageTooltip": "Unstage",
+    "closeDiff": "关闭 diff",
+    "initRepo": "初始化 Git",
+    "initRepoDesc": "让 CC 为工作空间建立 Git 版本控制",
+    "initMessage": "请为当前工作空间初始化 Git 仓库。先检查 git 是否已安装，如果没安装就先安装 git，然后执行 git init，并创建适合该项目的 .gitignore 文件。"
   },
 
   "contextUsage": {

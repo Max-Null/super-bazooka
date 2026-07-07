@@ -361,6 +361,27 @@ body {
   gap: 0.375rem;
 }
 
+/* ── 文件面板 Tab 栏 ── */
+.file-panel-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border-dim);
+}
+.file-panel-tab-btn {
+  padding: 2px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 150ms, color 150ms;
+}
+.file-panel-tab-btn:hover { color: var(--text-secondary); background: var(--bg-hover); }
+.file-panel-tab-btn--active {
+  color: var(--accent);
+  background: var(--accent-glow);
+}
+
 /* ── 文件面板 ── */
 .sb-file-panel {
   display: flex;

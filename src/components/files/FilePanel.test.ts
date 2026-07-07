@@ -63,6 +63,7 @@ function mountPanel() {
         ErrorBoundary: stub("ErrorBoundary", "<div><slot /></div>"),
         FileTree: stub("FileTree"),
         FilePreview: stub("FilePreview"),
+        GitPanel: stub("GitPanel"),
       },
     },
   });
