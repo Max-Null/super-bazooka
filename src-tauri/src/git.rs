@@ -325,12 +325,17 @@ mod tests {
     #[test]
     fn commit_amend_replaces_head() {
         let (repo, _tmp) = init_temp_repo();
+        // 先创建两个正常提交，amend 第二个（避免 amend 根提交时 parent=0）
         write_file(&repo, "f.txt", "v1");
         git_stage(&repo.to_string_lossy(), &["f.txt".into()]).expect("stage 失败");
         git_commit(&repo.to_string_lossy(), "first", false).expect("commit 失败");
-
         write_file(&repo, "g.txt", "extra");
         git_stage(&repo.to_string_lossy(), &["g.txt".into()]).expect("stage 失败");
+        git_commit(&repo.to_string_lossy(), "second", false).expect("commit 失败");
+
+        // amend 第二个提交
+        write_file(&repo, "h.txt", "more");
+        git_stage(&repo.to_string_lossy(), &["h.txt".into()]).expect("stage 失败");
         let oid = git_commit(&repo.to_string_lossy(), "amended", true).expect("amend 失败");
 
         // 验证 HEAD 指向新 commit
@@ -338,7 +343,7 @@ mod tests {
         let head_commit = repo_obj.head().expect("HEAD 失败").peel_to_commit().expect("peel 失败");
         assert_eq!(head_commit.id().to_string(), oid);
         assert!(head_commit.message().unwrap_or("").contains("amended"));
-        // amend 后应只有一个父提交
+        // amend 后 parent 数应与原提交一致（第一个提交的 parent 即 1）
         assert_eq!(head_commit.parent_count(), 1);
     }
 
