@@ -190,7 +190,11 @@ mod tests {
     /// 在临时目录创建 git 仓库，返回路径（Drop 时自动清理）
     fn init_temp_repo() -> (PathBuf, tempfile::TempDir) {
         let dir = tempfile::tempdir().expect("创建临时目录失败");
-        GitRepo::init(dir.path()).expect("init 仓库失败");
+        let repo = GitRepo::init(dir.path()).expect("init 仓库失败");
+        // CI 环境可能无全局 user.name/email → 仓库级配置兜底
+        let mut cfg = repo.config().expect("获取 config 失败");
+        let _ = cfg.set_str("user.name", "test");
+        let _ = cfg.set_str("user.email", "test@test.com");
         (dir.path().to_path_buf(), dir)
     }
 
@@ -204,7 +208,8 @@ mod tests {
     fn status_empty_repo() {
         let (repo, _tmp) = init_temp_repo();
         let status = git_status(&repo.to_string_lossy()).expect("status 失败");
-        assert!(status.branch.contains("main") || status.branch.contains("master"));
+        // CI 环境 git init 默认分支可能是任意名称，只要非空即可
+        assert!(!status.branch.is_empty());
         assert!(status.staged.is_empty());
         assert!(status.modified.is_empty());
         assert!(status.untracked.is_empty());
@@ -235,6 +240,11 @@ mod tests {
     #[test]
     fn unstage_file() {
         let (repo, _tmp) = init_temp_repo();
+        // 先提交一个文件，让 HEAD 存在（unstage 依赖 HEAD）
+        write_file(&repo, "base.txt", "base");
+        git_stage(&repo.to_string_lossy(), &["base.txt".into()]).expect("stage 失败");
+        git_commit(&repo.to_string_lossy(), "initial", false).expect("commit 失败");
+        // 再 stage 一个新文件，然后 unstage
         write_file(&repo, "new.txt", "hello");
         git_stage(&repo.to_string_lossy(), &["new.txt".into()]).expect("stage 失败");
         git_unstage(&repo.to_string_lossy(), &["new.txt".into()]).expect("unstage 失败");
