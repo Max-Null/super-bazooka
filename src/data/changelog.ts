@@ -31,6 +31,72 @@ export const APP_VERSION: string = appPackage.version;
 // 按版本降序排列（最新在第一个）
 export const changelog: ChangelogEntry[] = [
   {
+    version: "0.8.0",
+    date: "2026-07-08",
+    sections: [
+      {
+        titleZh: "四列布局重构",
+        titleEn: "4-Column Layout Refactor",
+        itemsZh: [
+          "新建 usePanelLayout composable 统一管理文件面板和编辑面板的拖拽列宽",
+          "拖拽增加透明遮罩层防止 iframe（HTML 预览）吞鼠标事件导致拖拽卡住",
+          "ResizeObserver 监听容器宽度变化，窗口缩放时自动收缩右侧面板",
+          "Main 聊天区 min-width: 300px，JS 层拖拽 clamp 双向保护不被挤扁",
+          "右侧面板动态上限 min(固定值, 容器宽 × 50%)，小屏自动收窄",
+        ],
+        itemsEn: [
+          "New usePanelLayout composable unifies drag-resize logic for file panel and editor panel",
+          "Transparent overlay during drag prevents iframe (HTML preview) from capturing mouse events",
+          "ResizeObserver auto-shrinks right panels on window resize to prevent overflow",
+          "Main chat area min-width: 300px, JS-level drag clamping protects it bidirectionally",
+          "Dynamic max width min(fixed, container × 50%) for right panels on small screens",
+        ],
+      },
+      {
+        titleZh: "HTML 预览增强",
+        titleEn: "HTML Preview Enhancements",
+        itemsZh: [
+          "预览区顶部增加宽度预设按钮栏：跟随 / 375 / 768 / 1024 / 1440 / 1920",
+          "选中固定宽度后容器横向滚动，适合预览桌面端/平板/手机页面",
+          "修复 CodeMirror 编辑区水平滚动条被内容挤出可视区",
+        ],
+        itemsEn: [
+          "Width preset buttons above preview: Fit / 375 / 768 / 1024 / 1440 / 1920",
+          "Fixed-width mode with horizontal scroll, ideal for previewing desktop/tablet/mobile pages",
+          "Fixed CodeMirror horizontal scrollbar pushed outside visible area in edit tab",
+        ],
+      },
+      {
+        titleZh: "工具块摘要 + 会话缓存修复",
+        titleEn: "Tool Summary + Session Cache Fix",
+        itemsZh: [
+          "Bash/PowerShell 命令行块收起时显示 description 而非完整命令原文",
+          "Skill 调用块收起时显示 skill 名而非 args 原文",
+          "修复 createSession 前未保存缓存导致切回时流式消息丢失",
+          "修复编辑↔预览 tab 切换后编辑面板空白（离开编辑时未销毁编辑器）",
+        ],
+        itemsEn: [
+          "Bash/PowerShell blocks show description instead of raw command when collapsed",
+          "Skill blocks show skill name instead of raw args when collapsed",
+          "Fixed session cache not saved before createSession, causing message loss on switch-back",
+          "Fixed blank editor after edit↔preview tab switch (editor not destroyed on leaving edit tab)",
+        ],
+      },
+      {
+        titleZh: "CSS 收拢",
+        titleEn: "CSS Consolidation",
+        itemsZh: [
+          "FilePanel 全局样式从 main.css 迁入组件 scoped style",
+          "拖拽手柄 active 态统一 var(--accent-dim)，移除 !important",
+        ],
+        itemsEn: [
+          "FilePanel global CSS moved from main.css to component scoped style",
+          "Drag handle active state unified to var(--accent-dim), removed !important",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.7.0",
     date: "2026-07-08",
     sections: [

@@ -50,6 +50,9 @@ import ManagePanel from "@/components/shared/ManagePanel.vue";
 import MarkdownRenderer from "@/components/shared/MarkdownRenderer.vue";
 import changelogRaw from "../../../docs/变更记录.md?raw";
 
+// Windows CRLF → LF 归一化，防止 MarkdownRenderer 解析失败
+const changelogContent = changelogRaw.replace(/\r\n/g, "\n");
+
 const router = useRouter();
 const { t } = useI18n();
 const settings = useSettingsStore();
@@ -783,7 +786,7 @@ async function saveSettingsJson() {
     <template #header>
       <span class="text-sm font-semibold" :style="{ color: 'var(--text-bright)' }">{{ $t('settings.changelog') }}</span>
     </template>
-    <MarkdownRenderer :content="changelogRaw" />
+    <MarkdownRenderer :content="changelogContent" />
   </ModalShell>
   <ManagePanel :open="showManagePanel" :initial-tab="manageInitialTab" @close="showManagePanel = false; manageInitialTab = ''" />
   </ErrorBoundary>
