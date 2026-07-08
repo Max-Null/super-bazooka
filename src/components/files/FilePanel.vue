@@ -9,12 +9,12 @@ import ErrorBoundary from "@/components/shared/ErrorBoundary.vue";
 import FileTree from "./FileTree.vue";
 import FilePreview from "./FilePreview.vue";
 import GitPanel from "./GitPanel.vue";
+import { PANEL_LAYOUT_KEY } from "@/composables/usePanelLayout";
 
 const props = defineProps<{ navCounter?: number; navPath?: string; forceClose?: number }>();
 
 const { t } = useI18n();
 const collapsed = ref(true);
-const panelWidth = ref(280);
 const rootPath = ref("");
 const workspaceRoot = ref("");
 const files = ref<FileEntry[]>([]);
@@ -23,30 +23,14 @@ const selectedFilePath = ref("");  // 完整路径，openModalPreview 从子目�
 const previewContent = ref("");
 const openFileInPanel = inject<(f: { name: string; path: string }) => void>("openFileInPanel", () => {});
 
+// 列宽由 usePanelLayout composable 统一管理
+const layout = inject(PANEL_LAYOUT_KEY)!;
+
 // ═══ 文件剪贴板（跨递归 FileTree 共享） ═══
 interface ClipState { path: string; name: string; op: "copy" | "cut" }
 const clipState = ref<ClipState | null>(null);
 function setClip(v: ClipState | null) { clipState.value = v; }
 provide("file-clipboard", { state: clipState as Ref<ClipState | null>, set: setClip });
-
-// Drag-to-resize panel width
-const draggingPanel = ref(false);
-function onPanelDragStart(e: MouseEvent) {
-  e.preventDefault();
-  draggingPanel.value = true;
-  const startX = e.clientX;
-  const startW = panelWidth.value;
-  const onMove = (ev: MouseEvent) => {
-    panelWidth.value = Math.min(600, Math.max(200, startW - (ev.clientX - startX)));
-  };
-  const onUp = () => {
-    draggingPanel.value = false;
-    document.removeEventListener("mousemove", onMove);
-    document.removeEventListener("mouseup", onUp);
-  };
-  document.addEventListener("mousemove", onMove);
-  document.addEventListener("mouseup", onUp);
-}
 
 // Drag-to-resize splitter between file tree and preview
 const activeTab = ref<"files" | "git">("files");  // 面板 Tab 切换
@@ -198,9 +182,9 @@ function goUp() {
     <!-- Drag handle (thin strip, visible when panel is open) -->
     <div
       v-if="!collapsed"
-      @mousedown="onPanelDragStart"
+      @mousedown="layout.startResize('files', $event)"
       class="file-panel-drag-handle"
-      :class="{ 'file-panel-drag-handle--active': draggingPanel }"
+      :class="{ 'file-panel-drag-handle--active': layout.filesDragging.value }"
     ></div>
 
     <!-- Drawer pull-tab -->
@@ -219,7 +203,7 @@ function goUp() {
     <aside
       class="file-panel-body"
       :class="{ 'file-panel-body--closed': collapsed }"
-      :style="{ width: collapsed ? '0' : panelWidth + 'px' }"
+      :style="{ width: collapsed ? '0' : layout.filesWidth.value + 'px' }"
     >
       <div v-if="!collapsed" class="flex flex-col h-full">
         <!-- Breadcrumb -->
@@ -326,3 +310,101 @@ function goUp() {
   </div>
   </ErrorBoundary>
 </template>
+
+<style scoped>
+/* ── Tab 栏（文件 / Git）── */
+.file-panel-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border-dim);
+}
+.file-panel-tab-btn {
+  padding: 2px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 150ms, color 150ms;
+}
+.file-panel-tab-btn:hover { color: var(--text-secondary); background: var(--bg-hover); }
+.file-panel-tab-btn--active {
+  color: var(--accent);
+  background: var(--accent-glow);
+}
+
+/* ── 文件面板 ── */
+.sb-file-panel {
+  display: flex;
+  overflow: hidden;
+}
+
+.sb-file-panel-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── 拖拽把手 ── */
+.file-panel-drag-handle {
+  width: 0.375rem;
+  flex-shrink: 0;
+  cursor: col-resize;
+  user-select: none;
+  background: transparent;
+  transition: background-color 150ms;
+}
+.file-panel-drag-handle:hover {
+  background: rgba(6, 214, 160, 0.1);
+}
+.file-panel-drag-handle--active {
+  background: var(--accent-dim);
+}
+
+/* ── 抽屉标签 ── */
+.file-panel-tab {
+  width: 1.75rem;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem 0 0 0.5rem;
+  cursor: pointer;
+  user-select: none;
+  transition: background 200ms, border 200ms;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-dim);
+  border-right: none;
+}
+.file-panel-tab--open {
+  background: var(--bg-elevated);
+  border: none;
+}
+
+.file-panel-tab-label {
+  transition: transform 200ms;
+  writing-mode: vertical-rl;
+  font-size: 10px;
+  letter-spacing: 3px;
+}
+.file-panel-tab-label--open {
+  transform: rotate(180deg);
+}
+
+/* ── 面板主体 ── */
+.file-panel-body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: width 200ms, min-width 200ms;
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border-dim);
+  min-width: 200px;
+}
+.file-panel-body--closed {
+  min-width: 0;
+  border-left: none;
+}
+</style>

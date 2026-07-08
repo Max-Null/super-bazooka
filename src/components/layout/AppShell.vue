@@ -16,6 +16,7 @@ import { useSettingsStore, PROVIDER_LOGOS } from "@/stores/settings";
 import { useSessionStore } from "@/stores/session";
 import { useChatStore } from "@/stores/chat";
 import { useI18n } from "vue-i18n";
+import { usePanelLayout, PANEL_LAYOUT_KEY } from "@/composables/usePanelLayout";
 
 const { t } = useI18n();
 const router = useRouter();
@@ -77,6 +78,11 @@ const diffLines = computed(() => {
 provide("openFileInPanel", (f: { name: string; path: string }) => { panelFile.value = f; gitDiffFile.value = null; });
 provide("openGitDiff", (f: { path: string; diff: string }) => { gitDiffFile.value = f; panelFile.value = null; });
 provide("closeGitDiff", () => { gitDiffFile.value = null; });
+
+// 统一的列宽管理（文件预览 + 文件面板的拖拽宽度）
+const sbBodyRef = ref<HTMLElement | null>(null);
+const panelLayout = usePanelLayout({ containerRef: sbBodyRef, sidebarOpen: drawerOpen });
+provide(PANEL_LAYOUT_KEY, panelLayout);
 const showWorkspaceMenu = ref(false);
 
 // ── 工作区（状态由 settings store 管理，SQLite 持久化）──
@@ -271,6 +277,7 @@ onMounted(async () => {
     initializing.value = false;
     document.addEventListener("keydown", onGlobalKeydown);
     document.addEventListener("fullscreenchange", onFullscreenChange);
+    panelLayout.setupObserver(); // ResizeObserver 监听容器宽度变化，自动 clamp 右侧面板
   }
 });
 
@@ -495,7 +502,7 @@ function openFilePanelTo(_path: string) {
     </header>
 
     <!-- Body -->
-    <div class="sb-body">
+    <div ref="sbBodyRef" class="sb-body">
       <!-- 左侧会话栏：rail + 展开面板 -->
       <div class="sb-sidebar">
         <!-- 窄 rail（收起时显示） -->
@@ -655,6 +662,7 @@ function openFilePanelTo(_path: string) {
   flex: 1;
   display: flex;
   overflow: hidden;
+  min-width: 300px;  /* 保护聊天区不被右侧面板挤扁 */
 }
 
 .sb-main-content {

@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { ref } from "vue";
 import { mount } from "@vue/test-utils";
 import { createI18n } from "vue-i18n";
+import { PANEL_LAYOUT_KEY, type PanelLayout } from "@/composables/usePanelLayout";
 
 // ── Mock @tauri-apps/plugin-shell ──
 vi.mock("@tauri-apps/plugin-shell", () => ({
@@ -55,10 +57,21 @@ function stub(name: string, template = "<div></div>") {
 const mockOpenInPanel = vi.fn();
 
 function mountPanel() {
+  const mockLayout: PanelLayout = {
+    previewWidth: ref(350),
+    filesWidth: ref(280),
+    previewDragging: ref(false),
+    filesDragging: ref(false),
+    startResize: vi.fn(),
+    setupObserver: vi.fn(),
+  };
   const wrapper = mount(FilePanel, {
     global: {
       plugins: [i18n],
-      provide: { openFileInPanel: mockOpenInPanel },
+      provide: {
+        openFileInPanel: mockOpenInPanel,
+        [PANEL_LAYOUT_KEY as symbol]: mockLayout,
+      },
       stubs: {
         ErrorBoundary: stub("ErrorBoundary", "<div><slot /></div>"),
         FileTree: stub("FileTree"),

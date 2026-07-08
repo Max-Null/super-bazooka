@@ -117,6 +117,14 @@ async function copyContent() {
 
 // ── Tool input display helpers ──
 function summarizeInput(input: Record<string, unknown>): string {
+  // Bash/PowerShell 命令行：收起时显示 description 而非 command 原文
+  if (typeof input.description === "string" && input.description.length > 0) {
+    return input.description;
+  }
+  // Skill 调用：收起时显示 skill 名而非 args 原文
+  if (typeof input.skill === "string" && input.skill.length > 0) {
+    return input.skill;
+  }
   const entries = Object.entries(input);
   if (entries.length === 0) return "(no args)";
   const previews = entries.slice(0, 3).map(([k, v]) => {

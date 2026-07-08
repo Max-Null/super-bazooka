@@ -1,5 +1,6 @@
 import { defineStore } from "pinia";
 import { ref, computed } from "vue";
+import { useChatStore } from "./chat";
 import {
   createSession as createSessionBackend,
   listSessions,
@@ -67,6 +68,10 @@ export const useSessionStore = defineStore("session", () => {
 
   /** Create a new session via backend，可指定 CWD 和 mode。locale 用于本地化默认标题 */
   async function createSession(model?: string, cwd?: string, mode?: string, locale?: string, title?: string): Promise<string> {
+    // 切换会话前保存当前会话消息缓存——防止流式中的会话被新会话覆盖后切回时消息丢失
+    if (activeSessionId.value) {
+      useChatStore().saveSessionCache(activeSessionId.value);
+    }
     const finalTitle = title || defaultTitle(locale);
     try {
       const s = await createSessionBackend(model, cwd, mode, finalTitle);

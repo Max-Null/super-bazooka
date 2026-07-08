@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, computed, onMounted, onUnmounted, shallowRef, nextTick } from "vue";
+import { ref, watch, computed, onMounted, onUnmounted, shallowRef, nextTick, inject } from "vue";
 
 import { readFileContent, readFileBase64, saveFileContent, checkSkillInstalled } from "@/lib/tauri-bridge";
 import { isImageFile, mimeType } from "@/composables/useFilePreview";
@@ -8,6 +8,7 @@ import MarkdownRenderer from "./MarkdownRenderer.vue";
 import mammoth from "mammoth";
 import DOMPurify from "dompurify";
 import { useI18n } from "vue-i18n";
+import { PANEL_LAYOUT_KEY } from "@/composables/usePanelLayout";
 // CodeMirror 6（编辑 tab）
 import { EditorView, keymap, lineNumbers, highlightActiveLine } from "@codemirror/view";
 import { EditorState, Prec } from "@codemirror/state";
@@ -31,26 +32,12 @@ const props = defineProps<{
 
 const emit = defineEmits<{ close: [] }>();
 
-// ── 可拖拽列宽 ──
-const panelWidth = ref(Math.max(350, Math.floor(window.innerWidth * 0.35)));
-const draggingPanel = ref(false);
+// 列宽由 usePanelLayout composable 统一管理
+const layout = inject(PANEL_LAYOUT_KEY)!;
 
-function onPanelDragStart(e: MouseEvent) {
-  e.preventDefault();
-  draggingPanel.value = true;
-  const startX = e.clientX;
-  const startW = panelWidth.value;
-  const onMove = (ev: MouseEvent) => {
-    panelWidth.value = Math.min(700, Math.max(280, startW - (ev.clientX - startX)));
-  };
-  const onUp = () => {
-    draggingPanel.value = false;
-    document.removeEventListener("mousemove", onMove);
-    document.removeEventListener("mouseup", onUp);
-  };
-  document.addEventListener("mousemove", onMove);
-  document.addEventListener("mouseup", onUp);
-}
+// HTML 预览宽度预设：0 = 跟随面板，>0 = 固定宽度
+const HTML_PRESETS = [0, 375, 768, 1024, 1440, 1920] as const
+const htmlWidth = ref(0)
 
 const content = ref("");       // 原始文本（编辑 tab）
 const previewHtml = ref("");   // 渲染后 HTML（预览 tab）
@@ -414,9 +401,11 @@ watch(content, (val) => {
 onMounted(() => maybeCreateEditor());
 onUnmounted(() => destroyEditor());
 
-// 切换到编辑 tab 时初始化编辑器
+// 切换到编辑 tab 时初始化编辑器，离开时销毁——v-else-if 会重建 DOM，
+// 旧 EditorView 挂载的父元素已不在文档中，必须重建
 watch(activeTab, (tab) => {
   if (tab === "edit") { maybeCreateEditor(); selectedDom.value = null; }
+  else { destroyEditor(); }
 });
 
 // ── 保存 ──
@@ -454,13 +443,13 @@ function handleClose() {
   <div v-if="file" class="flex h-full">
     <!-- 拖拽把手 -->
     <div
-      @mousedown="onPanelDragStart"
+      @mousedown="layout.startResize('preview', $event)"
       class="panel-drag-handle"
-      :class="{ 'panel-drag-handle--active': draggingPanel }"
+      :class="{ 'panel-drag-handle--active': layout.previewDragging.value }"
     />
 
     <!-- 面板主体 -->
-    <div class="panel-body" :style="{ width: panelWidth + 'px', minWidth: '280px' }">
+    <div class="panel-body" :style="{ width: layout.previewWidth.value + 'px' }">
       <!-- Header -->
       <div class="panel-header">
         <div class="flex items-center gap-1.5 min-w-0 flex-1">
@@ -510,8 +499,29 @@ function handleClose() {
           <img v-if="imageSrc" :src="imageSrc" :alt="file.name" class="max-w-full max-h-full object-contain rounded" />
         </div>
         <div v-else-if="fileKind === 'html'" class="flex-1 flex flex-col" style="min-height: 0">
-          <div class="flex-1 relative" style="min-height: 0">
-            <iframe class="absolute inset-0 w-full h-full border-none" ref="previewIframe" sandbox="allow-scripts" :src="previewHtmlBlob" style="background: #fff" />
+          <!-- 宽度预设工具栏 -->
+          <div class="flex items-center gap-1 px-2 h-7 text-[10px] shrink-0" style="background: var(--bg-elevated); border-bottom: 1px solid var(--border-dim)">
+            <button
+              v-for="w in HTML_PRESETS" :key="w"
+              @click="htmlWidth = w"
+              class="px-1.5 py-0.5 rounded transition-colors font-medium"
+              :style="{
+                background: htmlWidth === w ? 'var(--accent)' : 'transparent',
+                color: htmlWidth === w ? 'var(--bg-root)' : 'var(--text-muted)',
+                border: htmlWidth === w ? 'none' : '1px solid var(--border-dim)',
+              }"
+            >{{ w === 0 ? $t('preview.htmlFit') : w }}</button>
+          </div>
+          <div class="flex-1" :style="{ minHeight: 0, overflow: htmlWidth > 0 ? 'auto' : 'hidden' }">
+            <div :class="htmlWidth === 0 ? 'relative' : ''" :style="htmlWidth > 0 ? { width: htmlWidth + 'px', height: '100%' } : { height: '100%' }">
+              <iframe
+                :class="htmlWidth === 0 ? 'absolute inset-0 w-full h-full border-none' : 'h-full border-none'"
+                ref="previewIframe"
+                sandbox="allow-scripts"
+                :src="previewHtmlBlob"
+                :style="{ background: '#fff', width: htmlWidth > 0 ? htmlWidth + 'px' : '' }"
+              />
+            </div>
           </div>
         </div>
         <div v-else-if="fileKind === 'markdown'" class="flex-1 overflow-auto p-5">
@@ -662,4 +672,8 @@ function handleClose() {
   background: var(--bg-root);
   min-height: 0;
 }
+
+/* CodeMirror 填满容器高度，防止水平滚动条被内容撑到可视区外 */
+.panel-content .cm-editor { height: 100%; }
+.panel-content .cm-scroller { overflow: auto; }
 </style>

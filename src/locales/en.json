@@ -224,6 +224,7 @@
     "loading": "Loading...",
     "unsupported": "Preview not available for this file type",
     "unsupportedHint": "Binary / proprietary format — open externally",
+    "htmlFit": "Fit",
     "sendToChat": "Send",
     "mdSuggestionPlaceholder": "Enter suggestion…"
   },
