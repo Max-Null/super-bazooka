@@ -59,10 +59,12 @@ Super Bazooka is a clean, fast, developer‑friendly desktop interface for [Clau
 - ⚙️ **Settings** — API key, base URL, model config + connection test
 - 🛡️ **Permissions** — 6 modes, auto-sync to `~/.claude/settings.json`
 - 🎨 **Dark/Light themes** — CSS variable driven, semantic BEM class naming
+- 📊 **Office Preview** — DOCX (mammoth), XLSX/CSV (SheetJS), PPTX (text extraction)
 - 🌐 **i18n** — Chinese / English
 - 🔔 **Desktop notifications** — Token stats on completion
 - ✨ **Prompt optimizer** — One-click AI rewrite for vague prompts
 - 🔧 **Built-in CC installer** — One-click Claude Code CLI installation
+- 📋 **Todo Panel** — CC TodoWrite task list with status chips
 
 ---
 
@@ -193,7 +195,8 @@ flowchart TB
 
 | Version | Date | Highlights |
 |---------|------|------------|
-| [0.6.0](docs/变更记录.md) | 2026-07-07 | 4th column editor, MD/HTML selection to chat, CSS semantic naming, smart session reuse |
+| [0.9.0](docs/变更记录.md) | 2026-07-12 | Unified dialog styling, PPTX text extraction, xlsx selection, Office preview, TodoPanel |
+| [0.8.0](docs/变更记录.md) | 2026-07-08 | 4-column layout refactor, HTML preview width presets, tool block summary, session cache fix |
 | [0.5.0](docs/变更记录.md) | 2026-07-04 | File panel context menu, tool result rendering, CodeMirror editor, changelog dialog, settings UI polish |
 | [0.4.0](docs/变更记录.md) | 2026-07-04 | Message timeline, session audit, MD→docx |
 | [0.3.0](docs/变更记录.md) | 2026-07-03 | Core features, multi-provider, i18n |

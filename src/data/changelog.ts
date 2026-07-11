@@ -31,6 +31,64 @@ export const APP_VERSION: string = appPackage.version;
 // 按版本降序排列（最新在第一个）
 export const changelog: ChangelogEntry[] = [
   {
+    version: "0.9.0",
+    date: "2026-07-12",
+    sections: [
+      {
+        titleZh: "弹框样式统一",
+        titleEn: "Unified Dialog Styling",
+        itemsZh: [
+          "ModalShell 裸 Tailwind → 语义 class 体系（modal-shell-overlay/panel/header/body/footer/close + 4 种宽度 + 2 种垂直位置）",
+          "按钮统一 btn-primary / btn-ghost，删除死代码 modal-btn-* / btn-primary-sm",
+          "审批条 amber 风格 → bg-elevated + accent 竖条 + 圆角卡片，与全局 UI 色调一致",
+          "状态消息从底部 → 会话区顶部 status-toast 悬浮，不遮挡审批条和 TodoPanel",
+          "新增 bottom-notices 容器统一管理审批条和工作清单",
+          "工作清单 TodoPanel：显示已完成项 + 序号 + 保持原始顺序 + 删除线",
+          "新增语义类：badge / badge--accent / input-plain--elevated / export-btn / zen-indicator / sb-input-bar / status-toast / modal-shell-title / selection-tip",
+        ],
+        itemsEn: [
+          "ModalShell: bare Tailwind → semantic class system (modal-shell-overlay/panel/header/body/footer/close + 4 widths + 2 positions)",
+          "Buttons unified to btn-primary / btn-ghost; dead code modal-btn-* / btn-primary-sm removed",
+          "Approval bar: amber → bg-elevated + accent bar + rounded card, matching global UI tone",
+          "Status messages moved from bottom → top status-toast floating in chat area",
+          "New bottom-notices container for approval bar + TodoPanel",
+          "TodoPanel: completed items shown with strikethrough, sequence numbers, original order preserved",
+          "New semantic classes: badge / input-plain--elevated / export-btn / zen-indicator / sb-input-bar / status-toast / modal-shell-title / selection-tip",
+        ],
+      },
+      {
+        titleZh: "PPTX 文字提取 + xlsx 选区",
+        titleEn: "PPTX Text Extraction + xlsx Selection",
+        itemsZh: [
+          "PPTX 预览放弃视觉渲染，改用 JSZip 纯文字提取（段落分组 + Y 坐标排序 + 虚线分隔）",
+          "xlsx 支持拖拽选区 + 发送到对话（SheetJS → 带 data-row/data-col 的 HTML 表格）",
+          "PptxPreview 独立组件，xlsx 内联在 FilePreviewPanel",
+          "统一选区浮动 tip（useSelectionTip composable），定位修复——取光标位 rect 而非整段包围盒",
+        ],
+        itemsEn: [
+          "PPTX preview: dropped visual rendering, now uses JSZip text extraction (paragraph grouping + Y-sort + dashed separators)",
+          "xlsx: drag-select cells + send to chat (SheetJS → HTML table with data-row/data-col)",
+          "Standalone PptxPreview component; xlsx inline in FilePreviewPanel",
+          "Unified selection tip (useSelectionTip composable), fixed positioning to cursor rect",
+        ],
+      },
+      {
+        titleZh: "测试工具面板 + 注释补充",
+        titleEn: "Test Dev Panel + Comment Coverage",
+        itemsZh: [
+          "Ctrl+Shift+T 开发测试面板：12 个按钮覆盖全部弹窗/通知场景（AskUserQuestion / PlanReview / ApprovalBar / ContextUsage / Export / Rename / About / Manage / TodoWrite / Notify OK/Warn/Err）",
+          "补充 9 个组件注释（ThinkingIndicator / ErrorBoundary / ChangelogDialog / ContextUsageModal / MermaidRenderer / ModeBar / DiffViewer / FilePreview / InputBar）",
+          "handleDeny 改进：先清队列关闭弹窗再通知 CC，sendStdin 容错 try-catch",
+        ],
+        itemsEn: [
+          "Ctrl+Shift+T dev test panel: 12 buttons covering all dialog/notification scenarios",
+          "Added comments to 9 components (ThinkingIndicator / ErrorBoundary / ChangelogDialog etc.)",
+          "handleDeny: resolve control request before sendStdin, with try-catch tolerance",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.8.0",
     date: "2026-07-08",
     sections: [
