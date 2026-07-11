@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 更新日志弹窗——版本号变化时自动弹出，对比 localStorage 中的 lastSeenVersion 与当前 APP_VERSION 决定是否显示 */
 import { ref, computed } from "vue";
 import { useI18n } from "vue-i18n";
 import ModalShell from "./ModalShell.vue";
@@ -8,11 +9,16 @@ const { t, locale } = useI18n();
 
 const emit = defineEmits<{ close: [] }>();
 
+// 查找当前版本的更新日志条目
 const entry = findEntry(APP_VERSION);
+// 从 localStorage 读取上次查看的版本号
 const lastSeen = ref(getLastSeenVersion());
+// 仅当有 changelog 条目且用户未查看过当前版本时显示
 const show = computed(() => !!entry && lastSeen.value !== APP_VERSION);
+// 按当前语言本地化条目内容
 const sections = computed(() => entry ? localizedSections(entry, locale.value) : []);
 
+/** 关闭时将当前版本写入 localStorage，下次启动不再弹出 */
 function onClose() {
   markVersionSeen(APP_VERSION);
   lastSeen.value = APP_VERSION;

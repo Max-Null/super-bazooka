@@ -1,4 +1,5 @@
 ﻿<script setup lang="ts">
+/** 上下文用量弹窗——展示 token 消耗的估算值（系统提示 + 工具定义 + MCP + 消息等固定开销 + 实际消息用量），支持手动触发 /compact */
 import { computed } from "vue";
 import { useChatStore } from "@/stores/chat";
 import { useSettingsStore } from "@/stores/settings";
@@ -11,33 +12,41 @@ const emit = defineEmits<{ close: []; compact: [] }>();
 const chat = useChatStore();
 const settings = useSettingsStore();
 
+// 上下文窗口上限：优先用户手动设置，其次按模型名推断
 const limit = computed(() => {
+  if (settings.contextLimit > 0) return settings.contextLimit;
   const m = settings.model.toLowerCase();
   if (m.includes("[1m]") || m.includes("deepseek-v4-pro") || m.includes("deepseek-v4")) return 1_000_000;
   if (m.includes("claude")) return 200_000;
   return 128_000;
 });
 
+// 实际消息中携带的 token 统计（input + output）
 const msgTokens = computed(() => {
   let total = 0;
   for (const m of chat.messages) total += (m.inputTokens || 0) + (m.outputTokens || 0);
   return total;
 });
 
-const systemPrompt = 1500;
-const systemTools = 10500;
-const mcpTools = 200;
-const customAgents = 2600;
-const memoryFiles = 1200;
-const skills = 6100;
+// 固定开销估算值（单位 tokens）——基于 CC 2.1 系统提示和工具定义的实测尺寸
+// 这些值会随 CC 版本升级而变化，更新时以 `--verbose` 输出的 system prompt 长度为准
+const systemPrompt = 1500;    // 系统提示词（角色 + 规则）
+const systemTools = 10500;    // 内置工具定义（Bash/Read/Write/Edit/Glob/Grep 等）
+const mcpTools = 200;         // MCP 服务端注册工具
+const customAgents = 2600;    // 自定义 agent 定义
+const memoryFiles = 1200;     // Memory 文件内容
+const skills = 6100;          // 已安装 skill 定义
 
+// 总用量 = 消息 tokens + 固定开销
 const totalUsed = computed(() =>
   msgTokens.value + systemPrompt + systemTools + mcpTools + customAgents + memoryFiles + skills
 );
 const freeSpace = computed(() => Math.max(0, limit.value - totalUsed.value));
-const pct = (val: number) => ((val / limit.value) * 100).toFixed(1);
 const pctNum = computed(() => (totalUsed.value / limit.value) * 100);
+/** 单行百分比格式化（模板用） */
+const pct = (val: number) => ((val / limit.value) * 100).toFixed(1);
 
+// 用量分类行（bottom-to-top 堆叠顺序对应 bar 图表）
 interface Row { key: string; tokens: number }
 const rows = computed<Row[]>(() => [
   { key: "systemPrompt", tokens: systemPrompt },

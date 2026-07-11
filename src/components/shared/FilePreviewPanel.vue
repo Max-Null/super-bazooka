@@ -9,6 +9,9 @@ import mammoth from "mammoth";
 import DOMPurify from "dompurify";
 import { useI18n } from "vue-i18n";
 import { PANEL_LAYOUT_KEY } from "@/composables/usePanelLayout";
+import { useSelectionTip } from "@/composables/useSelectionTip";
+import PptxPreview from "./PptxPreview.vue";
+import * as XLSX from "xlsx";
 // CodeMirror 6（编辑 tab）
 import { EditorView, keymap, lineNumbers, highlightActiveLine } from "@codemirror/view";
 import { EditorState, Prec } from "@codemirror/state";
@@ -39,12 +42,20 @@ const layout = inject(PANEL_LAYOUT_KEY)!;
 const HTML_PRESETS = [0, 375, 768, 1024, 1440, 1920] as const
 const htmlWidth = ref(0)
 
+// ── xlsx 状态 ──
+const xlsxSheets = ref<{ name: string; html: string }[]>([]);
+const xlsxActiveSheet = ref("");
+// ── pptx 预览由独立组件 PptxPreview.vue 处理 ──
+
 const content = ref("");       // 原始文本（编辑 tab）
 const previewHtml = ref("");   // 渲染后 HTML（预览 tab）
 const loading = ref(false);
 const error = ref("");
 const imageSrc = ref("");
 const activeTab = ref<"edit" | "preview">("edit");
+
+// ── 统一浮动 tip ──
+const selTip = useSelectionTip();
 
 // ── HTML 预览 Blob URL（绕过 srcdoc 的脚本执行 bug）──
 const previewHtmlBlob = ref("");
@@ -220,11 +231,13 @@ left:r.left,top:r.top,bottom:r.bottom
 
 // ── 文件类型检测 ──
 
-type FileKind = "text" | "html" | "markdown" | "docx" | "image" | "unsupported";
+type FileKind = "text" | "html" | "markdown" | "docx" | "xlsx" | "pptx" | "image" | "unsupported";
 
 const DOCX_EXTS = new Set(["docx", "doc"]);
 const HTML_EXTS = new Set(["html", "htm"]);
 const MD_EXTS = new Set(["md", "mdx", "markdown"]);
+const XLSX_EXTS = new Set(["xlsx", "xls", "csv"]);
+const PPTX_EXTS = new Set(["pptx"]);
 
 function detectKind(filename: string): FileKind {
   const ext = filename.split(".").pop()?.toLowerCase() || "";
@@ -232,10 +245,12 @@ function detectKind(filename: string): FileKind {
   if (DOCX_EXTS.has(ext)) return "docx";
   if (HTML_EXTS.has(ext)) return "html";
   if (MD_EXTS.has(ext)) return "markdown";
+  if (XLSX_EXTS.has(ext)) return "xlsx";
+  if (PPTX_EXTS.has(ext)) return "pptx";
   // 二进制 / 无文本预览
   const binary = new Set([
     "exe","dll","so","dylib","bin","dat","db","sqlite","sqlite3",
-    "xlsx","xls","pptx","ppt","pdf","zip","tar","gz","rar","7z",
+    "pdf","zip","tar","gz","rar","7z",
     "mp3","mp4","avi","mov","mkv","wav","flac",
     "ttf","otf","woff","woff2","eot","class","pyc","o","obj","lib","a","wasm",
   ]);
@@ -246,9 +261,11 @@ function detectKind(filename: string): FileKind {
 const fileKind = computed(() => props.file ? detectKind(props.file.name) : "unsupported");
 
 /** 哪些 tab 可用 */
-const hasEdit = computed(() => fileKind.value !== "image" && fileKind.value !== "unsupported");
+const hasEdit = computed(() =>
+  fileKind.value !== "image" && fileKind.value !== "unsupported" && fileKind.value !== "xlsx" && fileKind.value !== "pptx" && fileKind.value !== "docx"
+);
 const hasPreview = computed(() =>
-  fileKind.value === "html" || fileKind.value === "markdown" || fileKind.value === "docx" || fileKind.value === "image"
+  fileKind.value === "html" || fileKind.value === "markdown" || fileKind.value === "docx" || fileKind.value === "xlsx" || fileKind.value === "pptx" || fileKind.value === "image"
 );
 
 // ── 加载文件 ──
@@ -295,20 +312,217 @@ watch(() => props.file, async (f) => {
     return;
   }
 
+  if (kind === "xlsx") {
+    activeTab.value = "preview";
+    try {
+      const ext = f.name.split(".").pop()?.toLowerCase();
+      let wb: XLSX.WorkBook;
+      if (ext === "csv") {
+        const text = await readFileContent(f.path);
+        wb = XLSX.read(text, { type: "string" });
+      } else {
+        const b64 = await readFileBase64(f.path);
+        const raw = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+        const buf = raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength);
+        wb = XLSX.read(buf, { type: "array" });
+      }
+      // 手动构建带 data-row/data-col 的 HTML 表格，支持单元格选取
+      xlsxSheets.value = wb.SheetNames.map(name => {
+        const data = XLSX.utils.sheet_to_json<(string | number | boolean | null | undefined)[]>(wb.Sheets[name], { header: 1 });
+        // 截断：最多渲染 1000 行
+        const maxRows = 1000;
+        const rows = data.slice(0, maxRows);
+        let html = "<table>";
+        for (let r = 0; r < rows.length; r++) {
+          html += "<tr>";
+          const row = rows[r] || [];
+          for (let c = 0; c < row.length; c++) {
+            const cell = row[c] != null ? String(row[c]).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") : "";
+            const tag = r === 0 ? "th" : "td";
+            html += `<${tag} data-row="${r}" data-col="${c}">${cell}</${tag}>`;
+          }
+          html += "</tr>";
+        }
+        html += "</table>";
+        if (data.length > maxRows) {
+          html += `<div class="text-[10px] mt-1" style="color:var(--text-muted)">${t("preview.truncated", { n: maxRows })}</div>`;
+        }
+        return { name, html };
+      });
+      xlsxActiveSheet.value = wb.SheetNames[0] || "";
+    } catch (e) {
+      error.value = String(e);
+      if ((e as any)?.message?.includes("password") || (e as any)?.message?.includes("Password")) {
+        error.value = t("preview.xlsxPassword");
+      }
+    }
+    loading.value = false;
+    return;
+  }
+
+  if (kind === "pptx") {
+    activeTab.value = "preview";
+    loading.value = false;
+    return;
+  }
+
   // 文本文件（html / markdown / code / text）
   activeTab.value = hasPreview.value ? "preview" : "edit";
   try {
     const raw = await readFileContent(f.path);
     content.value = raw;
     if (kind === "html") {
-      const injected = raw.replace("<body>", "<body>" + INSPECTOR_SCRIPT)
-        || raw + INSPECTOR_SCRIPT;
+      const injected = raw.includes("<body>")
+        ? raw.replace("<body>", "<body>" + INSPECTOR_SCRIPT)
+        : raw + INSPECTOR_SCRIPT;
       updateHtmlBlob(injected);
     }
     // markdown 预览由 MarkdownRenderer 处理，不需要 previewHtml
   } catch (e) { error.value = String(e); }
   loading.value = false;
 }, { immediate: true });
+
+// ═══ Excel 拖拽选区 ═══
+const excelAnchor = ref<{ r: number; c: number } | null>(null);
+const excelSelection = ref<{ r1: number; c1: number; r2: number; c2: number } | null>(null);
+
+/** 列数字 → Excel 字母（0→A, 1→B, …, 25→Z, 26→AA） */
+function colLetter(n: number): string {
+  let s = "";
+  while (n >= 0) { s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26) - 1; }
+  return s;
+}
+
+function onExcelMouseDown(e: MouseEvent) {
+  const td = (e.target as HTMLElement).closest("td,th") as HTMLTableCellElement | null;
+  if (!td) return;
+  const r = parseInt(td.dataset.row || "0");
+  const c = parseInt(td.dataset.col || "0");
+  if (isNaN(r) || isNaN(c)) return;
+  excelAnchor.value = { r, c };
+  excelSelection.value = { r1: r, c1: c, r2: r, c2: c };
+}
+
+function onExcelMouseMove(e: MouseEvent) {
+  if (!excelAnchor.value) return;
+  const td = (e.target as HTMLElement).closest("td,th") as HTMLTableCellElement | null;
+  if (!td) return;
+  const r = parseInt(td.dataset.row || "0");
+  const c = parseInt(td.dataset.col || "0");
+  if (isNaN(r) || isNaN(c)) return;
+  excelSelection.value = {
+    r1: Math.min(excelAnchor.value.r, r), c1: Math.min(excelAnchor.value.c, c),
+    r2: Math.max(excelAnchor.value.r, r), c2: Math.max(excelAnchor.value.c, c),
+  };
+}
+
+function onExcelMouseUp() {
+  if (!excelSelection.value) return;
+  excelAnchor.value = null;
+  const sel = excelSelection.value;
+  const rangeStr = sel.r1 === sel.r2 && sel.c1 === sel.c2
+    ? `${colLetter(sel.c1)}${sel.r1 + 1}`
+    : `${colLetter(sel.c1)}${sel.r1 + 1}:${colLetter(sel.c2)}${sel.r2 + 1}`;
+  // 生成选区摘要
+  const lines: string[] = [];
+  for (let r = sel.r1; r <= Math.min(sel.r2, sel.r1 + 2); r++) {
+    const rowCells: string[] = [];
+    for (let c = sel.c1; c <= Math.min(sel.c2, sel.c1 + 2); c++) {
+      const td = document.querySelector(`td[data-row="${r}"][data-col="${c}"]`);
+      rowCells.push(td?.textContent?.trim() || "");
+    }
+    lines.push(`| ${rowCells.join(" | ")} |`);
+  }
+  const summary = `${xlsxActiveSheet.value}!${rangeStr}  ${lines.join("  ")}`;
+  // 定位 tip 在选区附近
+  const rect = document.querySelector(`td[data-row="${sel.r1}"][data-col="${sel.c1}"]`)?.getBoundingClientRect();
+  if (rect) selTip.showTip(summary, rect);
+}
+
+/** 生成 Excel 选区 → sent to CC 的 markdown 表格消息 */
+function sendExcelSelection() {
+  const sel = excelSelection.value;
+  if (!sel || !props.file) return;
+  const rangeStr = sel.r1 === sel.r2 && sel.c1 === sel.c2
+    ? `${colLetter(sel.c1)}${sel.r1 + 1}`
+    : `${colLetter(sel.c1)}${sel.r1 + 1}:${colLetter(sel.c2)}${sel.r2 + 1}`;
+  const lines: string[] = [];
+  for (let r = sel.r1; r <= sel.r2; r++) {
+    const rowCells: string[] = [];
+    for (let c = sel.c1; c <= sel.c2; c++) {
+      const td = document.querySelector(`td[data-row="${r}"][data-col="${c}"]`);
+      rowCells.push(td?.textContent?.trim() || "");
+    }
+    lines.push(`| ${rowCells.join(" | ")} |`);
+  }
+  const table = lines.join("\n");
+  const msg = `在 \`${props.file.name}\` 的 ${xlsxActiveSheet.value}!${rangeStr} 区域，当前内容为：\n\n${table}\n\n请修改为...`;
+  emitChatCommand(`excel-selection:${msg}`);
+  excelSelection.value = null;
+  selTip.hideTip();
+}
+
+// ═══ 文本划选取（DOCX / PPTX / MD 预览）═══
+function onTextSelectionMouseUp() {
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed || !sel.toString().trim()) return;
+  const text = sel.toString().trim();
+  // 取选区末尾（光标位）的 rect，而非整段包围盒——否则段宽撑满容器，定位偏移
+  const endRange = sel.getRangeAt(0).cloneRange();
+  endRange.collapse(false);
+  const rect = endRange.getClientRects()[0] || sel.getRangeAt(0).getBoundingClientRect();
+  selTip.showTip(text, rect);
+}
+
+function sendTextSelection() {
+  if (!props.file) return;
+  const text = selTip.tipFullText.value;
+  if (!text) return;
+  const kind = fileKind.value;
+  let msg: string;
+  if (kind === "markdown") {
+    // MD：在 content.value 中搜索选中文本，获取行号和出现次数
+    const lines = content.value.split("\n");
+    const occurrences: number[] = [];
+    lines.forEach((line, i) => { if (line.includes(text.split("\n")[0])) occurrences.push(i + 1); });
+    if (occurrences.length === 1) {
+      msg = `在 \`${props.file.name}\` 第 ${occurrences[0]} 行选中了以下内容：\n\n${text}`;
+    } else {
+      msg = `在 \`${props.file.name}\` 中选中（此文本出现 ${occurrences.length} 次，以下为第 1 处）：\n\n> ${text}\n\n⚠️ 请先确认修改位置后再操作。`;
+    }
+  } else if (kind === "docx" || kind === "pptx") {
+    // DOCX/PPTX：取选区上方的标题作为结构上下文
+    const heading = findClosestHeading();
+    const loc = heading ? `「${heading}」小节中` : "";
+    msg = `在 \`${props.file.name}\` 的${loc}选中了以下内容：\n\n> ${text}`;
+  } else {
+    msg = `在 \`${props.file.name}\` 中选中了以下内容：\n\n> ${text}`;
+  }
+  emitChatCommand(`selection:${msg}`);
+  selTip.hideTip();
+  window.getSelection()?.removeAllRanges();
+}
+
+/** 在 DOCX mammoth HTML 中查找选区上方最近的标题 */
+function findClosestHeading(): string {
+  const sel = window.getSelection();
+  if (!sel?.rangeCount) return "";
+  let node: Node | null = sel.getRangeAt(0).startContainer;
+  while (node) {
+    if (node.nodeType === 1) {
+      const el = node as HTMLElement;
+      if (/^H[1-6]$/.test(el.tagName)) return el.textContent?.trim() || "";
+      // 查找同层级前方兄弟中的标题
+      let prev = el.previousElementSibling;
+      while (prev) {
+        if (/^H[1-6]$/.test(prev.tagName)) return prev.textContent?.trim() || "";
+        prev = prev.previousElementSibling;
+      }
+    }
+    node = node.parentNode;
+  }
+  return "";
+}
 
 // ── CodeMirror 编辑器 ──
 
@@ -524,24 +738,54 @@ function handleClose() {
             </div>
           </div>
         </div>
-        <div v-else-if="fileKind === 'markdown'" class="flex-1 overflow-auto p-5">
+        <div v-else-if="fileKind === 'xlsx'" class="flex-1 flex flex-col" style="min-height: 0">
+          <!-- Sheet Tab 栏 -->
+          <div v-if="xlsxSheets.length > 1" class="flex items-center gap-1 px-2 h-7 text-[10px] shrink-0" style="background: var(--bg-elevated); border-bottom: 1px solid var(--border-dim)">
+            <button
+              v-for="s in xlsxSheets" :key="s.name"
+              @click="xlsxActiveSheet = s.name"
+              class="px-2 py-0.5 rounded transition-colors font-medium"
+              :style="{
+                background: xlsxActiveSheet === s.name ? 'var(--accent)' : 'transparent',
+                color: xlsxActiveSheet === s.name ? 'var(--bg-root)' : 'var(--text-muted)',
+                border: xlsxActiveSheet === s.name ? 'none' : '1px solid var(--border-dim)',
+              }"
+            >{{ s.name }}</button>
+          </div>
+          <!-- 表格（含拖拽选区） -->
+          <div
+            class="flex-1 overflow-auto p-3 xlsx-preview"
+            @mousedown="onExcelMouseDown"
+            @mousemove="onExcelMouseMove"
+            @mouseup="onExcelMouseUp"
+          >
+            <div v-if="xlsxSheets.length === 0" class="flex items-center justify-center h-full" style="color: var(--text-muted)">
+              <span class="text-xs">{{ $t('preview.noData') }}</span>
+            </div>
+            <div v-else v-html="xlsxSheets.find(s => s.name === xlsxActiveSheet)?.html || ''"></div>
+          </div>
+        </div>
+        <div v-else-if="fileKind === 'pptx'" class="flex-1 flex flex-col" style="min-height:0" @mouseup="onTextSelectionMouseUp">
+          <PptxPreview :file="{ name: props.file!.name, path: props.file!.path }" />
+        </div>
+        <div v-else-if="fileKind === 'markdown'" class="flex-1 overflow-auto p-5" @mouseup="onTextSelectionMouseUp">
           <MarkdownRenderer :content="content" />
         </div>
-        <div v-else-if="fileKind === 'docx'" class="flex-1 overflow-auto p-5 docx-preview" v-html="previewHtml"></div>
+        <div v-else-if="fileKind === 'docx'" class="flex-1 overflow-auto p-5 docx-preview" v-html="previewHtml" @mouseup="onTextSelectionMouseUp"></div>
         <div v-else-if="hasEdit" ref="editorContainer" class="flex-1 overflow-auto"></div>
         <div v-else class="flex-1 flex items-center justify-center" style="color: var(--text-muted)">
           <span class="text-xs">{{ $t('preview.noPreview') }}</span>
         </div>
       </div>
 
-      <!-- MD 选中修改建议 Tip（浮动在选区旁） -->
+      <!-- 统一选区浮动 Tip（MD 编辑 / Excel / 文本划选 共用） -->
       <Teleport to="body">
         <div
-          v-if="mdSelection && fileKind === 'markdown' && activeTab === 'edit'"
-          class="fixed z-[60] rounded-lg shadow-lg border flex flex-col gap-2 px-3 py-2.5 text-[11px]"
+          v-if="selTip.tipVisible.value"
+          class="selection-tip"
           :style="{
-            left: mdTipPos.left,
-            top: mdTipPos.top,
+            left: selTip.tipPos.value.left,
+            top: selTip.tipPos.value.top,
             background: 'var(--bg-elevated)',
             borderColor: 'var(--accent-dim)',
             minWidth: '320px',
@@ -549,24 +793,22 @@ function handleClose() {
         >
           <div class="flex items-center gap-2">
             <span style="color: var(--amber)">📝</span>
-            <span class="truncate" style="color: var(--text-secondary)">
-              "{{ mdSelection.text.slice(0, 50) }}{{ mdSelection.text.length > 50 ? '…' : '' }}"
-            </span>
-            <button @click="mdSelection = null; mdSuggestion = ''" class="shrink-0 w-5 h-5 flex items-center justify-center rounded hover:bg-[var(--bg-hover)] ml-auto" style="color: var(--text-muted)">×</button>
+            <span class="truncate" style="color: var(--text-secondary)">"{{ selTip.tipSummary.value }}"</span>
+            <button @click="selTip.hideTip()" class="shrink-0 w-5 h-5 flex items-center justify-center rounded hover:bg-[var(--bg-hover)] ml-auto" style="color: var(--text-muted)">×</button>
           </div>
           <div class="flex gap-2">
-            <input
-              v-model="mdSuggestion"
-              @keydown.enter="sendMdToChat"
-              :placeholder="$t('preview.mdSuggestionPlaceholder')"
-              class="flex-1 text-[11px] bg-transparent border rounded px-2 py-1 outline-none"
-              :style="{ borderColor: 'var(--border-default)', color: 'var(--text-primary)' }"
-            />
             <button
-              @click="sendMdToChat"
-              class="shrink-0 px-3 py-1 rounded text-[10px] font-medium transition-colors hover:opacity-80"
+              v-if="fileKind === 'xlsx'"
+              @click="sendExcelSelection"
+              class="flex-1 px-3 py-1 rounded text-[10px] font-medium transition-colors hover:opacity-80"
               style="background: var(--accent); color: var(--bg-root)"
-            >{{ $t('preview.sendToChat') }}</button>
+            >⊞ {{ $t('preview.sendToChat') }}</button>
+            <button
+              v-else
+              @click="sendTextSelection"
+              class="flex-1 px-3 py-1 rounded text-[10px] font-medium transition-colors hover:opacity-80"
+              style="background: var(--accent); color: var(--bg-root)"
+            >[-] {{ $t('preview.sendToChat') }}</button>
           </div>
         </div>
       </Teleport>
@@ -618,6 +860,22 @@ function handleClose() {
 }
 .docx-preview tr:nth-child(even) { background: var(--bg-hover); }
 .docx-preview tr:first-child { background: var(--bg-elevated); font-weight: 600; }
+
+/* ── 统一选区浮动 Tip ── */
+.selection-tip {
+  position: fixed;
+  z-index: 60;
+  border-radius: 0.5rem;
+  box-shadow: 0 10px 15px -3px rgba(0,0,0,.1), 0 4px 6px -4px rgba(0,0,0,.1);
+  border: 1px solid;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  font-size: 11px;
+  min-width: 320px;
+  max-width: min(380px, calc(100vw - 16px));
+}
 
 /* ── DOM 选中浮动 Tip ── */
 .fm-dom-tip {
@@ -676,4 +934,30 @@ function handleClose() {
 /* CodeMirror 填满容器高度，防止水平滚动条被内容撑到可视区外 */
 .panel-content .cm-editor { height: 100%; }
 .panel-content .cm-scroller { overflow: auto; }
+
+/* ── xlsx 表格预览 ── */
+.xlsx-preview table {
+  border-collapse: collapse;
+  font-size: 12px;
+  font-family: ui-monospace, monospace;
+}
+.xlsx-preview td, .xlsx-preview th {
+  border: 1px solid var(--border-dim);
+  padding: 0.25em 0.6em;
+  text-align: left;
+  white-space: nowrap;
+  cursor: cell;
+  user-select: none;
+}
+.xlsx-preview th {
+  background: var(--bg-elevated);
+  font-weight: 600;
+  color: var(--text-bright);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.xlsx-preview tr:nth-child(even) td { background: var(--bg-hover); }
+.xlsx-preview td:hover { background: var(--accent-glow); }
+
 </style>

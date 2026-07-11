@@ -404,4 +404,73 @@ describe("chat store", () => {
     expect(msg.contentBlocks![2].toolResult).toBeDefined();
     expect(msg.contentBlocks![2].toolResult!.content).toBe("content");
   });
+
+  // ── updateTodosFromTool ──
+
+  it("updateTodosFromTool handles TodoWrite with full todo list", () => {
+    const chat = useChatStore();
+    chat.updateTodosFromTool("TodoWrite", {
+      todos: [
+        { content: "Task 1", status: "completed", activeForm: "Doing task 1" },
+        { content: "Task 2", status: "in_progress", activeForm: "Doing task 2" },
+        { content: "Task 3", status: "pending", activeForm: "Doing task 3" },
+      ],
+    });
+    expect(chat.todos).toHaveLength(3);
+    expect(chat.todos[0].content).toBe("Task 1");
+    expect(chat.todos[1].status).toBe("in_progress");
+  });
+
+  it("updateTodosFromTool handles TaskCreate", () => {
+    const chat = useChatStore();
+    chat.updateTodosFromTool("TaskCreate", {
+      subject: "New task",
+      activeForm: "Creating new task",
+      taskId: "task_001",
+    });
+    expect(chat.todos).toHaveLength(1);
+    expect(chat.todos[0].content).toBe("New task");
+    expect(chat.todos[0].status).toBe("pending");
+    expect(chat.todos[0].taskId).toBe("task_001");
+  });
+
+  it("updateTodosFromTool handles TaskUpdate", () => {
+    const chat = useChatStore();
+    chat.updateTodosFromTool("TaskCreate", { subject: "Task A", taskId: "t1" });
+    chat.updateTodosFromTool("TaskUpdate", { taskId: "t1", status: "completed" });
+    expect(chat.todos).toHaveLength(1);
+    expect(chat.todos[0].status).toBe("completed");
+  });
+
+  it("updateTodosFromTool ignores unknown tool names", () => {
+    const chat = useChatStore();
+    chat.updateTodosFromTool("Bash", { command: "ls" });
+    expect(chat.todos).toHaveLength(0);
+  });
+
+  // ── session cache with todos ──
+
+  it("saveSessionCache and loadFromCache preserve todos", () => {
+    const chat = useChatStore();
+    chat.addUserMessage("Hello");
+    chat.todos.push({ content: "Task", status: "pending", activeForm: "Working" });
+
+    chat.saveSessionCache("test-session");
+    chat.clearMessages();
+
+    const cached = chat.loadFromCache("test-session");
+    expect(cached).not.toBeNull();
+    expect(cached!).toHaveLength(1);
+    expect(chat.todos).toHaveLength(1);
+    expect(chat.todos[0].content).toBe("Task");
+  });
+
+  it("clearMessages clears todos", () => {
+    const chat = useChatStore();
+    chat.addUserMessage("Hi");
+    chat.todos.push({ content: "Task", status: "pending", activeForm: "Working" });
+    chat.clearMessages();
+    expect(chat.messages).toHaveLength(0);
+    expect(chat.todos).toHaveLength(0);
+  });
 });

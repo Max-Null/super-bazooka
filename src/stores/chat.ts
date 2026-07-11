@@ -71,10 +71,21 @@ function genId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
 }
 
+/** CC TodoWrite / TaskCreate 工具产出的工作清单项 */
+export interface TodoItem {
+  content: string
+  status: "pending" | "in_progress" | "completed" | "deleted"
+  activeForm: string
+  /** TaskCreate/TaskUpdate 使用的任务 ID（TodoWrite 无此字段） */
+  taskId?: string
+}
+
 export const useChatStore = defineStore("chat", () => {
   const messages = ref<Message[]>([]);
   const currentAssistantMsg = ref<Message | null>(null);
   const isProcessing = ref(false);
+  // CC 工作清单（TodoWrite / TaskCreate → 前端实时展示）
+  const todos = ref<TodoItem[]>([]);
   // 审批队列：防止子 agent 并发 control_request 互相覆盖
   const pendingControlRequests = ref<ControlRequest[]>([]);
   // 兼容旧引用：队列头即当前待审批项
@@ -82,14 +93,17 @@ export const useChatStore = defineStore("chat", () => {
     pendingControlRequests.value.length > 0 ? pendingControlRequests.value[0] : null
   );
 
-  // 会话消息缓存：切换会话时保留进行中的流式消息（DB 只有已完成的消息）
-  const sessionCache = new Map<string, Message[]>();
+  // 会话消息缓存：切换会话时保留进行中的流式消息和工作清单（DB 只有已完成的消息）
+  const sessionCache = new Map<string, { messages: Message[]; todos: TodoItem[] }>();
   const MAX_CACHE_SIZE = 20; // LRU 淘汰上限
 
-  /** 将当前消息深拷贝存入缓存（切换会话前调用） */
+  /** 将当前消息和工作清单深拷贝存入缓存（切换会话前调用） */
   function saveSessionCache(sessionId: string) {
     if (!sessionId) return;
-    sessionCache.set(sessionId, JSON.parse(JSON.stringify(messages.value)));
+    sessionCache.set(sessionId, {
+      messages: JSON.parse(JSON.stringify(messages.value)),
+      todos: JSON.parse(JSON.stringify(todos.value)),
+    });
     // LRU 淘汰：超出上限时删除最旧条目
     if (sessionCache.size > MAX_CACHE_SIZE) {
       const firstKey = sessionCache.keys().next().value;
@@ -97,15 +111,17 @@ export const useChatStore = defineStore("chat", () => {
     }
   }
 
-  /** 从缓存恢复消息；缓存无数据则返回 null。命中时将条目移到 LRU 末尾 */
+  /** 从缓存恢复消息和工作清单；缓存无数据则返回 null。命中时将条目移到 LRU 末尾 */
   function loadFromCache(sessionId: string): Message[] | null {
     const cached = sessionCache.get(sessionId);
     if (cached) {
       // LRU: 删除后重新插入，使其成为最新条目
       sessionCache.delete(sessionId);
       sessionCache.set(sessionId, cached);
+      todos.value = cached.todos;
+      return cached.messages;
     }
-    return cached ?? null;
+    return null;
   }
 
   /**
@@ -114,8 +130,10 @@ export const useChatStore = defineStore("chat", () => {
    */
   // ponytail: event 用 any 避免跨模块类型依赖
   function handleBackgroundStreamEvent(sessionId: string, event: any) {
-    const cached = sessionCache.get(sessionId) || [];
-    let last = cached[cached.length - 1];
+    const cached = sessionCache.get(sessionId);
+    const cachedMessages = cached?.messages || [];
+    const cachedTodos = cached?.todos || [];
+    let last = cachedMessages[cachedMessages.length - 1];
 
     if (event.type === 'assistant') {
       // 确保有进行中的 assistant 消息
@@ -124,7 +142,7 @@ export const useChatStore = defineStore("chat", () => {
           id: genId(), role: 'assistant', content: '', thinking: '',
           toolUses: [], timestamp: Date.now(), isStreaming: true,
         };
-        cached.push(last);
+        cachedMessages.push(last);
       }
       // 文本去重（同 useStreamProcessor 逻辑）
       if (event.text) {
@@ -192,7 +210,24 @@ export const useChatStore = defineStore("chat", () => {
       }
     }
 
-    sessionCache.set(sessionId, cached);
+    // 后台会话也拦截 TodoWrite / TaskCreate / TaskUpdate 更新工作清单
+    if (event.tool_use) {
+      for (const tu of event.tool_use) {
+        const input = tu.input || {};
+        if (tu.name === "TodoWrite" && Array.isArray(input.todos)) {
+          cachedTodos.splice(0, cachedTodos.length, ...input.todos as TodoItem[]);
+        } else if (tu.name === "TaskCreate" && typeof input.subject === "string") {
+          cachedTodos.push({ content: input.subject, status: "pending" as const, activeForm: (input.activeForm as string) || input.subject, taskId: input.taskId as string | undefined });
+        } else if (tu.name === "TaskUpdate" && typeof input.taskId === "string") {
+          const idx = cachedTodos.findIndex(t => t.taskId === input.taskId);
+          if (idx >= 0 && typeof input.status === "string") {
+            cachedTodos[idx] = { ...cachedTodos[idx], status: input.status as TodoItem["status"] };
+          }
+        }
+      }
+    }
+
+    sessionCache.set(sessionId, { messages: cachedMessages, todos: cachedTodos });
   }
 
   /**
@@ -256,6 +291,25 @@ export const useChatStore = defineStore("chat", () => {
         const next = new Set(usedAgents.value);
         next.add(agentType);
         usedAgents.value = next;
+      }
+    }
+  }
+
+  /** 从 TodoWrite / TaskCreate 工具调用中提取工作清单 */
+  function updateTodosFromTool(name: string, input: Record<string, unknown>) {
+    if (name === "TodoWrite" && Array.isArray(input.todos)) {
+      todos.value = input.todos as TodoItem[];
+    } else if (name === "TaskCreate" && typeof input.subject === "string") {
+      todos.value.push({
+        content: input.subject as string,
+        status: "pending",
+        activeForm: (input.activeForm as string) || input.subject as string,
+        taskId: input.taskId as string | undefined,
+      });
+    } else if (name === "TaskUpdate" && typeof input.taskId === "string") {
+      const idx = todos.value.findIndex(t => t.taskId === input.taskId);
+      if (idx >= 0 && typeof input.status === "string") {
+        todos.value[idx] = { ...todos.value[idx], status: input.status as TodoItem["status"] };
       }
     }
   }
@@ -328,6 +382,7 @@ export const useChatStore = defineStore("chat", () => {
 
   function clearMessages() {
     messages.value = [];
+    todos.value = [];
     currentAssistantMsg.value = null;
     isProcessing.value = false;
     pendingControlRequests.value = [];
@@ -501,6 +556,7 @@ export const useChatStore = defineStore("chat", () => {
     messages,
     currentAssistantMsg,
     isProcessing,
+    todos,
     pendingControlRequest,
     pendingControlRequests,
     addUserMessage,
@@ -514,6 +570,7 @@ export const useChatStore = defineStore("chat", () => {
     resolveControlRequest,
     markStopped,
     finishAssistantMessage,
+    updateTodosFromTool,
     usedAgents,
     clearMessages,
     loadMessages,

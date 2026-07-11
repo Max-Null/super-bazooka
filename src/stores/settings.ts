@@ -129,6 +129,9 @@ export const useSettingsStore = defineStore("settings", () => {
   const LLM_API_URL_KEY = "sb-llm-api-url-override";
   const optimizeApiUrl = ref(localStorage.getItem(LLM_API_URL_KEY) || baseUrl.value);
 
+  // 上下文窗口大小（tokens）：0 = 自动检测，>0 = 手动指定
+  const contextLimit = ref(0);
+
   // 禅模式：直接与 LLM 对话，不启动 CC CLI（仅内存状态，不持久化）
   const zenMode = ref(false);
 
@@ -168,6 +171,7 @@ export const useSettingsStore = defineStore("settings", () => {
       if (db.locale) locale.value = db.locale as "zh" | "en";
       if (db.fontSize) fontSize.value = db.fontSize as "small" | "medium" | "large";
       if (db.ponytailMode) ponytailMode.value = db.ponytailMode as PonytailMode;
+      if (db.contextLimit != null) contextLimit.value = db.contextLimit;
       if (db.cwd) {
         // 校验路径是否仍存在，防止 exe 换位置后加载无效工作区
         listDir(db.cwd).then(() => { cwd.value = db.cwd; }).catch(() => { /* 路径不存在，保持空让 AppShell 用 getWorkspaceRoot */ });
@@ -260,7 +264,7 @@ export const useSettingsStore = defineStore("settings", () => {
   // UI 偏好变更 → 写 SQLite（500ms 防抖，不受 Tauri identifier 变更影响）
   let uiDbTimer: ReturnType<typeof setTimeout> | null = null;
   watch(
-    [optimizeApiUrl, claudePath, theme, locale, fontSize, ponytailMode, planMode, autoMode, permissionMode, effort, cwd, recentWorkspaces],
+    [optimizeApiUrl, claudePath, theme, locale, fontSize, ponytailMode, planMode, autoMode, permissionMode, effort, cwd, recentWorkspaces, contextLimit],
     () => {
       if (uiDbTimer) clearTimeout(uiDbTimer);
       uiDbTimer = setTimeout(() => {
@@ -277,6 +281,7 @@ export const useSettingsStore = defineStore("settings", () => {
           effort: effort.value,
           cwd: cwd.value,
           recentWorkspaces: recentWorkspaces.value,
+          contextLimit: contextLimit.value,
         })).catch(() => {});
       }, 500);
     },
@@ -289,5 +294,5 @@ export const useSettingsStore = defineStore("settings", () => {
     else localStorage.removeItem("sb-current-workspace");
   });
 
-  return { apiKey, baseUrl, model, providerId, models, planMode, autoMode, permissionMode, effort, ponytailMode, theme, locale, fontSize, claudePath, optimizeApiUrl, zenMode, resolvedClaudePath, saveCurrentConfig, restoreConfig, cwd, recentWorkspaces, addRecentWorkspace, initFromDb };
+  return { apiKey, baseUrl, model, providerId, models, planMode, autoMode, permissionMode, effort, ponytailMode, theme, locale, fontSize, claudePath, optimizeApiUrl, zenMode, contextLimit, resolvedClaudePath, saveCurrentConfig, restoreConfig, cwd, recentWorkspaces, addRecentWorkspace, initFromDb };
 });

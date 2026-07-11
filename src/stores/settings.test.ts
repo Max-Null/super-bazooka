@@ -93,6 +93,17 @@ describe("settings store", () => {
     expect(settings.theme).toBe("dark");
   });
 
+  it("contextLimit defaults to 0 (auto-detect)", () => {
+    const settings = useSettingsStore();
+    expect(settings.contextLimit).toBe(0);
+  });
+
+  it("contextLimit can be set manually", () => {
+    const settings = useSettingsStore();
+    settings.contextLimit = 128000;
+    expect(settings.contextLimit).toBe(128000);
+  });
+
   it("saves current config and restores per-provider config", async () => {
     const settings = useSettingsStore();
 

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 文件面板内联预览——HTML 文件用 iframe 渲染，其他文本类型用 CodeMirror 只读模式展示语法高亮 */
 import { ref, watch, onMounted, onUnmounted, shallowRef, computed, nextTick } from "vue";
 import { EditorView, keymap, lineNumbers, highlightActiveLine } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";

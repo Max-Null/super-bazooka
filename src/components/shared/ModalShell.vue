@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted } from "vue";
+import { onMounted, onUnmounted } from "vue";
 
 const props = defineProps<{
   open: boolean;
@@ -9,10 +9,6 @@ const props = defineProps<{
   size?: "sm" | "md" | "lg" | "xl";
 }>();
 const emit = defineEmits<{ close: [] }>();
-
-const maxHClass = computed(() =>
-  props.position === "top" ? "max-h-[70vh]" : "max-h-[85vh]"
-);
 
 function onKeydown(e: KeyboardEvent) {
   if (e.key === "Escape") emit("close");
@@ -25,40 +21,36 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
   <Teleport to="body">
     <div
       v-if="open"
-      class="fixed inset-0 z-50 flex"
-      :class="position === 'top' ? 'items-start justify-center pt-[14vh]' : 'items-center justify-center'"
-      style="background: rgba(0,0,0,0.3)"
+      class="modal-shell-overlay"
+      :class="{ 'modal-shell-overlay--top': position === 'top' }"
       @click.self="emit('close')"
     >
       <div
-        class="modal-shell-panel rounded-xl overflow-hidden shadow-2xl border flex flex-col"
+        class="modal-shell-panel"
         :class="[
-          maxHClass,
+          position === 'top' ? 'modal-shell-panel--top' : 'modal-shell-panel--center',
           {
-            'w-[28rem]': size === 'sm',
-            'w-[34rem]': !size || size === 'md',
-            'w-[36rem]': size === 'lg',
-            'w-[38rem]': size === 'xl',
+            'modal-shell-panel--sm': size === 'sm',
+            'modal-shell-panel--md': !size || size === 'md',
+            'modal-shell-panel--lg': size === 'lg',
+            'modal-shell-panel--xl': size === 'xl',
           },
         ]"
       >
-        <!-- 头部 -->
-        <div class="shrink-0 flex items-center justify-between px-5 pt-3 pb-2 border-b modal-shell-header">
+        <div class="modal-shell-header">
           <slot name="header" />
           <button
             @click="emit('close')"
-            class="w-6 h-6 flex items-center justify-center rounded transition-colors hover:bg-[var(--bg-hover)] shrink-0 ml-2 modal-shell-close"
+            class="modal-shell-close"
             :title="$t('modal.close')"
           >&times;</button>
         </div>
 
-        <!-- 内容（可滚动） -->
-        <div class="overflow-y-auto flex-1 px-5 py-3 modal-shell-body">
+        <div class="modal-shell-body">
           <slot />
         </div>
 
-        <!-- 底部（固定） -->
-        <div v-if="$slots.footer" class="shrink-0 px-5 py-2 border-t modal-shell-footer" :style="{ borderColor: 'var(--border-dim)' }">
+        <div v-if="$slots.footer" class="modal-shell-footer">
           <slot name="footer" />
         </div>
       </div>

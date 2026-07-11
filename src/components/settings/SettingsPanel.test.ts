@@ -50,6 +50,8 @@ const i18n = createI18n({
         ponytailUltra: "Ultra",
         installPonytail: "Install Ponytail",
         changelog: "Changelog",
+        contextLimit: "Context Limit",
+        contextLimitPlaceholder: "0=auto, accepts 128K / 1M",
       },
       mode: {
         askBefore: "Ask before edits", editAuto: "Edit auto",
@@ -173,5 +175,25 @@ describe("SettingsPanel", () => {
   it("shows test connection button", () => {
     const wrapper = mountPanel();
     expect(wrapper.text()).toContain("Test Connection");
+  });
+
+  it("contextLimit input accepts 128K shorthand", async () => {
+    const settings = useSettingsStore();
+    const wrapper = mountPanel();
+    const input = wrapper.find("input[type=\"text\"]");
+    // 找到 contextLimit 输入框（placeholder 匹配）
+    const allInputs = wrapper.findAll("input[type=\"text\"]");
+    const clInput = allInputs.find(el => (el.element as HTMLInputElement).placeholder.includes("128K"));
+    expect(clInput).toBeTruthy();
+    if (clInput) {
+      await clInput.setValue("128K");
+      await clInput.trigger("blur");
+      expect(settings.contextLimit).toBe(128000);
+    }
+  });
+
+  it("contextLimit defaults to 0", () => {
+    const settings = useSettingsStore();
+    expect(settings.contextLimit).toBe(0);
   });
 });

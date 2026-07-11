@@ -250,6 +250,8 @@ export function useStreamProcessor() {
               };
               chat.addToolUse(toolUse);
               markToolExecStart(toolUse);
+              // 提取 TodoWrite / TaskCreate / TaskUpdate 中的工作清单
+              chat.updateTodosFromTool(tu.name, tu.input);
             }
           }
           // 构建 contentBlocks 时间线。始终传入 existing，靠块内 startsWith 去重自行判断替换/追加

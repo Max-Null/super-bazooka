@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** CC 思考中占位指示器——逐字波动的 "Thinking…" 动画，或在工具执行时显示工具名 */
 defineProps<{ toolName?: string }>();
 </script>
 

@@ -28,7 +28,8 @@ import ManagePanel from "@/components/shared/ManagePanel.vue";
 import ModalShell from "@/components/shared/ModalShell.vue";
 import MarkdownRenderer from "@/components/shared/MarkdownRenderer.vue";
 import ChatTimelineNav from "./ChatTimelineNav.vue";
-import { useCommandPaletteBus, useChatCommandBus, emitGlobalCommand } from "@/composables/useCommandPalette";
+import { useCommandPaletteBus, useChatCommandBus, emitGlobalCommand, emitChatCommand } from "@/composables/useCommandPalette";
+import TodoPanel from "./TodoPanel.vue";
 import { useI18n } from "vue-i18n";
 const { t } = useI18n();
 import { useCommandRegistry } from "@/composables/useCommandRegistry";
@@ -106,6 +107,17 @@ function removeDomSnippet() { domSnippet.value = null; }
 
 const openFileInPanel = inject<(f: { name: string; path: string }) => void>("openFileInPanel", () => {});
 
+// ── 🧪 测试（Dev）──
+const showTestPanel = ref(false);
+function runTest(fn: () => void) { showTestPanel.value = false; fn(); }
+function testQuestion() { chat.pendingControlRequests.splice(0); chat.pendingControlRequests.push({ subtype: "approval", tool_name: "AskUserQuestion", tool_input: { questions: [{ question: "选择方案？", header: "Q", multiSelect: false, options: [{ label: "A", description: "desc" }] }] } }); }
+function testPlan() { chat.pendingControlRequests.splice(0); chat.pendingControlRequests.push({ subtype: "approval", tool_name: "ExitPlanMode", tool_input: { plan: "# 测试计划\n\n## 步骤 1\n实现\n## 步骤 2\n测试", planFilePath: "/tmp/test-plan.md" } }); }
+function testApprove() { chat.pendingControlRequests.splice(0); chat.pendingControlRequests.push({ subtype: "approval", tool_name: "Bash", tool_input: { command: "echo test", description: "测试命令" } }); }
+function testTodos() { chat.todos = [{ status: "completed" as const, content: "已完成", activeForm: "已完成" }, { status: "in_progress" as const, content: "进行中", activeForm: "进行中…" }, { status: "pending" as const, content: "待处理 A", activeForm: "待处理 A" }, { status: "pending" as const, content: "待处理 B", activeForm: "待处理 B" }]; }
+function testStatusOk() { showStatus("✅ 文件保存成功 — report.md"); }
+function testStatusWarn() { showStatus("⚠️ 连接超时，正在重试…"); }
+function testStatusErr() { showStatus("❌ 导出失败：权限不足"); }
+
 // ── 状态消息（临时横幅，不挤占消息区域）──
 const statusMessage = ref("");
 const showContextModal = ref(false);
@@ -166,13 +178,17 @@ const autoModeActive = ref(settings.autoMode);
 onMounted(async () => {
   try { autoModeActive.value = await getAutoModeStatus(); }
   catch { autoModeActive.value = settings.autoMode; }
-  // 切换会话后自动滚到底部
   window.addEventListener("session-switched", scrollToBottomInstant);
+  window.addEventListener("keydown", onTestKey);
 });
 
 onUnmounted(() => {
   window.removeEventListener("session-switched", scrollToBottomInstant);
+  window.removeEventListener("keydown", onTestKey);
 });
+function onTestKey(e: KeyboardEvent) {
+  if (e.ctrlKey && e.shiftKey && e.key === "T") { e.preventDefault(); showTestPanel.value = !showTestPanel.value; }
+}
 
 // Sync on store change
 watch(() => settings.autoMode, (v) => { autoModeActive.value = v; });
@@ -542,6 +558,8 @@ async function handleAllow() {
 }
 async function handleDeny() {
   const cr = chat.pendingControlRequest; if (!cr) return;
+  // 先清队列关闭弹窗，再通知 CC（sendStdin 可能因无活跃会话失败，不影响关闭）
+  chat.resolveControlRequest("deny");
   const payload = {
     type: "control_response",
     response: {
@@ -549,13 +567,12 @@ async function handleDeny() {
       request_id: cr.request_id || "",
       response: {
         behavior: "deny",
-        message: "User denied this action",  // deny 必须填 message
+        message: "User denied this action",
       },
     },
   };
   debugLog.add(`📤 control_response deny: ${JSON.stringify(payload)}`);
-  await sendStdin(session.activeSessionId, JSON.stringify(payload));
-  chat.resolveControlRequest("deny");
+  try { await sendStdin(session.activeSessionId, JSON.stringify(payload)); } catch { /* 无活跃 CC 会话时静默 */ }
 }
 
 // ── Edit + Resend: 保留原消息不动，新消息追加到末尾 ──
@@ -684,7 +701,7 @@ async function submitAnswers() {
 }
 
 function skipQuestions() {
-  handleDeny();
+  handleDeny(); // fire-and-forget，resolveControlRequest 已在 handleDeny 首行执行
   questionAnswers.value.clear();
   questionOther.value.clear();
 }
@@ -867,7 +884,29 @@ watch(
 
     <!-- Messages + 时间线导航 -->
     <div class="chat-area">
+      <!-- 状态消息浮层——会话区顶部居中，不遮挡底部通知区 -->
+      <Transition name="status-float">
+        <div v-if="statusMessage" class="status-toast"><span class="status-pill">{{ statusMessage }}</span></div>
+      </Transition>
       <div ref="scrollContainer" class="chat-messages" @scroll="onScrollThrottled">
+      <!-- 🧪 Ctrl+Shift+T -->
+      <details v-if="showTestPanel" class="mx-auto mb-3 text-[11px]" style="color:var(--text-muted); max-width:48rem; position:sticky; top:0; z-index:5; background:var(--bg-root)">
+        <summary class="cursor-pointer py-1 hover:text-[var(--accent)]">🧪 测试弹窗</summary>
+        <div class="flex flex-wrap gap-1.5 mt-2 ml-2">
+          <button @click="runTest(testQuestion)" class="btn-ghost" style="font-size:11px; padding:0.15rem 0.5rem">AskUserQuestion</button>
+          <button @click="runTest(testPlan)" class="btn-ghost" style="font-size:11px; padding:0.15rem 0.5rem">PlanReview</button>
+          <button @click="runTest(testApprove)" class="btn-ghost" style="font-size:11px; padding:0.15rem 0.5rem">ApprovalBar</button>
+          <button @click="runTest(() => emitChatCommand('slash-context'))" class="btn-ghost" style="font-size:11px; padding:0.15rem 0.5rem">ContextUsage</button>
+          <button @click="runTest(() => emitChatCommand('export-session'))" class="btn-ghost" style="font-size:11px; padding:0.15rem 0.5rem">ExportPreview</button>
+          <button @click="runTest(() => emitChatCommand('rename-session'))" class="btn-ghost" style="font-size:11px; padding:0.15rem 0.5rem">RenameSession</button>
+          <button @click="runTest(() => emitChatCommand('about'))" class="btn-ghost" style="font-size:11px; padding:0.15rem 0.5rem">About</button>
+          <button @click="runTest(() => emitChatCommand('manage-plugins'))" class="btn-ghost" style="font-size:11px; padding:0.15rem 0.5rem">ManagePanel</button>
+          <button @click="runTest(testTodos)" class="btn-ghost" style="font-size:11px; padding:0.15rem 0.5rem">TodoWrite</button>
+          <button @click="runTest(testStatusOk)" class="btn-ghost" style="font-size:11px; padding:0.15rem 0.5rem">Notify OK</button>
+          <button @click="runTest(testStatusWarn)" class="btn-ghost" style="font-size:11px; padding:0.15rem 0.5rem">Notify Warn</button>
+          <button @click="runTest(testStatusErr)" class="btn-ghost" style="font-size:11px; padding:0.15rem 0.5rem">Notify Err</button>
+        </div>
+      </details>
       <!-- Welcome -->
       <div v-if="chat.messages.length === 0" class="welcome-container">
         <div class="welcome-page">
@@ -957,17 +996,15 @@ watch(
       </div>
     </Teleport>
 
-    <!-- Permission bar（AskUserQuestion 走独立问答弹窗）-->
-    <div
-      v-if="chat.pendingControlRequest && chat.pendingControlRequest.tool_name !== 'AskUserQuestion' && chat.pendingControlRequest.tool_name !== 'ExitPlanMode'"
-      class="approval-bar"
-      style="background:var(--amber-glow); border-top:1px solid var(--amber); border-color:var(--amber); --tw-border-opacity:0.25"
-    >
-      <span class="text-xs flex-1" style="color:var(--amber)">
-        {{ $t('chat.allowTool', { tool: toolLabel(chat.pendingControlRequest.tool_name || '') }) }}
-      </span>
-      <button @click="handleAllow" class="px-3 py-1 rounded-md text-xs font-medium transition-colors" style="background:var(--accent-dim); color:white">{{ $t('chat.allow') }}</button>
-      <button @click="handleDeny" class="px-3 py-1 rounded-md text-xs font-medium transition-colors" style="border:1px solid var(--coral); color:var(--coral)">{{ $t('chat.deny') }}</button>
+    <!-- ═══ 底部通知区：审批条 + 工作清单 ═══ -->
+    <div class="bottom-notices">
+      <div v-if="chat.pendingControlRequest && chat.pendingControlRequest.tool_name !== 'AskUserQuestion' && chat.pendingControlRequest.tool_name !== 'ExitPlanMode'" class="approval-bar">
+        <div class="w-0.5 h-5 rounded-full shrink-0" style="background:var(--accent)" />
+        <span class="text-xs flex-1" style="color:var(--text-secondary)">{{ $t('chat.allowTool', { tool: toolLabel(chat.pendingControlRequest.tool_name || '') }) }}</span>
+        <button @click="handleAllow" class="btn-primary">{{ $t('chat.allow') }}</button>
+        <button @click="handleDeny" class="btn-ghost" style="color:var(--coral); border-color:var(--coral)">{{ $t('chat.deny') }}</button>
+      </div>
+      <TodoPanel />
     </div>
 
     <!-- ═══ 底部区域：滚动按钮 + 状态消息 + 工具栏 + 输入框 ═══ -->
@@ -986,19 +1023,6 @@ watch(
         </button>
       </Transition>
 
-      <!-- 状态消息 -->
-      <Transition name="scroll-btn">
-        <div
-          v-if="statusMessage"
-          class="absolute left-0 right-0 flex justify-center z-10 pointer-events-none"
-          style="bottom: calc(100% + 36px)"
-        >
-          <span
-            class="status-pill"
-            style="background: var(--accent-glow); color: var(--accent)"
-          >{{ statusMessage }}</span>
-        </div>
-      </Transition>
 
       <!-- Toolbar（禅模式下隐藏——模式/effort/Ponytail 对直接 LLM 无意义） -->
       <InputBarToolbar

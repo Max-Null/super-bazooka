@@ -1,11 +1,15 @@
 <script setup lang="ts">
+/** 权限模式选择栏——单选框切换四种权限模式，computed getter/setter 将 UI 状态映射到 settings store 的多个字段 */
 import { computed } from "vue";
-
 import { useSettingsStore } from "@/stores/settings";
-
 
 const settings = useSettingsStore();
 
+// 四种模式的 UI 值与 store 字段的映射关系：
+//   plan → settings.planMode=true
+//   auto → settings.autoMode=true
+//   editAuto → settings.permissionMode="acceptEdits"
+//   askBefore → settings.permissionMode="default"（planMode/autoMode=false）
 const activeMode = computed({
   get: () => {
     if (settings.planMode) return "plan";

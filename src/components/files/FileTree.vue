@@ -147,6 +147,12 @@ async function revealInExplorer(entry: FileEntry) {
   try { await reveal(entry.path); } catch {}
 }
 
+// ═══ 添加到对话 ═══
+function addToChat(entry: FileEntry) {
+  closeMenu();
+  window.dispatchEvent(new CustomEvent("attach-files", { detail: [{ name: entry.name, path: entry.path }] }));
+}
+
 // ═══ 复制路径/文件名 ═══
 async function copyToClipboard(text: string) {
   closeMenu();
@@ -327,6 +333,13 @@ function isLoading(path: string): boolean { return !!loadingDirs.value[path]; }
           <div class="my-1 mx-2 border-t" :style="{ borderColor: 'var(--border-dim)' }"></div>
         </template>
         <!-- 通用操作 -->
+        <template v-if="!ctxMenu.entry.is_dir">
+          <button @click="addToChat(ctxMenu.entry)"
+            class="w-full text-left px-3 py-1.5 hover:bg-[var(--bg-hover)] transition-colors flex items-center gap-2"
+            :style="{ color: 'var(--accent)' }"
+          >💬 {{ $t('file.addToChat') }}</button>
+          <div class="my-1 mx-2 border-t" :style="{ borderColor: 'var(--border-dim)' }"></div>
+        </template>
         <button @click="doCopy(ctxMenu.entry, 'copy')"
           class="w-full text-left px-3 py-1.5 hover:bg-[var(--bg-hover)] transition-colors flex items-center gap-2"
         >📋 {{ $t('file.copy') }}</button>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 子组件异常捕获容器——onErrorCaptured 拦截渲染错误，展示错误信息 + 重试按钮，防止单组件崩溃波及整个页面 */
 import { ref, onErrorCaptured } from "vue";
 
 defineProps<{ name?: string }>();
@@ -6,12 +7,14 @@ defineProps<{ name?: string }>();
 const error = ref<string | null>(null);
 const ready = ref(true);
 
+// 捕获子组件渲染时的异常，return false 阻止向更上层传播
 onErrorCaptured((err) => {
   error.value = String(err);
   ready.value = false;
-  return false; // prevent propagation
+  return false;
 });
 
+/** 重置错误状态重新渲染子组件 */
 function retry() {
   error.value = null;
   ready.value = true;

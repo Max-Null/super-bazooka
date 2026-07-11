@@ -37,11 +37,13 @@ Super Bazooka is a clean, fast, developer‑friendly desktop interface for [Clau
 
 ---
 
-## 🤔 Why "Super Bazooka"?
+## 💡 产品理念 / Philosophy
 
-Because this tool is designed to be **simple, powerful, and precise** — just like the weapon it's named after. It delivers your prompts with zero detours.
+产品最终是给人用的，用户思维是第一位的。功能实现可以复杂，但**节省用户的学习成本和使用成本**才能获得更多用户。用户的反馈是做出更好产品的动力——**没有用户的程序最终会"死去"**。
 
-*(Yes, the abbreviation is SB. We call it the "Smart Bridge" internally.)*
+*We build for humans first. Complex implementation is fine; complex experience is not. User feedback is the fuel that keeps software alive.*
+
+> 名字由来：Super Bazooka 意为简单、强大、精准，像一发射向目标的火箭弹。缩写 SB，内部称 "Smart Bridge"。*The name stands for simple, powerful, and precise — like a rocket straight to the target.*
 
 ---
 

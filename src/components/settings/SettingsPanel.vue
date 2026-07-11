@@ -59,6 +59,34 @@ const settings = useSettingsStore();
 const chat = useChatStore();
 const sessionStore = useSessionStore();
 
+// ── 上下文窗口输入（支持 128K / 1M 简写）──
+const contextLimitInput = ref("");
+watch(() => settings.contextLimit, (v) => {
+  if (v > 0 && contextLimitInput.value === "") contextLimitInput.value = formatTokens(v);
+}, { immediate: true });
+
+function formatTokens(n: number): string {
+  if (n >= 1_000_000 && n % 1_000_000 === 0) return (n / 1_000_000) + "M";
+  if (n >= 1_000 && n % 1_000 === 0) return (n / 1_000) + "K";
+  return String(n);
+}
+
+function parseContextLimit() {
+  const raw = contextLimitInput.value.trim().toUpperCase();
+  // 空或 0 → 自动检测
+  if (!raw || raw === "0") { settings.contextLimit = 0; contextLimitInput.value = ""; return; }
+  // 简写格式
+  const m = raw.match(/^(\d+(?:\.\d+)?)\s*M$/);
+  if (m) { settings.contextLimit = Math.round(parseFloat(m[1]) * 1_000_000); return; }
+  const k = raw.match(/^(\d+(?:\.\d+)?)\s*K$/);
+  if (k) { settings.contextLimit = Math.round(parseFloat(k[1]) * 1_000); return; }
+  // 纯数字
+  const n = parseInt(raw, 10);
+  if (!isNaN(n)) { settings.contextLimit = Math.max(0, n); return; }
+  // 解析失败 → 回退为当前有效值
+  contextLimitInput.value = settings.contextLimit > 0 ? formatTokens(settings.contextLimit) : "";
+}
+
 // ── 聊天 API 地址静默查询 ──
 const isLookingUpUrl = ref(false);
 
@@ -301,6 +329,7 @@ async function saveSettingsJson() {
     jsonEditorError.value = t(key, params as any);
   }
 }
+
 </script>
 
 <template>
@@ -401,6 +430,13 @@ async function saveSettingsJson() {
                 </div>
               </Transition>
             </div>
+          </div>
+          <div>
+            <label class="block text-xs font-medium mb-1.5" style="color:var(--text-secondary)">{{ $t('settings.contextLimit') }}</label>
+            <input v-model="contextLimitInput" type="text"
+              :placeholder="$t('settings.contextLimitPlaceholder')"
+              class="settings-input w-full rounded-lg px-3.5 py-2 text-sm outline-none"
+              @blur="parseContextLimit" />
           </div>
           <div>
             <div class="flex items-center justify-between mb-1.5">

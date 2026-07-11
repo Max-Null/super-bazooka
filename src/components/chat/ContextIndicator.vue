@@ -22,6 +22,8 @@ const contextLimits: Record<string, number> = {
 };
 
 const limit = computed(() => {
+  // 手动设置优先
+  if (settings.contextLimit > 0) return settings.contextLimit;
   // 模型名中的 [1M] / [1m] 后缀直接指示 1M 上下文
   const modelLower = settings.model.toLowerCase();
   if (modelLower.includes("[1m]") || modelLower.includes("[1M]")) {

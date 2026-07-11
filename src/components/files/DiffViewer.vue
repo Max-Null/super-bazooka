@@ -1,15 +1,18 @@
 <script setup lang="ts">
+/** Git diff 行级对比渲染——用 diff 库将 oldStr/newStr 逐行对比，输出 add/remove/equal 三类 DiffLine */
 import { computed } from "vue";
 import * as Diff from "diff";
 
 const props = defineProps<{ oldStr: string; newStr: string }>();
 
+// 逐行对比结果，type 决定背景色（绿增/红删/无变化）
 interface DiffLine {
   type: "add" | "remove" | "equal";
   text: string;
-  lineNum?: number;
+  lineNum?: number;  // add/remove 行在原始文件中的行号
 }
 
+// diffLines 拆分文本为变更块 → 展平为单行数组，保留 add/remove 的行号用于显示
 const lines = computed<DiffLine[]>(() => {
   const changes = Diff.diffLines(props.oldStr || "", props.newStr || "");
   const result: DiffLine[] = [];
@@ -18,7 +21,7 @@ const lines = computed<DiffLine[]>(() => {
 
   for (const change of changes) {
     const changeLines = change.value.split("\n");
-    // Remove trailing empty line from split
+    // 去掉 split 产生的末尾空串
     if (changeLines[changeLines.length - 1] === "") changeLines.pop();
 
     for (const line of changeLines) {

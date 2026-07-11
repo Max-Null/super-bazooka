@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, provide, inject, type Ref } from "vue";
 
-import { listDir, readFileContent, readFileBase64, getWorkspaceRoot, type FileEntry } from "@/lib/tauri-bridge";
-import mammoth from "mammoth";
+import { listDir, readFileContent, getWorkspaceRoot, type FileEntry } from "@/lib/tauri-bridge";
 import { translateError } from "@/lib/utils";
 import { useI18n } from "vue-i18n";
 import ErrorBoundary from "@/components/shared/ErrorBoundary.vue";
@@ -131,23 +130,18 @@ async function openFile(entry: FileEntry) {
   selectedFile.value = entry.name;
   selectedFilePath.value = entry.path;  // 完整路径，供 openModalPreview 使用
   const ext = entry.name.split(".").pop()?.toLowerCase() || "";
-  if (DOCX_EXTS.has(ext)) {
-    // Word 文档：base64 → ArrayBuffer → mammoth 提取纯文本
-    try {
-      const b64 = await readFileBase64(entry.path);
-      const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
-      const result = await mammoth.extractRawText({ arrayBuffer: bytes.buffer });
-      previewContent.value = result.value;
-    } catch (e) {
-      const { key, params } = translateError(e);
-      previewContent.value = t(key, params as any);
-    }
-  } else {
-    try { previewContent.value = await readFileContent(entry.path); }
-    catch (e) {
-      const { key, params } = translateError(e);
-      previewContent.value = t(key, params as any);
-    }
+
+  // 二进制/结构化文件：内联预览无法展示，直接跳到第四列，关闭内联预览
+  if (DOCX_EXTS.has(ext) || ext === "xlsx" || ext === "xls" || ext === "csv" || ext === "pptx") {
+    clearPreview();
+    openFileInPanel({ name: entry.name, path: entry.path });
+    return;
+  }
+
+  try { previewContent.value = await readFileContent(entry.path); }
+  catch (e) {
+    const { key, params } = translateError(e);
+    previewContent.value = t(key, params as any);
   }
 }
 

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 聊天输入栏——多行输入 + 拖放文件 + / 命令补全 + Enter/Shift+Enter 发送换行 */
 import { ref, computed, nextTick } from "vue";
 import { optimizePrompt } from "@/lib/tauri-bridge";
 import { useSettingsStore } from "@/stores/settings";
@@ -159,7 +160,7 @@ defineExpose({ setText: (text: string) => { input.value = text; autoResize(); } 
 </script>
 
 <template>
-  <div class="sb-input-bar shrink-0 pt-3 pb-8 relative" style="background: var(--bg-root)">
+  <div class="sb-input-bar">
     <!-- 斜杠自动补全下拉 — 绝对定位，不挤占消息区域 -->
     <div v-if="showSlashMenu && slashSuggestions.length > 0" class="slash-autocomplete">
       <button
