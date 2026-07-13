@@ -42,6 +42,29 @@ const layout = inject(PANEL_LAYOUT_KEY)!;
 const HTML_PRESETS = [0, 375, 768, 1024, 1440, 1920] as const
 const htmlWidth = ref(0)
 
+// ── MD 大纲 ──
+const showMdOutline = ref(false);
+const mdHeadings = computed(() => {
+  if (fileKind.value !== "markdown") return [];
+  const headings: { level: number; text: string; id: string }[] = [];
+  for (const line of content.value.split("\n")) {
+    const m = line.match(/^(#{1,6})\s+(.+)$/);
+    if (m) {
+      headings.push({
+        level: m[1].length,
+        text: m[2],
+        id: m[2].toLowerCase().replace(/[^\w一-鿿]+/g, "-").replace(/^-|-$/g, ""),
+      });
+    }
+  }
+  return headings;
+});
+
+function scrollToHeading(id: string) {
+  const el = document.getElementById(id);
+  el?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 // ── xlsx 状态 ──
 const xlsxSheets = ref<{ name: string; html: string }[]>([]);
 const xlsxActiveSheet = ref("");
@@ -56,6 +79,17 @@ const activeTab = ref<"edit" | "preview">("edit");
 
 // ── 统一浮动 tip ──
 const selTip = useSelectionTip();
+const selectionTipRef = ref<HTMLElement | null>(null);
+
+// 选区 mouseup 后会紧接着触发 click，用标志位防止 onClickOutside 误关 tip
+let skipNextClickOutside = false;
+
+function onClickOutside(e: MouseEvent) {
+  if (skipNextClickOutside) { skipNextClickOutside = false; return; }
+  if (!selTip.tipVisible.value) return;
+  if (!selectionTipRef.value || selectionTipRef.value.contains(e.target as Node)) return;
+  selTip.hideTip();
+}
 
 // ── HTML 预览 Blob URL（绕过 srcdoc 的脚本执行 bug）──
 const previewHtmlBlob = ref("");
@@ -109,6 +143,10 @@ function onCcFileChanged() {
 onMounted(() => window.addEventListener("cc-file-changed", onCcFileChanged));
 onUnmounted(() => window.removeEventListener("cc-file-changed", onCcFileChanged));
 
+// 点击 tip 外部关闭
+onMounted(() => document.addEventListener("click", onClickOutside));
+onUnmounted(() => document.removeEventListener("click", onClickOutside));
+
 const { t } = useI18n();
 const converting = ref(false);
 
@@ -150,24 +188,6 @@ function sendDomToChat() {
 // ── MD 选中 → 发送修改建议到对话 ──
 const mdSelection = ref<{ text: string; from: number; to: number; startLine: number; endLine: number } | null>(null);
 const mdSuggestion = ref("");
-const mdTipPos = ref<{ left: string; top: string }>({ left: "0px", top: "0px" });
-
-function updateMdTipPos() {
-  if (!mdSelection.value || !editorView.value) {
-    mdTipPos.value = { left: "-9999px", top: "-9999px" };  // 隐藏
-    return;
-  }
-  const coords = editorView.value.coordsAtPos(mdSelection.value.to);
-  if (!coords) {
-    mdTipPos.value = { left: "-9999px", top: "-9999px" };
-    return;
-  }
-  // 定位到选区末尾右下方，偏移避免遮挡
-  mdTipPos.value = {
-    left: `${Math.min(coords.right + 8, window.innerWidth - 380)}px`,
-    top: `${Math.min(coords.bottom + 6, window.innerHeight - 160)}px`,
-  };
-}
 
 function domTipStyle() {
   if (!selectedDom.value) return { left: '-9999px', top: '-9999px' };
@@ -186,10 +206,11 @@ function sendMdToChat() {
   const body = suggestion
     ? `${loc}，请修改以下内容：\n\n\`\`\`markdown\n${sel.text}\n\`\`\`\n\n修改建议：${suggestion}`
     : `${loc}，请修改以下内容：\n\n\`\`\`markdown\n${sel.text}\n\`\`\``;
-  emitChatCommand(`md-selection:${body}`);
-  // 清除选区和输入
+  emitChatCommand(`md-selection:${props.file.name}|${body}`);
+  // 清除选区和输入 + 关闭 tip
   mdSelection.value = null;
   mdSuggestion.value = "";
+  selTip.hideTip();
   editorView.value?.dispatch({ selection: { anchor: 0, head: 0 } });
 }
 
@@ -395,12 +416,20 @@ function colLetter(n: number): string {
 
 function onExcelMouseDown(e: MouseEvent) {
   const td = (e.target as HTMLElement).closest("td,th") as HTMLTableCellElement | null;
-  if (!td) return;
+  if (!td) {
+    // 点击表格空白处（padding / 无单元格区域）→ 清除旧选区 + 关闭 tip
+    excelSelection.value = null;
+    excelAnchor.value = null;
+    clearSelectionHighlight();
+    selTip.hideTip();
+    return;
+  }
   const r = parseInt(td.dataset.row || "0");
   const c = parseInt(td.dataset.col || "0");
   if (isNaN(r) || isNaN(c)) return;
   excelAnchor.value = { r, c };
   excelSelection.value = { r1: r, c1: c, r2: r, c2: c };
+  applySelectionHighlight();
 }
 
 function onExcelMouseMove(e: MouseEvent) {
@@ -414,6 +443,32 @@ function onExcelMouseMove(e: MouseEvent) {
     r1: Math.min(excelAnchor.value.r, r), c1: Math.min(excelAnchor.value.c, c),
     r2: Math.max(excelAnchor.value.r, r), c2: Math.max(excelAnchor.value.c, c),
   };
+  applySelectionHighlight();
+}
+
+/** 查询单元格（td 或 th），行 0 是 th */
+function queryCell(r: number, c: number) {
+  return document.querySelector(`td[data-row="${r}"][data-col="${c}"],th[data-row="${r}"][data-col="${c}"]`);
+}
+
+const SEL_CLASS = "xlsx-selected";
+
+/** 清除所有选区高亮 */
+function clearSelectionHighlight() {
+  document.querySelectorAll(`.${SEL_CLASS}`).forEach(el => el.classList.remove(SEL_CLASS));
+}
+
+/** 按 excelSelection 给单元格加高亮 */
+function applySelectionHighlight() {
+  const sel = excelSelection.value;
+  if (!sel) return;
+  // 先清除旧高亮再应用新的——选区通常不大，全量刷足够快
+  clearSelectionHighlight();
+  for (let r = sel.r1; r <= sel.r2; r++) {
+    for (let c = sel.c1; c <= sel.c2; c++) {
+      queryCell(r, c)?.classList.add(SEL_CLASS);
+    }
+  }
 }
 
 function onExcelMouseUp() {
@@ -428,15 +483,14 @@ function onExcelMouseUp() {
   for (let r = sel.r1; r <= Math.min(sel.r2, sel.r1 + 2); r++) {
     const rowCells: string[] = [];
     for (let c = sel.c1; c <= Math.min(sel.c2, sel.c1 + 2); c++) {
-      const td = document.querySelector(`td[data-row="${r}"][data-col="${c}"]`);
-      rowCells.push(td?.textContent?.trim() || "");
+      rowCells.push(queryCell(r, c)?.textContent?.trim() || "");
     }
     lines.push(`| ${rowCells.join(" | ")} |`);
   }
   const summary = `${xlsxActiveSheet.value}!${rangeStr}  ${lines.join("  ")}`;
   // 定位 tip 在选区附近
-  const rect = document.querySelector(`td[data-row="${sel.r1}"][data-col="${sel.c1}"]`)?.getBoundingClientRect();
-  if (rect) selTip.showTip(summary, rect);
+  const rect = queryCell(sel.r1, sel.c1)?.getBoundingClientRect();
+  if (rect) { selTip.showTip(summary, rect); skipNextClickOutside = true; }
 }
 
 /** 生成 Excel 选区 → sent to CC 的 markdown 表格消息 */
@@ -450,15 +504,15 @@ function sendExcelSelection() {
   for (let r = sel.r1; r <= sel.r2; r++) {
     const rowCells: string[] = [];
     for (let c = sel.c1; c <= sel.c2; c++) {
-      const td = document.querySelector(`td[data-row="${r}"][data-col="${c}"]`);
-      rowCells.push(td?.textContent?.trim() || "");
+      rowCells.push(queryCell(r, c)?.textContent?.trim() || "");
     }
     lines.push(`| ${rowCells.join(" | ")} |`);
   }
   const table = lines.join("\n");
   const msg = `在 \`${props.file.name}\` 的 ${xlsxActiveSheet.value}!${rangeStr} 区域，当前内容为：\n\n${table}\n\n请修改为...`;
-  emitChatCommand(`excel-selection:${msg}`);
+  emitChatCommand(`excel-selection:${props.file.name}|${msg}`);
   excelSelection.value = null;
+  clearSelectionHighlight();
   selTip.hideTip();
 }
 
@@ -472,6 +526,7 @@ function onTextSelectionMouseUp() {
   endRange.collapse(false);
   const rect = endRange.getClientRects()[0] || sel.getRangeAt(0).getBoundingClientRect();
   selTip.showTip(text, rect);
+  skipNextClickOutside = true;
 }
 
 function sendTextSelection() {
@@ -498,7 +553,7 @@ function sendTextSelection() {
   } else {
     msg = `在 \`${props.file.name}\` 中选中了以下内容：\n\n> ${text}`;
   }
-  emitChatCommand(`selection:${msg}`);
+  emitChatCommand(`selection:${props.file.name}|${msg}`);
   selTip.hideTip();
   window.getSelection()?.removeAllRanges();
 }
@@ -570,10 +625,17 @@ function createEditor(doc: string) {
           const startLine = update.state.doc.lineAt(sel.from).number;
           const endLine = update.state.doc.lineAt(sel.to).number;
           mdSelection.value = { text, from: sel.from, to: sel.to, startLine, endLine };
-          updateMdTipPos();
+          // 用 selTip 统一 tip 显示选区文本
+          const coords = editorView.value!.coordsAtPos(sel.to);
+          if (coords) {
+            const r = { left: coords.left, right: coords.right, top: coords.top, bottom: coords.bottom } as DOMRect;
+            selTip.showTip(text, r);
+            skipNextClickOutside = true;
+          }
         } else {
           mdSelection.value = null;
           mdSuggestion.value = "";
+          selTip.hideTip();
         }
       }
     }),
@@ -584,8 +646,17 @@ function createEditor(doc: string) {
     state: EditorState.create({ doc, extensions }),
     parent: editorContainer.value,
   });
-  // 编辑器滚动时更新 MD Tip 位置
-  editorView.value.scrollDOM.addEventListener("scroll", updateMdTipPos, { passive: true });
+  // 编辑器滚动时更新 tip 位置（设标志位防止 scrollbar 点击误关 tip）
+  editorView.value.scrollDOM.addEventListener("scroll", () => {
+    if (mdSelection.value && editorView.value) {
+      const coords = editorView.value.coordsAtPos(mdSelection.value.to);
+      if (coords) {
+        const r = { left: coords.left, right: coords.right, top: coords.top, bottom: coords.bottom } as DOMRect;
+        selTip.showTip(mdSelection.value.text, r);
+        skipNextClickOutside = true;
+      }
+    }
+  }, { passive: true });
 }
 
 function destroyEditor() {
@@ -620,6 +691,24 @@ onUnmounted(() => destroyEditor());
 watch(activeTab, (tab) => {
   if (tab === "edit") { maybeCreateEditor(); selectedDom.value = null; }
   else { destroyEditor(); }
+});
+
+// 切换 Sheet 时清理选区
+watch(xlsxActiveSheet, () => {
+  excelSelection.value = null;
+  excelAnchor.value = null;
+});
+
+// tip 关闭时清理 Excel 选区高亮 + MD 编辑器选区
+watch(() => selTip.tipVisible.value, (v) => {
+  if (!v) {
+    clearSelectionHighlight();
+    if (mdSelection.value) {
+      mdSelection.value = null;
+      mdSuggestion.value = "";
+      editorView.value?.dispatch({ selection: { anchor: 0, head: 0 } });
+    }
+  }
 });
 
 // ── 保存 ──
@@ -685,6 +774,10 @@ function handleClose() {
           :class="saving ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-80'"
           style="background: var(--accent); color: var(--bg-root)"
         >{{ saving ? '…' : $t('preview.save') }}</button>
+        <button v-if="fileKind === 'markdown'" @click="showMdOutline = !showMdOutline"
+          class="text-[10px] px-2 py-0.5 rounded font-medium transition-colors shrink-0 hover:opacity-80"
+          :style="{ background: showMdOutline ? 'var(--accent)' : 'transparent', color: showMdOutline ? 'var(--bg-root)' : 'var(--text-muted)', border: showMdOutline ? 'none' : '1px solid var(--border-dim)' }"
+        >☰</button>
         <button v-if="fileKind === 'markdown'" @click="sendConvertDocx" :disabled="converting"
           class="text-[10px] px-2 py-0.5 rounded font-medium transition-colors shrink-0"
           :class="converting ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-80'"
@@ -768,8 +861,27 @@ function handleClose() {
         <div v-else-if="fileKind === 'pptx'" class="flex-1 flex flex-col" style="min-height:0" @mouseup="onTextSelectionMouseUp">
           <PptxPreview :file="{ name: props.file!.name, path: props.file!.path }" />
         </div>
-        <div v-else-if="fileKind === 'markdown'" class="flex-1 overflow-auto p-5" @mouseup="onTextSelectionMouseUp">
-          <MarkdownRenderer :content="content" />
+        <div v-else-if="fileKind === 'markdown'" class="flex-1 flex" style="min-height:0">
+          <!-- 大纲侧边栏 -->
+          <div v-if="showMdOutline && mdHeadings.length > 0"
+            class="md-outline shrink-0 overflow-auto text-[11px]"
+            :style="{ width: '200px', background: 'var(--bg-surface)', borderRight: '1px solid var(--border-dim)' }"
+          >
+            <div class="px-3 py-2 font-medium" style="color: var(--text-secondary)">大纲</div>
+            <a
+              v-for="h in mdHeadings" :key="h.id"
+              @click="scrollToHeading(h.id)"
+              class="block px-3 py-1 cursor-pointer truncate transition-colors hover:bg-[var(--bg-hover)]"
+              :style="{
+                paddingLeft: `${8 + h.level * 12}px`,
+                color: h.level <= 2 ? 'var(--text-primary)' : 'var(--text-secondary)',
+              }"
+              :title="h.text"
+            >{{ h.text }}</a>
+          </div>
+          <div class="flex-1 overflow-auto p-5" @mouseup="onTextSelectionMouseUp">
+            <MarkdownRenderer :content="content" />
+          </div>
         </div>
         <div v-else-if="fileKind === 'docx'" class="flex-1 overflow-auto p-5 docx-preview" v-html="previewHtml" @mouseup="onTextSelectionMouseUp"></div>
         <div v-else-if="hasEdit" ref="editorContainer" class="flex-1 overflow-auto"></div>
@@ -781,6 +893,7 @@ function handleClose() {
       <!-- 统一选区浮动 Tip（MD 编辑 / Excel / 文本划选 共用） -->
       <Teleport to="body">
         <div
+          ref="selectionTipRef"
           v-if="selTip.tipVisible.value"
           class="selection-tip"
           :style="{
@@ -796,20 +909,40 @@ function handleClose() {
             <span class="truncate" style="color: var(--text-secondary)">"{{ selTip.tipSummary.value }}"</span>
             <button @click="selTip.hideTip()" class="shrink-0 w-5 h-5 flex items-center justify-center rounded hover:bg-[var(--bg-hover)] ml-auto" style="color: var(--text-muted)">×</button>
           </div>
-          <div class="flex gap-2">
-            <button
-              v-if="fileKind === 'xlsx'"
-              @click="sendExcelSelection"
-              class="flex-1 px-3 py-1 rounded text-[10px] font-medium transition-colors hover:opacity-80"
-              style="background: var(--accent); color: var(--bg-root)"
-            >⊞ {{ $t('preview.sendToChat') }}</button>
-            <button
-              v-else
-              @click="sendTextSelection"
-              class="flex-1 px-3 py-1 rounded text-[10px] font-medium transition-colors hover:opacity-80"
-              style="background: var(--accent); color: var(--bg-root)"
-            >[-] {{ $t('preview.sendToChat') }}</button>
-          </div>
+          <!-- MD 编辑器：建议输入框 + 发送 -->
+          <template v-if="fileKind === 'markdown' && activeTab === 'edit' && mdSelection">
+            <input
+              v-model="mdSuggestion"
+              class="w-full mt-1 px-2 py-1 rounded text-[11px] outline-none"
+              :style="{ background: 'var(--bg-root)', color: 'var(--text-primary)', border: '1px solid var(--border-dim)' }"
+              :placeholder="$t('preview.mdSuggestionPlaceholder')"
+              @keyup.enter="sendMdToChat"
+            />
+            <div class="flex gap-2 mt-1">
+              <button
+                @click="sendMdToChat"
+                class="flex-1 px-3 py-1 rounded text-[10px] font-medium transition-colors hover:opacity-80"
+                style="background: var(--accent); color: var(--bg-root)"
+              >[-] {{ $t('preview.sendToChat') }}</button>
+            </div>
+          </template>
+          <!-- Excel / 文本划选：无建议输入 -->
+          <template v-else>
+            <div class="flex gap-2">
+              <button
+                v-if="fileKind === 'xlsx'"
+                @click="sendExcelSelection"
+                class="flex-1 px-3 py-1 rounded text-[10px] font-medium transition-colors hover:opacity-80"
+                style="background: var(--accent); color: var(--bg-root)"
+              >⊞ {{ $t('preview.sendToChat') }}</button>
+              <button
+                v-else
+                @click="sendTextSelection"
+                class="flex-1 px-3 py-1 rounded text-[10px] font-medium transition-colors hover:opacity-80"
+                style="background: var(--accent); color: var(--bg-root)"
+              >[-] {{ $t('preview.sendToChat') }}</button>
+            </div>
+          </template>
         </div>
       </Teleport>
     </div>
@@ -959,5 +1092,10 @@ function handleClose() {
 }
 .xlsx-preview tr:nth-child(even) td { background: var(--bg-hover); }
 .xlsx-preview td:hover { background: var(--accent-glow); }
+.xlsx-preview td.xlsx-selected, .xlsx-preview th.xlsx-selected {
+  background: var(--accent-glow) !important;
+  outline: 1px solid var(--accent-dim);
+  outline-offset: -1px;
+}
 
 </style>

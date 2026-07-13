@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, watch, ref, nextTick, defineAsyncComponent } from "vue";
 import { useHighlight } from "@/composables/useHighlight";
+import { open } from "@tauri-apps/plugin-shell";
 
 const MermaidRenderer = defineAsyncComponent(() => import("./MermaidRenderer.vue"));
 
@@ -30,6 +31,11 @@ function parseBlocks(text: string): Block[] {
     blocks.push({ type: "markdown", content: text.slice(lastIdx) });
   }
   return blocks.length > 0 ? blocks : [{ type: "markdown", content: text }];
+}
+
+/** 标题文本 → URL 安全 id（中英文兼容） */
+function slug(text: string): string {
+  return text.toLowerCase().replace(/[^\w一-鿿]+/g, "-").replace(/^-|-$/g, "");
 }
 
 function renderMarkdown(text: string): string {
@@ -78,11 +84,27 @@ function renderMarkdown(text: string): string {
       if (tableHTML) { output.push(tableHTML); continue; }
     }
 
-    if (/^### (.+)$/.test(lines[i])) output.push(lines[i].replace(/^### (.+)$/, '<h3>$1</h3>'));
-    else if (/^## (.+)$/.test(lines[i])) output.push(lines[i].replace(/^## (.+)$/, '<h2>$1</h2>'));
-    else if (/^# (.+)$/.test(lines[i])) output.push(lines[i].replace(/^# (.+)$/, '<h1>$1</h1>'));
+    if (/^###### (.+)$/.test(lines[i])) output.push(lines[i].replace(/^###### (.+)$/, (_, t) => `<h6 id="${slug(t)}">${t}</h6>`));
+    else if (/^##### (.+)$/.test(lines[i])) output.push(lines[i].replace(/^##### (.+)$/, (_, t) => `<h5 id="${slug(t)}">${t}</h5>`));
+    else if (/^#### (.+)$/.test(lines[i])) output.push(lines[i].replace(/^#### (.+)$/, (_, t) => `<h4 id="${slug(t)}">${t}</h4>`));
+    else if (/^### (.+)$/.test(lines[i])) output.push(lines[i].replace(/^### (.+)$/, (_, t) => `<h3 id="${slug(t)}">${t}</h3>`));
+    else if (/^## (.+)$/.test(lines[i])) output.push(lines[i].replace(/^## (.+)$/, (_, t) => `<h2 id="${slug(t)}">${t}</h2>`));
+    else if (/^# (.+)$/.test(lines[i])) output.push(lines[i].replace(/^# (.+)$/, (_, t) => `<h1 id="${slug(t)}">${t}</h1>`));
     else if (/^---$/.test(lines[i])) output.push('<hr>');
-    else if (/^&gt; (.+)$/.test(lines[i])) output.push(lines[i].replace(/^&gt; (.+)$/, '<blockquote>$1</blockquote>'));
+    // 多行引用（连续 &gt; 行合并为一个 <blockquote>）
+    else if (/^&gt; (.+)$/.test(lines[i])) {
+      const items: string[] = [];
+      while (i < lines.length && /^&gt; (.+)$/.test(lines[i])) {
+        items.push(lines[i].replace(/^&gt; (.+)$/, '$1'));
+        i++;
+      }
+      output.push(`<blockquote>${items.join("<br>")}</blockquote>`);
+      continue;
+    }
+    else if (/^- \[([ x])\] (.+)$/.test(lines[i])) {
+      output.push(lines[i].replace(/^- \[([ x])\] (.+)$/, (_, checked, text) =>
+        `<div class="task-item"><input type="checkbox" ${checked === 'x' ? 'checked' : ''} disabled>${text}</div>`));
+    }
     else if (/^- (.+)$/.test(lines[i])) {
       const result = collectLines(i, (line) => { const m = line.match(/^- (.+)$/); return m ? `<li>${m[1]}</li>` : null; });
       output.push(`<ul>${result.html}</ul>`);
@@ -106,7 +128,9 @@ function renderMarkdown(text: string): string {
   html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
   html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
   html = html.replace(/\*(.+?)\*/g, "<em>$1</em>");
-  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+  html = html.replace(/~~(.+?)~~/g, "<del>$1</del>");
+  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1">');
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
 
   html = html.replace(/￿PRE(\d+)￿/g, (_, i) => preBlocks[Number(i)] || "");
 
@@ -115,7 +139,7 @@ function renderMarkdown(text: string): string {
   for (const part of parts) {
     const t = part.trim();
     if (t === "") wrapped.push('');
-    else if (/^<(h[1-6]|table|thead|tbody|tr|th|td|pre|ul|ol|blockquote|hr|li)/.test(t)) wrapped.push(t);
+    else if (/^<(h[1-6]|table|thead|tbody|tr|th|td|pre|ul|ol|blockquote|hr|li|div)/.test(t)) wrapped.push(t);
     else wrapped.push(`<p>${t}</p>`);
   }
   html = wrapped.join("\n");
@@ -151,6 +175,16 @@ const blocks = computed(() => parseBlocks(props.content));
 const markdownBlocks = computed(() => blocks.value.filter(b => b.type === "markdown").map(b => renderMarkdown(b.content)));
 const mermaidBlocks = computed(() => blocks.value.filter(b => b.type === "mermaid").map(b => b.content));
 
+/** 拦截链接点击，用默认浏览器打开 */
+async function onLinkClick(e: MouseEvent) {
+  const a = (e.target as HTMLElement).closest("a");
+  if (!a) return;
+  const href = a.getAttribute("href");
+  if (!href) return;
+  e.preventDefault();
+  try { await open(href); } catch { window.open(href, "_blank"); }
+}
+
 watch(() => props.content, async () => {
   await nextTick();
   highlight(container.value);
@@ -158,7 +192,7 @@ watch(() => props.content, async () => {
 </script>
 
 <template>
-  <div ref="container" class="markdown-body">
+  <div ref="container" class="markdown-body" @click="onLinkClick">
     <template v-for="(block, idx) in blocks" :key="idx">
       <div v-if="block.type === 'markdown'" v-html="markdownBlocks[markdownBlocks.findIndex((_, i) => i <= idx)] || renderMarkdown(block.content)"></div>
       <MermaidRenderer v-else :code="block.content" />
@@ -173,6 +207,9 @@ watch(() => props.content, async () => {
 .markdown-body :deep(h1) { font-size: 1.25em; font-weight: 700; margin: 0.75em 0 0.4em; color: var(--text-bright); }
 .markdown-body :deep(h2) { font-size: 1.1em; font-weight: 600; margin: 0.65em 0 0.3em; color: var(--text-bright); }
 .markdown-body :deep(h3) { font-size: 1em; font-weight: 600; margin: 0.5em 0 0.25em; color: var(--text-bright); }
+.markdown-body :deep(h4) { font-size: 0.95em; font-weight: 600; margin: 0.45em 0 0.2em; color: var(--text-primary); }
+.markdown-body :deep(h5) { font-size: 0.9em; font-weight: 500; margin: 0.4em 0 0.2em; color: var(--text-primary); }
+.markdown-body :deep(h6) { font-size: 0.85em; font-weight: 500; margin: 0.35em 0 0.15em; color: var(--text-secondary); }
 .markdown-body :deep(strong) { color: var(--text-bright); font-weight: 600; }
 .markdown-body :deep(em) { color: var(--text-secondary); }
 .markdown-body :deep(ul), .markdown-body :deep(ol) { margin: 0.35em 0; padding-left: 1.5em; }
@@ -189,4 +226,8 @@ watch(() => props.content, async () => {
 .markdown-body :deep(td) { padding: 0.3em 0.8em; border: 1px solid var(--border-dim); color: var(--text-primary); }
 .markdown-body :deep(a) { color: var(--accent); text-decoration: none; }
 .markdown-body :deep(a:hover) { text-decoration: underline; }
+.markdown-body :deep(del) { text-decoration: line-through; color: var(--text-muted); }
+.markdown-body :deep(img) { max-width: 100%; border-radius: 4px; }
+.markdown-body :deep(.task-item) { display: flex; align-items: flex-start; gap: 0.4em; margin: 0.15em 0; }
+.markdown-body :deep(.task-item input[type=checkbox]) { margin-top: 0.25em; accent-color: var(--accent); }
 </style>

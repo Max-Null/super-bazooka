@@ -100,10 +100,10 @@ function removeAttachedFile(index: number) {
   attachedFiles.value.splice(index, 1);
 }
 
-// ── DOM 选择器片段（来自文件预览）──
-interface DomSnippet { html: string; filePath: string; selector: string }
-const domSnippet = ref<DomSnippet | null>(null);
-function removeDomSnippet() { domSnippet.value = null; }
+// ── 选区片段卡片（DOM / Excel / 文本划选 / MD 选区 → 统一 chip）──
+interface TextSnippet { content: string; label: string }
+const textSnippet = ref<TextSnippet | null>(null);
+function removeTextSnippet() { textSnippet.value = null; }
 
 const openFileInPanel = inject<(f: { name: string; path: string }) => void>("openFileInPanel", () => {});
 
@@ -175,16 +175,28 @@ function showStatus(msg: string) {
 // Calibration: on mount, verify actual settings.json (catches external modifications)
 const autoModeActive = ref(settings.autoMode);
 
+// 右键菜单「添加到会话」→ CustomEvent
+function onAttachFiles(e: Event) {
+  const files = (e as CustomEvent).detail as { name: string; path: string }[];
+  for (const f of files) {
+    if (!attachedFiles.value.some(af => af.path === f.path)) {
+      attachedFiles.value.push(f);
+    }
+  }
+}
+
 onMounted(async () => {
   try { autoModeActive.value = await getAutoModeStatus(); }
   catch { autoModeActive.value = settings.autoMode; }
   window.addEventListener("session-switched", scrollToBottomInstant);
   window.addEventListener("keydown", onTestKey);
+  window.addEventListener("attach-files", onAttachFiles);
 });
 
 onUnmounted(() => {
   window.removeEventListener("session-switched", scrollToBottomInstant);
   window.removeEventListener("keydown", onTestKey);
+  window.removeEventListener("attach-files", onAttachFiles);
 });
 function onTestKey(e: KeyboardEvent) {
   if (e.ctrlKey && e.shiftKey && e.key === "T") { e.preventDefault(); showTestPanel.value = !showTestPanel.value; }
@@ -289,10 +301,9 @@ watch(() => chatCommand.value.ts, async (ts) => {
         const fileMatch = lines[0]?.match(/`([^`]+)`/);
         const fullPath = fileMatch?.[1] || "";
         const htmlLines = lines.slice(1).join("\n");
-        domSnippet.value = {
-          filePath: fullPath,
-          selector: htmlLines.match(/<(\w+)/)?.[1] || "element",
-          html: data,
+        textSnippet.value = {
+          content: data,
+          label: `[D] ${fullPath.split(/[\\/]/).pop() || fullPath} · <${htmlLines.match(/<(\w+)/)?.[1] || "element"}>`,
         };
       } else if (action.startsWith("switch-workspace:")) {
         const newPath = action.slice("switch-workspace:".length);
@@ -329,8 +340,15 @@ watch(() => chatCommand.value.ts, async (ts) => {
         }
       } else if (action.startsWith("show-status:")) {
         showStatus(action.slice("show-status:".length));
-      } else if (action.startsWith("md-selection:")) {
-        handleSend(action.slice("md-selection:".length));
+      } else if (action.startsWith("excel-selection:") || action.startsWith("selection:") || action.startsWith("md-selection:")) {
+        // 格式: prefix:文件名|内容
+        const colonIdx = action.indexOf(":");
+        const pipeIdx = action.indexOf("|");
+        const fileName = action.slice(colonIdx + 1, pipeIdx);
+        const content = action.slice(pipeIdx + 1);
+        const suffixes: Record<string, string> = { "excel-selection": "[E]", "selection": "[T]", "md-selection": "[M]" };
+        const prefix = action.slice(0, colonIdx);
+        textSnippet.value = { content, label: `${fileName} · ${suffixes[prefix] || ""}` };
       } else {
         // 通用文本 → 作为普通消息发送给 CC
         handleSend(action);
@@ -472,10 +490,10 @@ async function handleSend(text: string) {
   const filePaths = attachedFiles.value.map(f => f.path);
   attachedFiles.value = [];
 
-  // DOM 选择器片段：拼到消息文本前面（显示 + 发送都包含）
-  const domText = domSnippet.value ? `${domSnippet.value.html}\n\n` : "";
-  domSnippet.value = null;
-  const fullText = domText + text;
+  // 选区片段卡片：拼到消息文本前面（显示 + 发送都包含）
+  const snippetText = textSnippet.value ? `${textSnippet.value.content}\n\n` : "";
+  textSnippet.value = null;
+  const fullText = snippetText + text;
 
   const attachments = filePaths.length > 0 ? filePaths.map(p => ({ name: p.split(/[/\\]/).pop() || p, path: p })) : undefined;
   chat.addUserMessage(fullText, attachments);
@@ -584,10 +602,9 @@ function extractDomSnippet(content: string): string {
   const filePath = match[1];
   const html = match[2];
   const tagMatch = html.match(/<(\w+)/);
-  domSnippet.value = {
-    filePath,
-    selector: tagMatch?.[1] || "element",
-    html: match[0].slice(0, -2), // 去掉末尾 \n\n
+  textSnippet.value = {
+    content: match[0].slice(0, -2), // 去掉末尾 \n\n
+    label: `[D] ${filePath.split(/[\\/]/).pop() || filePath} · <${tagMatch?.[1] || "element"}>`,
   };
   return content.slice(match[0].length);
 }
@@ -1080,22 +1097,21 @@ watch(
     </div>
 
     <!-- 已保存计划的快捷入口 + 附件 chips — 无内容时不占高度 -->
-    <div v-if="(savedPlan.plan && !isPlanPending()) || attachedFiles.length > 0 || domSnippet" class="sb-attachment-bar">
+    <div v-if="(savedPlan.plan && !isPlanPending()) || attachedFiles.length > 0 || textSnippet" class="sb-attachment-bar">
       <button
         v-if="savedPlan.plan && !isPlanPending()"
         @click="showPlanModal = true"
         class="attach-chip chip--clickable"
         :style="{ color: 'var(--text-muted)', border: '1px dashed var(--border-dim)' }"
       >📋 {{ $t('chat.viewPlan') }}</button>
-      <!-- DOM 选择器片段卡片 -->
+      <!-- 统一选区卡片（DOM / Excel / 文本划选 / MD） -->
       <div
-        v-if="domSnippet"
+        v-if="textSnippet"
         class="attach-chip"
         :style="{ background: 'var(--accent-glow)', border: '1px solid var(--accent-dim)', color: 'var(--accent)' }"
       >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="shrink-0"><polyline points="6 9 12 15 18 9"/><line x1="4" y1="20" x2="20" y2="20"/></svg>
-        <span class="attach-chip-name" :title="domSnippet.filePath">{{ domSnippet.filePath.split(/[\\/]/).pop() }} · &lt;{{ domSnippet.selector }}&gt;</span>
-        <button @click="removeDomSnippet" class="icon-btn-sm shrink-0">×</button>
+        <span class="attach-chip-name">{{ textSnippet.label }}</span>
+        <button @click="removeTextSnippet" class="icon-btn-sm shrink-0">×</button>
       </div>
       <!-- Attached files chips -->
       <div
