@@ -195,6 +195,7 @@ flowchart TB
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| [0.10.0](docs/变更记录.md) | 2026-07-14 | Excel selection fix, unified tip, snippet cards merge, MD outline, link browser open |
 | [0.9.0](docs/变更记录.md) | 2026-07-12 | Unified dialog styling, PPTX text extraction, xlsx selection, Office preview, TodoPanel |
 | [0.8.0](docs/变更记录.md) | 2026-07-08 | 4-column layout refactor, HTML preview width presets, tool block summary, session cache fix |
 | [0.5.0](docs/变更记录.md) | 2026-07-04 | File panel context menu, tool result rendering, CodeMirror editor, changelog dialog, settings UI polish |

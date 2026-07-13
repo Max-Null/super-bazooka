@@ -31,6 +31,74 @@ export const APP_VERSION: string = appPackage.version;
 // 按版本降序排列（最新在第一个）
 export const changelog: ChangelogEntry[] = [
   {
+    version: "0.10.0",
+    date: "2026-07-14",
+    sections: [
+      {
+        titleZh: "Excel 选区修复与增强",
+        titleEn: "Excel Selection Fix & Enhancements",
+        itemsZh: [
+          "拖拽选区修复：表头行 <th> 选区 tip 不显示 → queryCell() 同时匹配 td 和 th",
+          "选区视觉高亮：拖拽时 .xlsx-selected class 实时标记选中单元格",
+          "tip 点击外部关闭：onClickOutside + skipNextClickOutside 标志位防误关",
+          "空白处点击自动清除选区并关闭 tip",
+        ],
+        itemsEn: [
+          "Drag-select fix: header row <th> tip now works via queryCell() matching both td and th",
+          "Visual highlight: .xlsx-selected class marks cells in real-time during drag",
+          "Click-outside-to-dismiss: onClickOutside + skipNextClickOutside flag prevents false close",
+          "Click blank area clears selection and closes tip",
+        ],
+      },
+      {
+        titleZh: "选区 tip 统一",
+        titleEn: "Unified Selection Tip",
+        itemsZh: [
+          "MD 编辑器选区接入统一 selTip（废弃未渲染的 mdTipPos）",
+          "MD 编辑器 tip 含修改建议输入框，回车发送",
+          "编辑器滚动时 tip 位置跟随更新",
+          "切换 Excel Sheet 时自动清除选区状态",
+        ],
+        itemsEn: [
+          "MD editor selection now uses unified selTip (removed unrendered mdTipPos)",
+          "MD editor tip includes suggestion input, Enter to send",
+          "Tip position updates on editor scroll",
+          "Auto-clear selection on Excel sheet switch",
+        ],
+      },
+      {
+        titleZh: "选区卡片合并",
+        titleEn: "Selection Card Merge",
+        itemsZh: [
+          "DomSnippet + TextSnippet → 统一 { content, label } 数据结构",
+          "统一 chip 样式，标签格式 [E][T][M][D] + 文件名",
+          "右键菜单「添加到会话」修复：监听 attach-files CustomEvent",
+        ],
+        itemsEn: [
+          "DomSnippet + TextSnippet → unified { content, label } data structure",
+          "Unified chip style with [E][T][M][D] tags + filename",
+          "Right-click 'Add to Chat' fix: listen for attach-files CustomEvent",
+        ],
+      },
+      {
+        titleZh: "MD 预览增强",
+        titleEn: "MD Preview Enhancements",
+        itemsZh: [
+          "大纲面板：☰ 切换，左侧 200px 标题导航，点击平滑滚动",
+          "h4/h5/h6 解析 + CSS 递减字号，标题自动生成 id",
+          "多行引用、任务列表、删除线、图片样式补全",
+          "链接 target=_blank + shell.open 在默认浏览器打开",
+        ],
+        itemsEn: [
+          "Outline panel: ☰ toggle, 200px sidebar with heading nav, smooth scroll",
+          "h4/h5/h6 parsing + CSS descending sizes, auto heading id generation",
+          "Multi-line blockquote, task list, strikethrough, image support",
+          "Links open in default browser via target=_blank + shell.open",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.9.0",
     date: "2026-07-12",
     sections: [
