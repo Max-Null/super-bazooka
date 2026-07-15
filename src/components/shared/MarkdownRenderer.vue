@@ -2,7 +2,7 @@
 import { computed, watch, ref, nextTick, defineAsyncComponent } from "vue";
 import { useHighlight } from "@/composables/useHighlight";
 import { open } from "@tauri-apps/plugin-shell";
-import { marked } from "marked";
+import { marked, type Token } from "marked";
 
 const MermaidRenderer = defineAsyncComponent(() => import("./MermaidRenderer.vue"));
 
@@ -14,8 +14,9 @@ function slug(text: string): string {
 marked.use({
   renderer: {
     // 标题添加 id 锚点，保留内联格式（bold/code 等）
-    heading(token: { depth: number; text: string; tokens: unknown[] }) {
-      const rendered = this.parser.parseInline(token.tokens);
+    heading(token: { depth: number; text: string; tokens: Token[] }) {
+      // ponytail: marked re-exports Token but vue-tsc doesn't resolve it; cast at call site
+      const rendered = this.parser.parseInline(token.tokens as Parameters<typeof this.parser.parseInline>[0]);
       return `<h${token.depth} id="${slug(token.text)}">${rendered}</h${token.depth}>`;
     },
     // 转义原始 HTML 防 XSS（不影响 marked 自身生成的标签）
