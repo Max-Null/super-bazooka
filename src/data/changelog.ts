@@ -31,6 +31,76 @@ export const APP_VERSION: string = appPackage.version;
 // 按版本降序排列（最新在第一个）
 export const changelog: ChangelogEntry[] = [
   {
+    version: "0.11.0",
+    date: "2026-07-16",
+    sections: [
+      {
+        titleZh: "Markdown 渲染引擎替换",
+        titleEn: "Markdown Rendering Engine Replacement",
+        itemsZh: [
+          "将手写正则 Markdown 解析器替换为 marked 库，实现 GFM 规范完整支持",
+          "修复嵌套列表、转义字符、表格单元格内格式等手写解析器的边界情况",
+          "新增 heading 锚点 id 生成 + 原始 HTML 转义防 XSS",
+          "任务列表 CSS 适配 marked 输出结构（li input[type=checkbox]）",
+          "净减约 120 行手写代码",
+        ],
+        itemsEn: [
+          "Replaced hand-rolled regex markdown parser with marked library for full GFM spec compliance",
+          "Fixed edge cases in nested lists, escaped chars, table cell formatting",
+          "Added heading anchor id generation + raw HTML escaping for XSS prevention",
+          "Updated task list CSS for marked output structure (li input[type=checkbox])",
+          "Net reduction of ~120 lines of manual code",
+        ],
+      },
+      {
+        titleZh: "消息时间线分页压缩",
+        titleEn: "Message Timeline Pagination Compression",
+        itemsZh: [
+          "ChatTimelineNav 新增分页压缩：活跃点前后各保留 2 个 + 首尾常驻",
+          "消息 > 7 条时自动压缩，超出部分显示省略号并可点击跳转中间位置",
+          "按住 Alt 展开全部圆点，hover 查看消息摘要，松开恢复压缩",
+          "窗口失焦自动复位展开状态",
+          "新增 16 个单元测试覆盖交互场景",
+        ],
+        itemsEn: [
+          "ChatTimelineNav: pagination compression — 2 dots around active + first/last permanent",
+          "Auto-compress when > 7 messages, ellipsis clickable to jump to midpoint",
+          "Hold Alt to expand all dots with hover tooltips, release to restore",
+          "Window blur auto-resets expanded state",
+          "16 new unit tests for interaction scenarios",
+        ],
+      },
+      {
+        titleZh: "ContentBlock 时间线合并修复",
+        titleEn: "ContentBlock Timeline Merge Fix",
+        itemsZh: [
+          "修复 buildContentBlocks 中 text/thinking 块被 tool_use 隔开时错误合并的 bug",
+          "新增 hasIntervening 检查：跨块类型的新文本视为独立步骤，不合并",
+          "buildContentBlocks 提取为模块级导出函数，新增 14 个专项测试",
+        ],
+        itemsEn: [
+          "Fixed bug where text/thinking blocks separated by tool_use were incorrectly merged",
+          "Added hasIntervening check: new text across block types treated as independent step",
+          "buildContentBlocks extracted as module-level export, 14 new targeted tests",
+        ],
+      },
+      {
+        titleZh: "测试与文档",
+        titleEn: "Tests & Documentation",
+        itemsZh: [
+          "新增 30 个测试（ChatTimelineNav 16 + buildContentBlocks 14），全量 277 通过",
+          "新增消息时间线分页压缩设计文档",
+          "新增消息气泡时间线设计文档",
+        ],
+        itemsEn: [
+          "30 new tests (ChatTimelineNav 16 + buildContentBlocks 14), 277 total passing",
+          "New design doc: message timeline pagination compression",
+          "New design doc: message bubble timeline design",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.10.0",
     date: "2026-07-14",
     sections: [
