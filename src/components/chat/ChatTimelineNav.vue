@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from "vue";
+import { useI18n } from "vue-i18n";
 import type { Message } from "@/stores/chat";
+
+const { t } = useI18n();
 
 const props = defineProps<{
   messages: Message[];
@@ -21,7 +24,6 @@ function updateActive() {
   if (!c) { activeIndex.value = -1; return; }
   const userEls = c.querySelectorAll<HTMLElement>('[data-role="user"]');
   if (userEls.length === 0) { activeIndex.value = -1; return; }
-  // 最后一个顶部已滚出视口的用户消息（即当前可见的第一条或刚滚过的）
   let best = 0;
   userEls.forEach((el, i) => {
     if (el.offsetTop <= c.scrollTop + 80) best = i;
@@ -49,6 +51,73 @@ onUnmounted(() => {
   if (timer) clearTimeout(timer);
 });
 
+// ── 展开/压缩状态 ──
+const showAll = ref(false);
+
+function onKeyDown(e: KeyboardEvent) {
+  if (e.key === "Alt" && !e.repeat) showAll.value = true;
+}
+function onKeyUp(e: KeyboardEvent) {
+  if (e.key === "Alt") showAll.value = false;
+}
+// 切窗/失焦时重置，防止 showAll 卡在 true
+function onBlur() { showAll.value = false; }
+onMounted(() => {
+  window.addEventListener("keydown", onKeyDown);
+  window.addEventListener("keyup", onKeyUp);
+  window.addEventListener("blur", onBlur);
+});
+onUnmounted(() => {
+  window.removeEventListener("keydown", onKeyDown);
+  window.removeEventListener("keyup", onKeyUp);
+  window.removeEventListener("blur", onBlur);
+});
+
+// ── 压缩逻辑 ──
+const WINDOW = 2; // 活跃点前后保留数
+
+interface DotItem { type: "dot"; index: number }
+interface EllipsisItem { type: "ellipsis"; label: string; jumpTo: number }
+type TimelineItem = DotItem | EllipsisItem;
+
+const timelineItems = computed<TimelineItem[]>(() => {
+  const total = userMessages.value.length;
+  if (total === 0) return [];
+
+  const active = activeIndex.value < 0
+    ? Math.max(0, total - 1)
+    : Math.min(total - 1, Math.max(0, activeIndex.value));
+
+  // 展开模式或消息少时，全部显示
+  if (showAll.value || total <= WINDOW * 2 + 3) {
+    return userMessages.value.map((_, i) => ({ type: "dot" as const, index: i }));
+  }
+
+  const items: TimelineItem[] = [];
+  const rangeStart = Math.max(1, active - WINDOW);
+  const rangeEnd = Math.min(total - 2, active + WINDOW);
+
+  items.push({ type: "dot", index: 0 });
+
+  if (rangeStart > 1) {
+    items.push({ type: "ellipsis", label: t("chat.timelineEllipsis", { n: rangeStart - 1 }), jumpTo: Math.floor(rangeStart / 2) });
+  }
+
+  for (let i = rangeStart; i <= rangeEnd; i++) {
+    items.push({ type: "dot", index: i });
+  }
+
+  if (rangeEnd < total - 2) {
+    items.push({ type: "ellipsis", label: t("chat.timelineEllipsis", { n: total - 2 - rangeEnd }), jumpTo: Math.floor((rangeEnd + total) / 2) });
+  }
+
+  if (total > 1) {
+    items.push({ type: "dot", index: total - 1 });
+  }
+
+  return items;
+});
+
 const hoveredIndex = ref(-1);
 
 function onClick(index: number) {
@@ -57,22 +126,31 @@ function onClick(index: number) {
 </script>
 
 <template>
-  <div v-if="userMessages.length > 0" class="chat-timeline-nav">
-    <div
-      v-for="(msg, i) in userMessages"
-      :key="i"
-      class="chat-timeline-dot"
-      :class="{ 'chat-timeline-dot--active': activeIndex === i }"
-      @mouseenter="hoveredIndex = i"
-      @mouseleave="hoveredIndex = -1"
-      @click="onClick(i)"
-    >
-      <Transition name="tooltip-fade">
-        <div v-if="hoveredIndex === i" class="chat-timeline-tooltip">
-          {{ msg.content?.slice(0, 80) || "" }}
-        </div>
-      </Transition>
-    </div>
+  <div v-if="userMessages.length > 0" class="chat-timeline-nav" :class="{ 'chat-timeline-nav--expanded': showAll }">
+    <template v-for="item in timelineItems" :key="item.type === 'dot' ? item.index : 'e-'+item.jumpTo">
+      <!-- 消息点 -->
+      <div
+        v-if="item.type === 'dot'"
+        class="chat-timeline-dot"
+        :class="{ 'chat-timeline-dot--active': activeIndex === item.index }"
+        @mouseenter="hoveredIndex = item.index"
+        @mouseleave="hoveredIndex = -1"
+        @click="onClick(item.index)"
+      >
+        <Transition name="tooltip-fade">
+          <div v-if="hoveredIndex === item.index" class="chat-timeline-tooltip">
+            {{ userMessages[item.index].content?.slice(0, 80) || "" }}
+          </div>
+        </Transition>
+      </div>
+      <!-- 省略号 -->
+      <div
+        v-else
+        class="chat-timeline-ellipsis"
+        :title="item.label + '（' + t('chat.timelineExpandHint') + '）'"
+        @click="onClick(item.jumpTo)"
+      >…</div>
+    </template>
   </div>
 </template>
 
@@ -90,6 +168,10 @@ function onClick(index: number) {
   justify-content: center;
   gap: 8px;
   pointer-events: none;
+}
+.chat-timeline-nav--expanded {
+  /* 展开时加微弱背景提示 */
+  background: linear-gradient(to left, var(--bg-hover), transparent);
 }
 
 .chat-timeline-dot {
@@ -111,6 +193,27 @@ function onClick(index: number) {
   background: var(--accent);
   scale: 1.4;
   box-shadow: 0 0 6px var(--accent);
+}
+
+.chat-timeline-ellipsis {
+  width: 8px;
+  height: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--text-muted);
+  cursor: pointer;
+  pointer-events: auto;
+  flex-shrink: 0;
+  transition: color 150ms, scale 150ms;
+  /* 补偿字体基线偏移，让 … 视觉居中 */
+  margin-top: -1px;
+}
+.chat-timeline-ellipsis:hover {
+  color: var(--accent);
+  scale: 1.3;
 }
 
 .chat-timeline-tooltip {

@@ -27,10 +27,12 @@ describe("MarkdownRenderer", () => {
       expectAllWords("### Sub", ["Sub"]);
     });
 
-    it("generates correct HTML tags", () => {
-      expect(rendered("# H").html()).toContain("<h1>H</h1>");
-      expect(rendered("## H").html()).toContain("<h2>H</h2>");
-      expect(rendered("### H").html()).toContain("<h3>H</h3>");
+    it("generates correct HTML tags with id anchors", () => {
+      const h1 = rendered("# H").html();
+      expect(h1).toContain("<h1");
+      expect(h1).toContain('id="h"');
+      expect(rendered("## H").html()).toContain("<h2");
+      expect(rendered("### H").html()).toContain("<h3");
     });
 
     it("preserves inline formatting inside headers", () => {
@@ -93,7 +95,6 @@ describe("MarkdownRenderer", () => {
       const pre = rendered("```\n$x = $2\n`backtick`\n```").find("pre");
       expect(pre.text()).toContain("$2");
       expect(pre.text()).toContain("`backtick`");
-      expect(pre.html()).not.toContain("<code>"); // should not double-wrap
     });
 
     it("preserves **bold** markers (not converted)", () => {
@@ -237,9 +238,9 @@ describe("MarkdownRenderer", () => {
 
     it("handles alignment columns", () => {
       const html = rendered("| L | C | R |\n|:--|:-:|--:|\n| a | b | c |").html();
-      expect(html).toContain('text-align:left');
-      expect(html).toContain('text-align:center');
-      expect(html).toContain('text-align:right');
+      expect(html).toContain('align="left"');
+      expect(html).toContain('align="center"');
+      expect(html).toContain('align="right"');
     });
 
     it("table with inline formatting in cells", () => {

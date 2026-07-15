@@ -37,6 +37,100 @@ interface SessionCreatedPayload {
   mcpServers?: string[];
 }
 
+/** 归一化 tool_result.content 的三种形态 → 纯文本 */
+export function extractToolResultContent(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .filter((b): b is { type: string; text: string } => b?.type === "text" && typeof b.text === "string")
+      .map(b => b.text)
+      .join("");
+  }
+  return "";
+}
+
+/**
+ * 将 CC content_blocks 原始数据合并为有序 ContentBlock 数组。
+ *
+ * CC 2.1+ 协议：assistant 事件的 message.content[] 始终是该时刻的完整状态，
+ * 与后端（Anthropic/DeepSeek/OpenRouter）无关。stream_event delta 先到，
+ * 完整 assistant 后到，后者携带全量 content_blocks。
+ *
+ * - existing 为空：全量事件 → 从 raw 全新构建
+ * - existing 非空：增量事件 → 合并到已有数组末尾
+ *
+ * 合并策略：
+ * - text/thinking：跨 block 类型的新文本视为独立步骤，不合并
+ * - tool_use：按 ID 去重
+ * - tool_result：按 toolUseId 去重
+ */
+export function buildContentBlocks(
+  raw: StreamEvent["content_blocks"],
+  existing?: ContentBlock[],
+): ContentBlock[] {
+  if (!raw?.length) return existing || [];
+  const result: ContentBlock[] = existing ? [...existing] : [];
+  for (const block of raw) {
+    if (block.type === "text" || block.type === "thinking") {
+      const txt: string = (block as any).text || (block as any).thinking || "";
+      // 回查同类型上一个块
+      let sameTypeLast: ContentBlock | undefined;
+      let sameTypeIdx = -1;
+      for (let j = result.length - 1; j >= 0; j--) {
+        if (result[j].type === block.type) {
+          sameTypeLast = result[j];
+          sameTypeIdx = j;
+          break;
+        }
+      }
+      if (sameTypeLast) {
+        const old = sameTypeLast.content || "";
+        // CC 全量事件：新内容以旧内容开头 → 直接替换（累积更新）
+        if (txt.startsWith(old)) {
+          sameTypeLast.content = txt;
+        } else {
+          // 否则检查同类型旧块后面是否有其它类型隔断
+          const hasIntervening = result.slice(sameTypeIdx + 1).some(b => b.type !== block.type);
+          if (hasIntervening) {
+            result.push({ type: block.type as "text" | "thinking", content: txt });
+          } else {
+            // 无隔断 → DeepSeek 增量追加
+            sameTypeLast.content = old + txt;
+          }
+        }
+      } else {
+        result.push({ type: block.type as "text" | "thinking", content: txt });
+      }
+    } else if (block.type === "tool_use") {
+      const tuId = (block as any).id || "";
+      // 去重：同 ID tool_use 已存在则跳过
+      if (tuId && result.some(b => b.type === "tool_use" && b.toolUse?.id === tuId)) continue;
+      result.push({
+        type: "tool_use",
+        toolUse: {
+          id: tuId,
+          name: (block as any).name || "",
+          input: (block as any).input || {},
+        },
+      });
+    } else if (block.type === "tool_result") {
+      // tool_result 也可能出现在 assistant 事件的 content_blocks 中（较少见）
+      const trId = (block as any).tool_use_id || "";
+      // 去重：同 ID 已存在则跳过
+      if (trId && result.some(b => b.type === "tool_result" && b.toolResult?.toolUseId === trId)) continue;
+      result.push({
+        type: "tool_result",
+        toolResult: {
+          toolUseId: trId,
+          content: extractToolResultContent((block as any).content),
+          isError: (block as any).is_error,
+        },
+      });
+    }
+  }
+  return result;
+}
+
 export function useStreamProcessor() {
   const chat = useChatStore();
   const session = useSessionStore();
@@ -87,90 +181,6 @@ export function useStreamProcessor() {
         if (match.isError !== undefined) block.toolUse.isError = match.isError;
       }
     }
-  }
-
-  /**
-   * 将 CC content_blocks 原始数据合并为有序 ContentBlock 数组。
-   *
-   * CC 2.1+ 协议：assistant 事件的 message.content[] 始终是该时刻的完整状态，
-   * 与后端（Anthropic/DeepSeek/OpenRouter）无关。stream_event delta 先到，
-   * 完整 assistant 后到，后者携带全量 content_blocks。
-   *
-   * - existing 为空：Anthropic 全量事件 → 从 raw 全新构建
-   * - existing 非空：DeepSeek 增量事件 → 合并到已有数组末尾
-   *
-   * 合并策略：同类型块若新内容以旧内容开头（全量更新），替换旧内容；
-   * 否则追加新内容。tool_use 按 ID 去重。
-   */
-  function buildContentBlocks(
-    raw: StreamEvent["content_blocks"],
-    existing?: ContentBlock[],
-  ): ContentBlock[] {
-    if (!raw?.length) return existing || [];
-    const result: ContentBlock[] = existing ? [...existing] : [];
-    for (const block of raw) {
-      if (block.type === "text" || block.type === "thinking") {
-        const txt: string = (block as any).text || (block as any).thinking || "";
-        // 跨 tool_use 回查同类型上一个块——CC 完整事件中 thinking/text 被 tool_use
-        // 隔开时，新 thinking 是旧内容的累积扩展，需找到对应的旧块做 startsWith 去重。
-        let sameTypeLast: ContentBlock | undefined;
-        for (let j = result.length - 1; j >= 0; j--) {
-          if (result[j].type === block.type) {
-            sameTypeLast = result[j];
-            break;
-          }
-        }
-        if (sameTypeLast) {
-          const old = sameTypeLast.content || "";
-          if (txt.startsWith(old)) {
-            sameTypeLast.content = txt;
-          } else {
-            // 不相关的新内容 → 追加（DeepSeek 增量事件）
-            sameTypeLast.content = old + txt;
-          }
-        } else {
-          result.push({ type: block.type as "text" | "thinking", content: txt });
-        }
-      } else if (block.type === "tool_use") {
-        const tuId = (block as any).id || "";
-        // 去重：同 ID tool_use 已存在则跳过
-        if (tuId && result.some(b => b.type === "tool_use" && b.toolUse?.id === tuId)) continue;
-        result.push({
-          type: "tool_use",
-          toolUse: {
-            id: tuId,
-            name: (block as any).name || "",
-            input: (block as any).input || {},
-          },
-        });
-      } else if (block.type === "tool_result") {
-        // tool_result 也可能出现在 assistant 事件的 content_blocks 中（较少见）
-        const trId = (block as any).tool_use_id || "";
-        // 去重：同 ID 已存在则跳过
-        if (trId && result.some(b => b.type === "tool_result" && b.toolResult?.toolUseId === trId)) continue;
-        result.push({
-          type: "tool_result",
-          toolResult: {
-            toolUseId: trId,
-            content: extractToolResultContent((block as any).content),
-            isError: (block as any).is_error,
-          },
-        });
-      }
-    }
-    return result;
-  }
-
-  /** 归一化 tool_result.content 的三种形态 → 纯文本（辅助 buildContentBlocks 使用） */
-  function extractToolResultContent(content: unknown): string {
-    if (typeof content === "string") return content;
-    if (Array.isArray(content)) {
-      return content
-        .filter((b): b is { type: string; text: string } => b?.type === "text" && typeof b.text === "string")
-        .map(b => b.text)
-        .join("");
-    }
-    return "";
   }
 
   async function startListening() {

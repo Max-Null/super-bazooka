@@ -2,8 +2,29 @@
 import { computed, watch, ref, nextTick, defineAsyncComponent } from "vue";
 import { useHighlight } from "@/composables/useHighlight";
 import { open } from "@tauri-apps/plugin-shell";
+import { marked } from "marked";
 
 const MermaidRenderer = defineAsyncComponent(() => import("./MermaidRenderer.vue"));
+
+/** 标题文本 → URL 安全 id（中英文兼容） */
+function slug(text: string): string {
+  return text.toLowerCase().replace(/[^\w一-鿿]+/g, "-").replace(/^-|-$/g, "");
+}
+
+marked.use({
+  renderer: {
+    // 标题添加 id 锚点，保留内联格式（bold/code 等）
+    heading(token: { depth: number; text: string; tokens: unknown[] }) {
+      const rendered = this.parser.parseInline(token.tokens);
+      return `<h${token.depth} id="${slug(token.text)}">${rendered}</h${token.depth}>`;
+    },
+    // 转义原始 HTML 防 XSS（不影响 marked 自身生成的标签）
+    html(token: { text?: string; raw?: string }) {
+      const t = token.text || token.raw || "";
+      return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    },
+  },
+});
 
 const props = defineProps<{ content: string }>();
 const { highlight } = useHighlight();
@@ -33,147 +54,12 @@ function parseBlocks(text: string): Block[] {
   return blocks.length > 0 ? blocks : [{ type: "markdown", content: text }];
 }
 
-/** 标题文本 → URL 安全 id（中英文兼容） */
-function slug(text: string): string {
-  return text.toLowerCase().replace(/[^\w一-鿿]+/g, "-").replace(/^-|-$/g, "");
-}
-
+/** GFM 规范 Markdown → HTML */
 function renderMarkdown(text: string): string {
-  let html = text
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-  const lines = html.split("\n");
-  const output: string[] = [];
-  let i = 0;
-
-  function collectLines(start: number, pred: (line: string) => string | null): { html: string; end: number } {
-    const items: string[] = [];
-    let j = start;
-    while (j < lines.length) {
-      // 跳过空行：避免列表项间的空行导致 collectLines 提前终止，
-      // 把连续的 "1.\n\n2.\n\n3." 拆成三个独立的 <ol>（编号全部从 1 开始）
-      if (lines[j].trim() === "") { j++; continue; }
-      const result = pred(lines[j]);
-      if (result === null) break;
-      items.push(result);
-      j++;
-    }
-    return { html: items.join("\n"), end: j };
-  }
-
-  while (i < lines.length) {
-    if (/^ {0,3}```/.test(lines[i])) {
-      const lang = lines[i].slice(3).trim();
-      const codeLines: string[] = [];
-      i++;
-      while (i < lines.length && !/^ {0,3}```/.test(lines[i])) {
-        codeLines.push(lines[i]);
-        i++;
-      }
-      output.push(`<pre><code class="language-${lang || 'plaintext'}">${codeLines.join("\n")}</code></pre>`);
-      i++;
-      continue;
-    }
-
-    if (lines[i].includes("|") && i + 1 < lines.length &&
-        /^\|?[\s:-]+\|[\s|:-]+\|?$/.test(lines[i + 1])) {
-      const tableLines: string[] = [lines[i], lines[i + 1]];
-      i += 2;
-      while (i < lines.length && lines[i].includes("|")) { tableLines.push(lines[i]); i++; }
-      const tableHTML = parseTable(tableLines);
-      if (tableHTML) { output.push(tableHTML); continue; }
-    }
-
-    if (/^###### (.+)$/.test(lines[i])) output.push(lines[i].replace(/^###### (.+)$/, (_, t) => `<h6 id="${slug(t)}">${t}</h6>`));
-    else if (/^##### (.+)$/.test(lines[i])) output.push(lines[i].replace(/^##### (.+)$/, (_, t) => `<h5 id="${slug(t)}">${t}</h5>`));
-    else if (/^#### (.+)$/.test(lines[i])) output.push(lines[i].replace(/^#### (.+)$/, (_, t) => `<h4 id="${slug(t)}">${t}</h4>`));
-    else if (/^### (.+)$/.test(lines[i])) output.push(lines[i].replace(/^### (.+)$/, (_, t) => `<h3 id="${slug(t)}">${t}</h3>`));
-    else if (/^## (.+)$/.test(lines[i])) output.push(lines[i].replace(/^## (.+)$/, (_, t) => `<h2 id="${slug(t)}">${t}</h2>`));
-    else if (/^# (.+)$/.test(lines[i])) output.push(lines[i].replace(/^# (.+)$/, (_, t) => `<h1 id="${slug(t)}">${t}</h1>`));
-    else if (/^---$/.test(lines[i])) output.push('<hr>');
-    // 多行引用（连续 &gt; 行合并为一个 <blockquote>）
-    else if (/^&gt; (.+)$/.test(lines[i])) {
-      const items: string[] = [];
-      while (i < lines.length && /^&gt; (.+)$/.test(lines[i])) {
-        items.push(lines[i].replace(/^&gt; (.+)$/, '$1'));
-        i++;
-      }
-      output.push(`<blockquote>${items.join("<br>")}</blockquote>`);
-      continue;
-    }
-    else if (/^- \[([ x])\] (.+)$/.test(lines[i])) {
-      output.push(lines[i].replace(/^- \[([ x])\] (.+)$/, (_, checked, text) =>
-        `<div class="task-item"><input type="checkbox" ${checked === 'x' ? 'checked' : ''} disabled>${text}</div>`));
-    }
-    else if (/^- (.+)$/.test(lines[i])) {
-      const result = collectLines(i, (line) => { const m = line.match(/^- (.+)$/); return m ? `<li>${m[1]}</li>` : null; });
-      output.push(`<ul>${result.html}</ul>`);
-      i = result.end; continue;
-    }
-    else if (/^\d+\.(?!\d)\s?(.+)$/.test(lines[i])) {
-      const result = collectLines(i, (line) => { const m = line.match(/^\d+\.(?!\d)\s?(.+)$/); return m ? `<li>${m[1]}</li>` : null; });
-      output.push(`<ol>${result.html}</ol>`);
-      i = result.end; continue;
-    }
-    else if (lines[i].trim() === "") output.push('');
-    else output.push(lines[i]);
-    i++;
-  }
-
-  html = output.join("\n");
-
-  const preBlocks: string[] = [];
-  html = html.replace(/<pre[\s\S]*?<\/pre>/g, (m) => { preBlocks.push(m); return `￿PRE${preBlocks.length - 1}￿`; });
-
-  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-  html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-  html = html.replace(/\*(.+?)\*/g, "<em>$1</em>");
-  html = html.replace(/~~(.+?)~~/g, "<del>$1</del>");
-  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1">');
-  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
-
-  html = html.replace(/￿PRE(\d+)￿/g, (_, i) => preBlocks[Number(i)] || "");
-
-  const parts = html.split("\n");
-  const wrapped: string[] = [];
-  for (const part of parts) {
-    const t = part.trim();
-    if (t === "") wrapped.push('');
-    else if (/^<(h[1-6]|table|thead|tbody|tr|th|td|pre|ul|ol|blockquote|hr|li|div)/.test(t)) wrapped.push(t);
-    else wrapped.push(`<p>${t}</p>`);
-  }
-  html = wrapped.join("\n");
-  html = html.replace(/<p><\/p>/g, "");
-  // 合并直接相邻的同类列表（被空行分开但无其他内容的，避免编号重置）
-  html = html.replace(/<\/ol>\s*\n\s*<ol>/g, '');
-  html = html.replace(/<\/ul>\s*\n\s*<ul>/g, '');
-
-  return html;
-}
-
-function parseTable(lines: string[]): string | null {
-  if (lines.length < 2 || !lines[0].includes("|")) return null;
-  const sep = lines[1];
-  if (!/^\|?[\s:-]+\|[\s|:-]+\|?$/.test(sep)) return null;
-  const alignments: string[] = [];
-  for (const cell of sep.split("|").filter(c => c.trim())) {
-    const t = cell.trim();
-    if (t.startsWith(":") && t.endsWith(":")) alignments.push("center");
-    else if (t.endsWith(":")) alignments.push("right");
-    else alignments.push("left");
-  }
-  function rowToHTML(row: string, tag: "th" | "td"): string {
-    const cells = row.split("|").filter((_, i, a) => i > 0 || a[0].trim() !== "").filter((_, i, a) => i < a.length - 1 || _.trim() !== "");
-    return "<tr>" + cells.map((c, i) => `<${tag} style="text-align:${alignments[i] || "left"}">${c.trim()}</${tag}>`).join("") + "</tr>";
-  }
-  const header = rowToHTML(lines[0], "th");
-  const body = lines.slice(2).map(r => rowToHTML(r, "td")).join("");
-  return `<table><thead>${header}</thead><tbody>${body}</tbody></table>`;
+  return marked.parse(text, { async: false }) as string;
 }
 
 const blocks = computed(() => parseBlocks(props.content));
-const markdownBlocks = computed(() => blocks.value.filter(b => b.type === "markdown").map(b => renderMarkdown(b.content)));
-const mermaidBlocks = computed(() => blocks.value.filter(b => b.type === "mermaid").map(b => b.content));
 
 /** 拦截链接点击，用默认浏览器打开 */
 async function onLinkClick(e: MouseEvent) {
@@ -194,7 +80,7 @@ watch(() => props.content, async () => {
 <template>
   <div ref="container" class="markdown-body" @click="onLinkClick">
     <template v-for="(block, idx) in blocks" :key="idx">
-      <div v-if="block.type === 'markdown'" v-html="markdownBlocks[markdownBlocks.findIndex((_, i) => i <= idx)] || renderMarkdown(block.content)"></div>
+      <div v-if="block.type === 'markdown'" v-html="renderMarkdown(block.content)"></div>
       <MermaidRenderer v-else :code="block.content" />
     </template>
   </div>
@@ -228,6 +114,5 @@ watch(() => props.content, async () => {
 .markdown-body :deep(a:hover) { text-decoration: underline; }
 .markdown-body :deep(del) { text-decoration: line-through; color: var(--text-muted); }
 .markdown-body :deep(img) { max-width: 100%; border-radius: 4px; }
-.markdown-body :deep(.task-item) { display: flex; align-items: flex-start; gap: 0.4em; margin: 0.15em 0; }
-.markdown-body :deep(.task-item input[type=checkbox]) { margin-top: 0.25em; accent-color: var(--accent); }
+.markdown-body :deep(li input[type=checkbox]) { margin-right: 0.4em; accent-color: var(--accent); cursor: default; }
 </style>
