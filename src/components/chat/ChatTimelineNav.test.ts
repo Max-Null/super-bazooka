@@ -200,28 +200,33 @@ describe("ChatTimelineNav", () => {
 
   // ═══ tooltip ═══
 
-  it("hover 圆点显示消息摘要", async () => {
-    const msgs = [userMsg("u0", "这是一条很长的用户消息用于测试 tooltip 截断效果"), asstMsg("a0", "reply")];
+  it("鼠标进入时间线区域同时显示所有 tooltip", async () => {
+    const msgs = [
+      userMsg("u0", "第一条消息"),
+      asstMsg("a0", "reply1"),
+      userMsg("u1", "第二条消息"),
+      asstMsg("a1", "reply2"),
+    ];
     const w = mountNav(msgs);
-    const dot = w.find(".chat-timeline-dot");
+    const nav = w.find(".chat-timeline-nav");
 
-    await dot.trigger("mouseenter");
-    const tooltip = w.find(".chat-timeline-tooltip");
-    expect(tooltip.exists()).toBe(true);
-    // 截断到 80 字符
-    expect(tooltip.text().length).toBeLessThanOrEqual(80);
+    await nav.trigger("mouseenter");
+    const tooltips = w.findAll(".chat-timeline-tooltip");
+    expect(tooltips).toHaveLength(2);
+    expect(tooltips[0].text()).toContain("第一条消息");
+    expect(tooltips[1].text()).toContain("第二条消息");
   });
 
-  it("鼠标离开后 tooltip 消失", async () => {
+  it("鼠标离开时间线区域所有 tooltip 消失", async () => {
     const msgs = [userMsg("u0", "test"), asstMsg("a0", "reply")];
     const w = mountNav(msgs);
-    const dot = w.find(".chat-timeline-dot");
+    const nav = w.find(".chat-timeline-nav");
 
-    await dot.trigger("mouseenter");
-    expect(w.find(".chat-timeline-tooltip").exists()).toBe(true);
+    await nav.trigger("mouseenter");
+    expect(w.findAll(".chat-timeline-tooltip").length).toBeGreaterThan(0);
 
-    await dot.trigger("mouseleave");
-    expect(w.find(".chat-timeline-tooltip").exists()).toBe(false);
+    await nav.trigger("mouseleave");
+    expect(w.findAll(".chat-timeline-tooltip")).toHaveLength(0);
   });
 
   // ═══ 活跃点高亮 ═══

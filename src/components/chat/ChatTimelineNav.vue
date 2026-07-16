@@ -71,6 +71,7 @@ onUnmounted(() => {
   window.removeEventListener("keydown", onKeyDown);
   window.removeEventListener("keyup", onKeyUp);
   window.removeEventListener("blur", onBlur);
+  if (clickTimer) clearTimeout(clickTimer);
 });
 
 // ── 压缩逻辑 ──
@@ -118,27 +119,40 @@ const timelineItems = computed<TimelineItem[]>(() => {
   return items;
 });
 
-const hoveredIndex = ref(-1);
+const showTooltips = ref(false);
+const justClickedIndex = ref(-1);
+let clickTimer: ReturnType<typeof setTimeout> | null = null;
 
 function onClick(index: number) {
   emit("scrollTo", index);
+  // 点击脉冲动画：标记目标点 600ms 后清除（重复点击取消旧计时器）
+  if (clickTimer) clearTimeout(clickTimer);
+  justClickedIndex.value = index;
+  clickTimer = setTimeout(() => { justClickedIndex.value = -1; clickTimer = null; }, 600);
 }
 </script>
 
 <template>
-  <div v-if="userMessages.length > 0" class="chat-timeline-nav" :class="{ 'chat-timeline-nav--expanded': showAll }">
-    <template v-for="item in timelineItems" :key="item.type === 'dot' ? item.index : 'e-'+item.jumpTo">
+  <div
+    v-if="userMessages.length > 0"
+    class="chat-timeline-nav"
+    :class="{ 'chat-timeline-nav--expanded': showAll }"
+    @mouseenter="showTooltips = true"
+    @mouseleave="showTooltips = false"
+  >
+    <template v-for="item in timelineItems" :key="item.type === 'dot' ? 'd'+item.index : 'e'+item.jumpTo">
       <!-- 消息点 -->
       <div
         v-if="item.type === 'dot'"
         class="chat-timeline-dot"
-        :class="{ 'chat-timeline-dot--active': activeIndex === item.index }"
-        @mouseenter="hoveredIndex = item.index"
-        @mouseleave="hoveredIndex = -1"
+        :class="{
+          'chat-timeline-dot--active': activeIndex === item.index,
+          'chat-timeline-dot--just-clicked': justClickedIndex === item.index,
+        }"
         @click="onClick(item.index)"
       >
         <Transition name="tooltip-fade">
-          <div v-if="hoveredIndex === item.index" class="chat-timeline-tooltip">
+          <div v-if="showTooltips" class="chat-timeline-tooltip">
             {{ userMessages[item.index].content?.slice(0, 80) || "" }}
           </div>
         </Transition>
@@ -166,8 +180,7 @@ function onClick(index: number) {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  pointer-events: none;
+  gap: 20px;
 }
 .chat-timeline-nav--expanded {
   /* 展开时加微弱背景提示 */
@@ -193,6 +206,14 @@ function onClick(index: number) {
   background: var(--accent);
   scale: 1.4;
   box-shadow: 0 0 6px var(--accent);
+}
+.chat-timeline-dot--just-clicked {
+  animation: dot-pulse 600ms ease-out;
+}
+@keyframes dot-pulse {
+  0%   { box-shadow: 0 0 0 0 var(--accent-glow); scale: 2; }
+  50%  { box-shadow: 0 0 12px 4px var(--accent); scale: 1.2; }
+  100% { box-shadow: 0 0 6px var(--accent); scale: 1.4; }
 }
 
 .chat-timeline-ellipsis {

@@ -5,6 +5,7 @@ import { readFileContent, readFileBase64, saveFileContent, checkSkillInstalled }
 import { isImageFile, mimeType } from "@/composables/useFilePreview";
 import { emitChatCommand } from "@/composables/useCommandPalette";
 import MarkdownRenderer from "./MarkdownRenderer.vue";
+import { marked, type Token, type Tokens } from "marked";
 import mammoth from "mammoth";
 import DOMPurify from "dompurify";
 import { useI18n } from "vue-i18n";
@@ -44,20 +45,36 @@ const htmlWidth = ref(0)
 
 // ── MD 大纲 ──
 const showMdOutline = ref(false);
+
+/** 与 MarkdownRenderer.slug() 保持一致的 id 生成 */
+function mdSlug(text: string): string {
+  return text.toLowerCase().replace(/[^\w一-鿿]+/g, "-").replace(/^-|-$/g, "");
+}
+
 const mdHeadings = computed(() => {
-  if (fileKind.value !== "markdown") return [];
+  if (fileKind.value !== "markdown" || !content.value) return [];
   const headings: { level: number; text: string; id: string }[] = [];
-  for (const line of content.value.split("\n")) {
-    const m = line.match(/^(#{1,6})\s+(.+)$/);
-    if (m) {
-      headings.push({
-        level: m[1].length,
-        text: m[2],
-        id: m[2].toLowerCase().replace(/[^\w一-鿿]+/g, "-").replace(/^-|-$/g, ""),
-      });
+  // 用 marked.lexer 解析——与 MarkdownRenderer 使用同一个解析器，
+  // 自动排除代码块/引用等结构内的假标题，保证 id 与渲染 HTML 一致
+  const tokens = marked.lexer(content.value);
+  walkTokens(tokens);
+  return headings;
+
+  function walkTokens(tokens: Token[]) {
+    for (const t of tokens) {
+      if (t.type === "heading") {
+        const h = t as Tokens.Heading;
+        headings.push({ level: h.depth, text: h.text, id: mdSlug(h.text) });
+      }
+      // 递归嵌套 token（blockquote、list item 等）
+      if ("tokens" in t && Array.isArray(t.tokens)) walkTokens(t.tokens as Token[]);
+      if ("items" in t && Array.isArray(t.items)) {
+        for (const item of t.items as Tokens.ListItem[]) {
+          if (item.tokens) walkTokens(item.tokens);
+        }
+      }
     }
   }
-  return headings;
 });
 
 function scrollToHeading(id: string) {

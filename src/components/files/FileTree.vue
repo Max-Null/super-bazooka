@@ -47,11 +47,32 @@ function parentPath(filePath: string): string {
 
 // ═══ 右键菜单 ═══
 const ctxMenu = ref<{ x: number; y: number; entry: FileEntry } | null>(null);
+const menuRef = ref<HTMLElement | null>(null);
 
 function onContextMenu(e: MouseEvent, entry: FileEntry) {
   e.preventDefault();
   e.stopPropagation();  // 阻止冒泡到父级 FileTree，避免菜单覆盖
   ctxMenu.value = { x: e.clientX, y: e.clientY, entry };
+  // 等 DOM 渲染 + 布局完成，精确修正位置防止菜单超出视口
+  nextTick(() => {
+    requestAnimationFrame(() => {
+      if (!ctxMenu.value || !menuRef.value) return;
+      const rect = menuRef.value.getBoundingClientRect();
+      const pad = 8;
+      const m = ctxMenu.value;
+      let x = m.x;
+      let y = m.y;
+      if (rect.right > window.innerWidth) {
+        x = Math.max(pad, window.innerWidth - rect.width - pad);
+      }
+      if (rect.bottom > window.innerHeight) {
+        y = Math.max(pad, window.innerHeight - rect.height - pad);
+      }
+      if (x !== m.x || y !== m.y) {
+        ctxMenu.value = { ...m, x, y }; // 整体替换触发响应式更新
+      }
+    });
+  });
 }
 
 function closeMenu() { ctxMenu.value = null; }
@@ -309,6 +330,7 @@ function isLoading(path: string): boolean { return !!loadingDirs.value[path]; }
     <!-- ═══ 右键菜单 ═══ -->
     <Teleport to="body">
       <div
+        ref="menuRef"
         v-if="ctxMenu"
         class="fixed z-50 py-1 rounded-lg shadow-lg border text-[11px] min-w-[180px]"
         :style="{
