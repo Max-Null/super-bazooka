@@ -167,7 +167,7 @@ describe("SettingsPanel", () => {
   it("renders about footer", () => {
     const wrapper = mountPanel();
     expect(wrapper.text()).toContain("Super Bazooka");
-    expect(wrapper.text()).toContain("v0.11.0");
+    expect(wrapper.text()).toContain("v0.12.0");
   });
 
   // ── Connection test ──

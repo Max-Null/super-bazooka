@@ -31,6 +31,54 @@ export const APP_VERSION: string = appPackage.version;
 // 按版本降序排列（最新在第一个）
 export const changelog: ChangelogEntry[] = [
   {
+    version: "0.12.0",
+    date: "2026-07-17",
+    sections: [
+      {
+        titleZh: "时间线 tooltip 交互优化",
+        titleEn: "Timeline Tooltip Interaction Improvements",
+        itemsZh: [
+          "tooltip 改为容器级事件触发，鼠标进入时间线区域所有圆点同时弹出消息摘要",
+          "圆点间距从 8px 扩至 20px，tooltip 不互相遮挡",
+          "点击圆点添加脉冲动画（dot-pulse）明确跳转反馈",
+          "鼠标在圆点间移动不再触发 tooltip 闪烁",
+        ],
+        itemsEn: [
+          "Tooltips now triggered at container level: all dots show summaries simultaneously on mouse enter",
+          "Dot gap increased from 8px to 20px, eliminating tooltip overlap",
+          "Click pulse animation (dot-pulse) for clear jump feedback",
+          "No more tooltip flicker when moving between dots",
+        ],
+      },
+      {
+        titleZh: "右键菜单边界裁剪",
+        titleEn: "Context Menu Boundary Clamping",
+        itemsZh: [
+          "FileTree 右键菜单加视口边界裁剪：右侧/底部越界时自动回缩，保留 8px 边距",
+          "nextTick + requestAnimationFrame 确保菜单布局完成后精确测量",
+        ],
+        itemsEn: [
+          "FileTree context menu now clamps to viewport edges with 8px padding",
+          "nextTick + requestAnimationFrame ensures accurate measurement after layout",
+        ],
+      },
+      {
+        titleZh: "MD 大纲解析修复",
+        titleEn: "MD Outline Parsing Fix",
+        itemsZh: [
+          "mdHeadings 改用 marked.lexer() + 递归遍历 token 树提取标题",
+          "修复代码块/引用块内 # 行被误识别为标题导致大纲点击无效的 bug",
+          "id 生成公式与 MarkdownRenderer.slug() 完全一致",
+        ],
+        itemsEn: [
+          "mdHeadings now uses marked.lexer() with recursive token tree walk for heading extraction",
+          "Fixed headings inside code blocks / blockquotes being falsely recognized",
+          "ID generation formula 100% consistent with MarkdownRenderer.slug()",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.11.0",
     date: "2026-07-16",
     sections: [
